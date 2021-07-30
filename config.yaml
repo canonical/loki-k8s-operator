@@ -1,14 +1,8 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
-#
-# TEMPLATE-TODO: change this example to suit your needs.
-# If you don't need a config, you can remove the file entirely.
-# It ties in to the example _on_config_changed handler in src/charm.py
-#
-# Learn more about config at: https://juju.is/docs/sdk/config
 
 options:
-  thing:
-    default: 🎁
-    description: A thing used by the charm.
+  target:
+    default: all
+    description: Which component Loki runs. When target is not set to all (i.e., it is set to querier, ingester, query-frontend, or distributor), then Loki is said to be running in “horizontally scalable”, or microservices, mode.
     type: string
