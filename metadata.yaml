@@ -3,21 +3,42 @@
 
 # For a complete list of supported options, see:
 # https://discourse.charmhub.io/t/charm-metadata-v2/3674/15
-name: loki-operator
-display-name: |
-  TEMPLATE-TODO: fill out a display name for the Charmcraft store
+
+name: loki-k8s
+display-name: Loki
 description: |
-  TEMPLATE-TODO: fill out the charm's description
+  Loki for Kubernetes cluster
 summary: |
-  TEMPLATE-TODO: fill out the charm's summary
+  Unlike other logging systems, Loki is built around the idea of only indexing metadata about your logs: labels (just like Prometheus labels). Log data itself is then compressed and stored in chunks in object stores such as S3 or GCS, or even locally on the filesystem. A small index and highly compressed chunks simplifies the operation and significantly lowers the cost of Loki.
 
-# TEMPLATE-TODO: replace with containers for your workload (delete for non-k8s)
+tags:
+    - observability
+    - lma
+    - loki
+    - prometheus
+    - monitoring
+    - alerting
+    - grafana
+
+maintainers:
+    - Jose Massón <jose.masson@canonical.com>
+
 containers:
-  httpbin:
-    resource: httpbin-image
+  loki:
+    resource: loki-image
+    mounts:
+      - storage: active-index-directory
+        location: /loki/boltdb-shipper-active
+      - storage: loki-chunks
+        location: /loki/chunks
 
-# TEMPLATE-TODO: each container defined above must specify an oci-image resource
+storage:
+  active-index-directory:
+    type: filesystem
+  loki-chunks:
+    type: filesystem
+
 resources:
-  httpbin-image:
+  loki-image:
     type: oci-image
     description: OCI image for httpbin (kennethreitz/httpbin)
