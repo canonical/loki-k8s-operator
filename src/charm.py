@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 PORT = 3100
 
+
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
