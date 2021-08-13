@@ -3,7 +3,6 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
-import json
 import unittest
 
 from charm import LokiOperatorCharm
