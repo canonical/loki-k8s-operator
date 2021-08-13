@@ -38,6 +38,10 @@ storage:
   loki-chunks:
     type: filesystem
 
+provides:
+  loki:
+    interface: loki-push-api
+
 resources:
   loki-image:
     type: oci-image
