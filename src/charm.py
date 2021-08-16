@@ -23,7 +23,6 @@ from ops.main import main
 from ops.model import ActiveStatus
 
 logger = logging.getLogger(__name__)
-
 PORT = 3100
 
 
@@ -34,6 +33,7 @@ class LokiOperatorCharm(CharmBase):
     loki_provider: LokiProvider = None
 
     def __init__(self, *args):
+        logger.debug("Initializing Charm")
         super().__init__(*args)
         self._stored.set_default(provider_ready=False)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
@@ -42,6 +42,8 @@ class LokiOperatorCharm(CharmBase):
             name="grafana-source",
             consumes={"Grafana": ">=2.0.0"},
             refresh_event=self.on.loki_pebble_ready,
+            source_type="loki",
+            source_port=str(PORT),
         )
 
     ##############################################
