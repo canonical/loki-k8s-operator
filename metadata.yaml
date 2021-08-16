@@ -42,6 +42,11 @@ provides:
   loki:
     interface: loki-push-api
 
+requires:
+    grafana-source:
+        interface: grafana_datasource
+        optional: true
+
 resources:
   loki-image:
     type: oci-image

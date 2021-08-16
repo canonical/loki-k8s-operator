@@ -14,6 +14,7 @@ develop a new k8s charm using the Operator Framework:
 
 import logging
 
+from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 from charms.loki_k8s.v0.loki import LokiProvider
 from loki_server import LokiServer
 from ops.charm import CharmBase
@@ -36,6 +37,12 @@ class LokiOperatorCharm(CharmBase):
         super().__init__(*args)
         self._stored.set_default(provider_ready=False)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
+        self.grafana_source_consumer = GrafanaSourceConsumer(
+            charm=self,
+            name="grafana-source",
+            consumes={"Grafana": ">=2.0.0"},
+            refresh_event=self.on.loki_pebble_ready,
+        )
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
