@@ -106,13 +106,6 @@ class LokiOperatorCharm(CharmBase):
 
         return self._stored.provider_ready
 
-    @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP"""
-        if bind_address := self.model.get_binding("loki").network.bind_address:
-            return str(bind_address)
-        return ""
-
 
 if __name__ == "__main__":
     main(LokiOperatorCharm)

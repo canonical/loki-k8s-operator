@@ -72,3 +72,11 @@ class LokiProvider(ProviderBase):
 
         data = {"loki_push_api": f"http://{self.charm.unit_ip}:3100/loki/api/v1/push"}
         return json.dumps(data)
+
+    @property
+    def unit_ip(self) -> str:
+        """Returns unit's IP"""
+        if bind_address := self.charm.model.get_binding(self._relation_name).network.bind_address:
+            return str(bind_address)
+        return ""
+
