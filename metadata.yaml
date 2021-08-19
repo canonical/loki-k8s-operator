@@ -39,10 +39,10 @@ storage:
     type: filesystem
 
 provides:
-  loki:
+  logging:
     interface: loki-push-api
 
-requires:
+requires: # change
     grafana-source:
         interface: grafana_datasource
         optional: true
@@ -50,4 +50,4 @@ requires:
 resources:
   loki-image:
     type: oci-image
-    description: OCI image for httpbin (kennethreitz/httpbin)
+    description: OCI image
