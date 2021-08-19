@@ -4,11 +4,12 @@
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import unittest
+from unittest.mock import PropertyMock, patch
 
-from charm import LokiOperatorCharm
 from ops.model import ActiveStatus
 from ops.testing import Harness
-from unittest.mock import patch, PropertyMock
+
+from charm import LokiOperatorCharm
 
 
 class TestCharm(unittest.TestCase):
