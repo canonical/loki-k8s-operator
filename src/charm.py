@@ -16,11 +16,12 @@ import logging
 
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 from charms.loki_k8s.v0.loki import LokiProvider
-from loki_server import LokiServer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus
+
+from loki_server import LokiServer
 
 logger = logging.getLogger(__name__)
 
