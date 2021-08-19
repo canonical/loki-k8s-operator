@@ -43,8 +43,9 @@ class LokiOperatorCharm(CharmBase):
             consumes={"Grafana": ">=2.0.0"},
             refresh_event=self.on.loki_pebble_ready,
             source_type="loki",
-            source_port=str(PORT),
+            source_port=str(self.port),
         )
+        self._provide_loki()
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
@@ -71,14 +72,13 @@ class LokiOperatorCharm(CharmBase):
         container.add_layer("loki", pebble_layer, combine=True)
         # Autostart any services that were defined with startup: enabled
         container.autostart()
-        self._provide_loki()
 
     ##############################################
     #             UTILITY METHODS                #
     ##############################################
     def _provide_loki(self):
         if self.provider_ready:
-            self.loki_provider = LokiProvider(self, "loki", "loki", LokiServer().version)
+            self.loki_provider = LokiProvider(self, "logging", "loki", LokiServer().version)
             self.loki_provider.ready()
             logger.debug("Loki Provider is available")
             self.unit.status = ActiveStatus()
