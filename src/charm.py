@@ -23,7 +23,6 @@ from ops.main import main
 from ops.model import ActiveStatus
 
 logger = logging.getLogger(__name__)
-PORT = 3100
 
 
 class LokiOperatorCharm(CharmBase):
@@ -31,6 +30,7 @@ class LokiOperatorCharm(CharmBase):
 
     _stored = StoredState()
     loki_provider: LokiProvider = None
+    port = 3100
 
     def __init__(self, *args):
         logger.debug("Initializing Charm")
