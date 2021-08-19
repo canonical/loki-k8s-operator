@@ -49,6 +49,11 @@ class LokiServer:
             None if Loki server is not reachable.
         """
         info = self._build_info()
+
         if info:
             return info.get("version", None)
         return None
+
+    @property
+    def loki_push_api(self):
+        return f"http://{self.host}:{self.port}/loki/api/v1/push"
