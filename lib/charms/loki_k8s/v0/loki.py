@@ -83,3 +83,53 @@ class LokiProvider(ProviderBase):
             return str(bind_address)
         return ""
 
+
+class LokiConsumer(ConsumerBase):
+    """
+    Loki Consumer class
+    """
+
+    def __init__(self, charm, relation_name: str, consumes: dict, multi: bool = False):
+        """Construct a Loki charm client.
+
+        The `LokiConsumer` object provides configurations to a Loki client charm.
+        A charm instantiating this object needs Loki information, for instance the
+        Loki API endpoint to push logs.
+        The `LokiConsumer` can be instantiated as follows:
+
+            self.loki_lib = LokiConsumer(self, "logging", consumes={"loki": ">=2.3.0"})
+
+        Args:
+
+            charm: a `CharmBase` object that manages this
+                `LokiConsumer` object. Typically this is
+                `self` in the instantiating class.
+            relation_ name: a string name of the relation between `charm` and
+                the Loki charmed service.
+            consumes: a dictionary of acceptable logging service
+                providers. The keys of the dictionary are string names
+                of logging service providers. For loki, this
+                is typically "loki". The values of the
+                dictionary are corresponding minimal acceptable
+                semantic version specfications for the logging
+                service.
+        """
+        super().__init__(charm, relation_name, consumes, multi)
+        self._stored.set_default(loki_push_api=None)
+        self._charm = charm
+        self._relation_name = relation_name
+        events = self._charm.on[relation_name]
+        self.framework.observe(events.relation_changed, self._on_logging_relaton_changed)
+
+    def _on_logging_relaton_changed(self, event: RelationJoinedEvent):
+        if data := event.relation.data[event.app].get("data"):
+            self._stored.loki_push_api = json.loads(data)["loki_push_api"]
+
+    @property
+    def loki_push_api(self):
+        """Fetch Loki Push API endpoint sent from LokiProvider throught relation data
+
+        Returns:
+            Loki Push API endpoint
+        """
+        return self._stored.loki_push_api
