@@ -5,3 +5,4 @@
 __pycache__
 build
 venv
+lib/charms/grafana_k8s/*/*.py
