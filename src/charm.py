@@ -100,8 +100,7 @@ class LokiOperatorCharm(CharmBase):
         provided = {"loki": LokiServer().version}
 
         if provided["loki"] is not None:
-            logger.debug("Loki provider is available")
-            logger.debug("Providing : %s", provided)
+            logger.debug("Loki provider is available, version: %s", provided)
             self._stored.provider_ready = True
 
         return self._stored.provider_ready
