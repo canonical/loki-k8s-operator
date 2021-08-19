@@ -1,34 +1,60 @@
-# loki-operator
-
 ## Developing
 
 Create and activate a virtualenv with the development requirements:
 
-    virtualenv -p python3 venv
-    source venv/bin/activate
-    pip install -r requirements-dev.txt
+```bash
+$ virtualenv -p python3 venv
+$ source venv/bin/activate
+$ pip install -r requirements-dev.txt
+```
 
-## Code overview
+### Setup
 
-TEMPLATE-TODO: 
-One of the most important things a consumer of your charm (or library)
-needs to know is what set of functionality it provides. Which categories
-does it fit into? Which events do you listen to? Which libraries do you
-consume? Which ones do you export and how are they used?
+A typical setup using [snaps](https://snapcraft.io/), for deployments to a [microk8s](https://microk8s.io/) cluster can be done using the following commands
 
-## Intended use case
+```bash
+$ sudo snap install microk8s --classic
+$ microk8s.enable dns storage
+$ sudo snap install juju --classic
+$ juju bootstrap microk8s microk8s
+$ juju create-storage-pool operator-storage kubernetes storage-class=microk8s-hostpath
+```
 
-TEMPLATE-TODO:
-Why were these decisions made? What's the scope of your charm?
+### Build
 
-## Roadmap
+Install the charmcraft tool
 
-If this Charm doesn't fulfill all of the initial functionality you were
-hoping for or planning on, please add a Roadmap or TODO here
+```bash
+$ sudo snap install charmcraft
+```
+
+Build the charm in this git repository
+
+```bash
+$ charmcraft pack
+```
 
 ## Testing
 
-The Python operator framework includes a very nice harness for testing
-operator behaviour without full deployment. Just `run_tests`:
+Unit tests are implemented using the Operator Framework test [harness](https://ops.readthedocs.io/en/latest/#module-ops.testing). These tests may executed by doing:
 
-    ./run_tests
+
+```bash
+$ ./run_tests
+```
+
+
+## Code Overview
+
+The core implementation of this charm is represented by the [`LokiOperatorCharm`](src/charm.py) class.
+`LokiOperatorCharm` responds to the following events:
+
+- `loki_pebble_ready`: Here we set up pebble layer and start the service
+- `relation_joined` In this event (Provided by the object `LokiProvider`) we set the `loki_push_api` (`http://{self.unit_ip}:{self.charm.port}/loki/api/v1/push`) so it can be used by a Consumer charm that uses the `LokiConsumer` object.
+
+Both clases `LokiProvider` and `LokiConsumer` are provided by the [`Loki library`](lib/charms/loki_k8s/v0/loki.py)
+
+
+## Design Choices
+
+This Loki charm does not support (yet) the distributed deployment, only the standalone one.
