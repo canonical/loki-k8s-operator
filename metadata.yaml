@@ -33,7 +33,7 @@ storage:
     description: Mount point in which Loki will store index
   loki-chunks:
     type: filesystem
-        description: Mount point in which Loki will store chunks (objects)
+    description: Mount point in which Loki will store chunks (objects)
 
 provides:
   logging:
