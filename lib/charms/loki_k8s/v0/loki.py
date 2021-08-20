@@ -56,10 +56,7 @@ class LokiProvider(ProviderBase):
     #               RELATIONS                    #
     ##############################################
     def _on_logging_relation_joined(self, event):
-        if not self.charm.unit.is_leader():
-            return
-
-        event.relation.data[self.charm.app]["data"] = self.relation_data
+        event.relation.data[self.charm.unit]["data"] = self.relation_data
         logger.debug("Saving Loki url in relation data %s", self.relation_data)
 
     ##############################################
