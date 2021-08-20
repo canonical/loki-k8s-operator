@@ -4,5 +4,8 @@
 options:
   target:
     default: all
-    description: Which component Loki runs. When target is not set to all (i.e., it is set to querier, ingester, query-frontend, or distributor), then Loki is said to be running in “horizontally scalable”, or microservices, mode.
+    description: >
+      Which component Loki runs. When target is not set to `all`
+      (i.e., it is set to querier, ingester, query-frontend, or distributor),
+      then Loki is said to be running in "horizontally scalable", or microservices, mode.
     type: string

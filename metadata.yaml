@@ -9,7 +9,11 @@ display-name: Loki
 description: |
   Loki for Kubernetes cluster
 summary: |
-  Unlike other logging systems, Loki is built around the idea of only indexing metadata about your logs: labels (just like Prometheus labels). Log data itself is then compressed and stored in chunks in object stores such as S3 or GCS, or even locally on the filesystem. A small index and highly compressed chunks simplifies the operation and significantly lowers the cost of Loki.
+  Unlike other logging systems, Loki is built around the idea of only indexing metadata
+  about your logs: labels (just like Prometheus labels).
+  Log data itself is then compressed and stored in chunks in object stores such as S3 or GCS,
+  or even locally on the filesystem. A small index and highly compressed chunks simplifies
+  the operation and significantly lowers the cost of Loki.
 
 maintainers:
     - Jose Massón <jose.masson@canonical.com>
@@ -26,8 +30,10 @@ containers:
 storage:
   active-index-directory:
     type: filesystem
+    description: Mount point in which Loki will store index
   loki-chunks:
     type: filesystem
+        description: Mount point in which Loki will store chunks (objects)
 
 provides:
   logging:

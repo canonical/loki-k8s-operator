@@ -12,19 +12,19 @@ The [Loki](https://grafana.com/oss/loki/) operator provides an open-source fully
 Create a Juju model for your operators, say "loki-k8s"
 
 ```bash
-$ juju add-model loki-k8s
+    juju add-model lma
 ```
 
 The Loki Operator may be deployed using the Juju command line
 
 ```bash
-$ juju deploy loki-k8s
+    juju deploy loki-k8s
 ```
 
 If required, you can remove the deployment completely:
 
 ```bash
-$ juju destroy-model -y loki-k8s --no-wait --force --destroy-storage
+    juju destroy-model -y loki-k8s --no-wait --force --destroy-storage
 ```
 Note the `--destroy-storage` will delete any data stored by MySQL in its persistent store.
 
@@ -37,7 +37,7 @@ This charm implements the following optional configs:
 And you can use it, like this:
 
 ```bash
-$  juju deploy loki-k8s --config target=all
+    juju deploy loki-k8s --config target=all
 ```
 
 
