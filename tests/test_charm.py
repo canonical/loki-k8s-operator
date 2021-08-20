@@ -23,4 +23,4 @@ class TestCharm(unittest.TestCase):
     def test__provide_loki(self, mock_version):
         mock_version.return_value = "2.3.1"
         self.harness.charm._provide_loki()
-        self.assertEqual(type(self.harness.charm.unit.status), ActiveStatus)
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
