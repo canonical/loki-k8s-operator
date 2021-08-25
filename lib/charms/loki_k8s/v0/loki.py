@@ -50,12 +50,12 @@ class LokiProvider(ProviderBase):
         self.charm = charm
         self._relation_name = relation_name
         events = self.charm.on[relation_name]
-        self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
+        self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
 
     ##############################################
     #               RELATIONS                    #
     ##############################################
-    def _on_logging_relation_joined(self, event):
+    def _on_logging_relation_changed(self, event):
         event.relation.data[self.charm.unit]["data"] = self.relation_data
         logger.debug("Saving Loki url in relation data %s", self.relation_data)
 
@@ -118,8 +118,12 @@ class LokiConsumer(ConsumerBase):
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_changed, self._on_logging_relaton_changed)
 
-    def _on_logging_relaton_changed(self, event: RelationJoinedEvent):
-        if data := event.relation.data[event.app].get("data"):
+    def _on_logging_relaton_changed(self, event):
+        if event.unit is None:
+            # Workaround: Seems this is a Juju bug that sends event.unit == None
+            return
+
+        if data := event.relation.data[event.unit].get("data"):
             self._stored.loki_push_api = json.loads(data)["loki_push_api"]
 
     @property
