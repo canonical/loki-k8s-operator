@@ -30,7 +30,6 @@ class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
     _stored = StoredState()
-    loki_provider: LokiProvider = None
     port = 3100
 
     def __init__(self, *args):
@@ -46,6 +45,7 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_port=str(self.port),
         )
+        self.loki_provider = None
         self._provide_loki()
 
     ##############################################
@@ -78,33 +78,13 @@ class LokiOperatorCharm(CharmBase):
     #             UTILITY METHODS                #
     ##############################################
     def _provide_loki(self):
-        if self.provider_ready:
-            self.loki_provider = LokiProvider(self, "logging", "loki", LokiServer().version)
+        version = LokiServer().version
+
+        if version is not None:
+            self.loki_provider = LokiProvider(self, "logging", "loki", version)
             self.loki_provider.ready()
-            logger.debug("Loki Provider is available")
             self.unit.status = ActiveStatus()
-
-    ##############################################
-    #               PROPERTIES                   #
-    ##############################################
-    @property
-    def provider_ready(self):
-        """Check status of Loki server.
-
-        Status of the Loki services is checked by querying
-        Loki for its version information. If Loki responds
-        with valid information, its status is recorded.
-
-        Returns:
-            True if Loki is ready, False otherwise
-        """
-        provided = {"loki": LokiServer().version}
-
-        if provided["loki"] is not None:
-            logger.debug("Loki provider is available, version: %s", provided)
-            self._stored.provider_ready = True
-
-        return self._stored.provider_ready
+            logger.debug("Loki Provider is available. Loki version: %s", version)
 
 
 if __name__ == "__main__":
