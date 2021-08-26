@@ -7,7 +7,6 @@
 import json
 import logging
 
-from ops.charm import RelationJoinedEvent
 from ops.relation import ProviderBase, ConsumerBase
 
 

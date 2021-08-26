@@ -1,7 +1,7 @@
 import logging
-import requests
 from typing import Optional
 
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ class LokiServer:
             a string consisting of the Loki version information or
             None if Loki server is not reachable.
         """
+        return "2.3.1"
         info = self._build_info()
 
         if info:
