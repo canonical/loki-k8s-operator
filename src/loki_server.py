@@ -5,6 +5,7 @@
 # Learn more at: https://juju.is/docs/sdk
 
 import logging
+
 import requests
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ class LokiServer:
         Args:
             host: host address of Loki application.
             port: port on which Loki service is exposed.
+            timeout: timeout for the http request
         """
         self.host = host
         self.port = port

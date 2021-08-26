@@ -2,12 +2,12 @@
 # See LICENSE file for licensing details.
 
 import unittest
+from unittest.mock import PropertyMock, patch
 
 from charms.loki_k8s.v0.loki import LokiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from unittest.mock import PropertyMock, patch
 
 
 class FakeLokiCharm(CharmBase):
@@ -19,7 +19,7 @@ class FakeLokiCharm(CharmBase):
         self.port = 3100
 
 
-class TestProvider(unittest.TestCase):
+class TestLokiProvider(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(FakeLokiCharm)
         self.addCleanup(self.harness.cleanup)
