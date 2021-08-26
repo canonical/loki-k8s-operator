@@ -1,6 +1,7 @@
 import logging
-
 import requests
+from typing import Optional
+
 
 logger = logging.getLogger(__name__)
 API_PATH = "loki/api/v1/status/buildinfo"
@@ -42,7 +43,7 @@ class LokiServer:
         return {}
 
     @property
-    def version(self):
+    def version(self) -> Optional[str]:
         """Fetch Loki version.
 
         Returns:
@@ -56,5 +57,10 @@ class LokiServer:
         return None
 
     @property
-    def loki_push_api(self):
+    def loki_push_api(self) -> str:
         return f"http://{self.host}:{self.port}/loki/api/v1/push"
+
+    @property
+    def is_ready(self) -> bool:
+        """Loki is up and running if we can get its version"""
+        return True if self.version is not None else False
