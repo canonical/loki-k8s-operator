@@ -37,7 +37,7 @@ storage:
 
 provides:
   logging:
-    interface: loki-push-api
+    interface: loki_push_api
 
 requires: # change
     grafana-source:
