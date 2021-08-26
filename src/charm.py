@@ -56,7 +56,6 @@ class LokiOperatorCharm(CharmBase):
         # Get a reference the container attribute on the PebbleReadyEvent
         container = event.workload
         # Define an initial Pebble layer configuration
-        target = self.config["target"]
         pebble_layer = {
             "summary": "Loki layer",
             "description": "pebble config layer for Loki",
@@ -64,7 +63,7 @@ class LokiOperatorCharm(CharmBase):
                 "loki": {
                     "override": "replace",
                     "summary": "loki",
-                    "command": f"/usr/bin/loki -target={target} -config.file=/etc/loki/local-config.yaml",
+                    "command": "/usr/bin/loki -target=all -config.file=/etc/loki/local-config.yaml",
                     "startup": "enabled",
                 },
             },
