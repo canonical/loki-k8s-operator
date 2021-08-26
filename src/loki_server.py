@@ -4,13 +4,12 @@ from typing import Optional
 
 
 logger = logging.getLogger(__name__)
-API_PATH = "loki/api/v1/status/buildinfo"
 
 
 class LokiServer:
     """Class to manage Loki server"""
 
-    def __init__(self, host="localhost", port="3100"):
+    def __init__(self, host="localhost", port=3100, timeout=2.0):
         """Utility to manage a Loki application.
         Args:
             host: host address of Loki application.
@@ -18,6 +17,7 @@ class LokiServer:
         """
         self.host = host
         self.port = port
+        self.timeout = timeout
 
     def _build_info(self):
         """Fetch build information from Loki.
@@ -28,10 +28,11 @@ class LokiServer:
             instance is not reachable then an empty dictionary is
             returned.
         """
-        url = f"http://{self.host}:{self.port}/{API_PATH}"
+        api_path = "loki/api/v1/status/buildinfo"
+        url = f"http://{self.host}:{self.port}/{api_path}"
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=self.timeout)
             info = response.json()
 
             if response.status_code == requests.codes.ok:

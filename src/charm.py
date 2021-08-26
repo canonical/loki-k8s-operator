@@ -78,9 +78,10 @@ class LokiOperatorCharm(CharmBase):
     #             UTILITY METHODS                #
     ##############################################
     def _provide_loki(self):
-        version = LokiServer().version
+        loki_server = LokiServer()
 
-        if version is not None:
+        if loki_server.is_ready:
+            version = loki_server.version
             self.loki_provider = LokiProvider(self, "logging", "loki", version)
             self.loki_provider.ready()
             self.unit.status = ActiveStatus()
