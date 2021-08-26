@@ -7,8 +7,7 @@
 import json
 import logging
 
-from ops.relation import ProviderBase, ConsumerBase
-
+from ops.relation import ConsumerBase, ProviderBase
 
 # The unique Charmhub library identifier, never change it
 LIBID = "Qwerty"  # TODO: get LIBID from charmhub
