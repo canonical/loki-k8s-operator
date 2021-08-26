@@ -5,8 +5,6 @@
 # Learn more at: https://juju.is/docs/sdk
 
 import logging
-from typing import Optional
-
 import requests
 
 logger = logging.getLogger(__name__)
@@ -50,19 +48,19 @@ class LokiServer:
         return {}
 
     @property
-    def version(self) -> Optional[str]:
+    def version(self) -> str:
         """Fetch Loki version.
 
         Returns:
             a string consisting of the Loki version information or
-            None if Loki server is not reachable.
+            an empty string if Loki server is not reachable.
         """
         return "2.3.1"
         info = self._build_info()
 
         if info:
             return info.get("version", None)
-        return None
+        return ""
 
     @property
     def loki_push_api(self) -> str:
@@ -71,4 +69,4 @@ class LokiServer:
     @property
     def is_ready(self) -> bool:
         """Loki is up and running if we can get its version"""
-        return True if self.version is not None else False
+        return True if self.version != "" else False
