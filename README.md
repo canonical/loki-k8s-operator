@@ -48,5 +48,5 @@ This charm provides a `loki-push-api` relation so you can integrate this charm w
 
 ## OCI Images
 
-This charm by default uses the latest version of the [ubuntu/mysql](https://hub.docker.com/r/ubuntu/mysql) image.
+This charm by default uses the latest stable version of the [grafana/loki](https://hub.docker.com/r/grafana/loki) image.
 
