@@ -30,7 +30,7 @@ class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
     _stored = StoredState()
-    port = 3100
+    _port = 3100
 
     def __init__(self, *args):
         logger.debug("Initializing Charm")
@@ -43,7 +43,7 @@ class LokiOperatorCharm(CharmBase):
             consumes={"Grafana": ">=2.0.0"},
             refresh_event=self.on.loki_pebble_ready,
             source_type="loki",
-            source_port=str(self.port),
+            source_port=str(self._port),
         )
         self.loki_provider = None
         self._provide_loki()
