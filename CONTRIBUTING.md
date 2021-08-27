@@ -2,13 +2,20 @@
 
 The intended use case of this operator is to be deployed in K8s.
 
-## Bugs and pull requests
+
+## Overview
+
+This documents explains the processes and practices recommended for
+contributing enhancements to the Loki charm.
+
 - Generally, before developing enhancements to this charm, you should consider
   opening an issue explaining your use case.
 - If you would like to chat with us about your use-cases or proposed
   implementation, you can reach us at
   [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
   or [Discourse](https://discourse.charmhub.io/).
+  The primary author of this charm is available on the Mattermost channel as
+  `@jose-masson`.
 - It is strongly recommended that prior to engaging in any enhancements
   to this charm you familiarise your self with Juju.
 - Familiarising yourself with the
