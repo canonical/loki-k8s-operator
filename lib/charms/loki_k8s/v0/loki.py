@@ -54,14 +54,14 @@ class LokiProvider(ProviderBase):
     #               RELATIONS                    #
     ##############################################
     def _on_logging_relation_changed(self, event):
-        event.relation.data[self.charm.unit]["data"] = self.relation_data
-        logger.debug("Saving Loki url in relation data %s", self.relation_data)
+        event.relation.data[self.charm.unit]["data"] = self._relation_data
+        logger.debug("Saving Loki url in relation data %s", self._relation_data)
 
     ##############################################
     #               PROPERTIES                   #
     ##############################################
     @property
-    def relation_data(self) -> str:
+    def _relation_data(self) -> str:
         """Fetch relation data
 
         Returns:

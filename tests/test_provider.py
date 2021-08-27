@@ -32,4 +32,4 @@ class TestLokiProvider(unittest.TestCase):
         version = "2.3.1"
         provider = LokiProvider(self.harness.charm, "logging", "loki", version)
         expected_value = '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'
-        self.assertEqual(expected_value, provider.relation_data)
+        self.assertEqual(expected_value, provider._relation_data)
