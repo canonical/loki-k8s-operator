@@ -54,6 +54,11 @@ class LokiProvider(ProviderBase):
     #               RELATIONS                    #
     ##############################################
     def _on_logging_relation_changed(self, event):
+        """Anytime there are changes in relations between Loki
+        provider and consumer charms the Loki charm is informed,
+        through a `RelationChanged` event.
+        The Loki charm then updates relation data with the Loki Push API url.
+        """
         event.relation.data[self.charm.unit]["data"] = self._relation_data
         logger.debug("Saving Loki url in relation data %s", self._relation_data)
 
