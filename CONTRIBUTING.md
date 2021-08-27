@@ -69,13 +69,7 @@ Unit tests are implemented using the Operator Framework test [harness](https://o
 
 ### Build
 
-Install the charmcraft tool
-
-```bash
-    sudo snap install charmcraft
-```
-
-Build the charm in this git repository
+Install the [charmcraft tool](https://juju.is/docs/sdk/setting-up-charmcraft) and build the charm in this git repository:
 
 ```bash
     charmcraft pack
