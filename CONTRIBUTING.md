@@ -1,8 +1,5 @@
 # Contributing to loki-operator
 
-The intended use case of this operator is to be deployed in K8s.
-
-
 ## Overview
 
 This documents explains the processes and practices recommended for
