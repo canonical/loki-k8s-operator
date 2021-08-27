@@ -97,7 +97,7 @@ class LokiConsumer(ConsumerBase):
         Loki API endpoint to push logs.
         The `LokiConsumer` can be instantiated as follows:
 
-            self.loki_lib = LokiConsumer(self, "logging", consumes={"loki": ">=2.3.0"})
+            self.loki_consumer = LokiConsumer(self, "logging", consumes={"loki": ">=2.3.0"})
 
         Args:
 
