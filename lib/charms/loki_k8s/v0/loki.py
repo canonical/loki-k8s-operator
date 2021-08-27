@@ -59,18 +59,18 @@ class LokiProvider(ProviderBase):
         through a `RelationChanged` event.
         The Loki charm then updates relation data with the Loki Push API url.
         """
-        event.relation.data[self.charm.unit]["data"] = self._relation_data
-        logger.debug("Saving Loki url in relation data %s", self._relation_data)
+        event.relation.data[self.charm.unit]["data"] = self._loki_push_api
+        logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
 
     ##############################################
     #               PROPERTIES                   #
     ##############################################
     @property
-    def _relation_data(self) -> str:
-        """Fetch relation data
+    def _loki_push_api(self) -> str:
+        """Fetch Loki push API URL
 
         Returns:
-            relation data as json string"""
+            Loki push API URL as json string"""
 
         loki_push_api = f"http://{self.unit_ip}:{self.charm.port}/loki/api/v1/push"
         data = {"loki_push_api": loki_push_api}
