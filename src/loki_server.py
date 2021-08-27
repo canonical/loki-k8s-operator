@@ -57,7 +57,7 @@ class LokiServer:
             a string consisting of the Loki version information or
             an empty string if Loki server is not reachable.
         """
-        return "2.3.1"
+
         info = self._build_info()
 
         if info:
