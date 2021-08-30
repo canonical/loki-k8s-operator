@@ -1,66 +1,66 @@
-# Copyright 2021 jose
+# Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import unittest
-from unittest.mock import Mock
+from typing import Dict
+from unittest.mock import PropertyMock, patch
 
-from charm import LokiOperatorCharm
 from ops.model import ActiveStatus
 from ops.testing import Harness
+
+from charm import LokiOperatorCharm
+
+
+class PushPullMock:
+    def __init__(self):
+        self._filesystem: Dict[str, str] = {}
+
+    def pull(self, path: str, *args, **kwargs) -> str:
+        return self._filesystem.get(path, "")
+
+    def push(self, path: str, source: str, *args, **kwargs) -> None:
+        self._filesystem[path] = source
+
+    def patch_push(self):
+        return patch("ops.testing._TestingPebbleClient.push", self.push)
+
+    def patch_pull(self):
+        return patch("ops.testing._TestingPebbleClient.pull", self.pull)
 
 
 class TestCharm(unittest.TestCase):
     def setUp(self):
+        self.container_name: str = "loki"
+        self.push_pull_mock = PushPullMock()
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
         self.harness.begin()
 
-    def test_config_changed(self):
-        self.assertEqual(list(self.harness.charm._stored.things), [])
-        self.harness.update_config({"thing": "foo"})
-        self.assertEqual(list(self.harness.charm._stored.things), ["foo"])
+    def test_pebble_layer_added(self):
+        with self.push_pull_mock.patch_push(), self.push_pull_mock.patch_pull():
+            self.harness.container_pebble_ready(self.container_name)
+        plan = self.harness.get_container_pebble_plan(self.container_name).to_dict()
 
-    def test_action(self):
-        # the harness doesn't (yet!) help much with actions themselves
-        action_event = Mock(params={"fail": ""})
-        self.harness.charm._on_fortune_action(action_event)
+        # Check we've got the plan as expected
+        self.assertIsNotNone(services := plan.get("services"))
+        self.assertIsNotNone(loki := services.get("loki"))
+        self.assertIsNotNone(command := loki.get("command"))
 
-        self.assertTrue(action_event.set_results.called)
+        # Check command contains key arguments
+        self.assertIn("/usr/bin/loki", command)
+        self.assertIn("-target", command)
+        self.assertIn("-config.file", command)
 
-    def test_action_fail(self):
-        action_event = Mock(params={"fail": "fail this"})
-        self.harness.charm._on_fortune_action(action_event)
-
-        self.assertEqual(action_event.fail.call_args, [("fail this",)])
-
-    def test_httpbin_pebble_ready(self):
-        # Check the initial Pebble plan is empty
-        initial_plan = self.harness.get_container_pebble_plan("httpbin")
-        self.assertEqual(initial_plan.to_yaml(), "{}\n")
-        # Expected plan after Pebble ready with default config
-        expected_plan = {
-            "services": {
-                "httpbin": {
-                    "override": "replace",
-                    "summary": "httpbin",
-                    "command": "gunicorn -b 0.0.0.0:80 httpbin:app -k gevent",
-                    "startup": "enabled",
-                    "environment": {"thing": "🎁"},
-                }
-            },
-        }
-        # Get the httpbin container from the model
-        container = self.harness.model.unit.get_container("httpbin")
-        # Emit the PebbleReadyEvent carrying the httpbin container
-        self.harness.charm.on.httpbin_pebble_ready.emit(container)
-        # Get the plan now we've run PebbleReady
-        updated_plan = self.harness.get_container_pebble_plan("httpbin").to_dict()
-        # Check we've got the plan we expected
-        self.assertEqual(expected_plan, updated_plan)
         # Check the service was started
-        service = self.harness.model.unit.get_container("httpbin").get_service("httpbin")
+        service = self.harness.model.unit.get_container("loki").get_service("loki")
         self.assertTrue(service.is_running())
-        # Ensure we set an ActiveStatus with no message
-        self.assertEqual(self.harness.model.unit.status, ActiveStatus())
+
+    @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
+    @patch("loki_server.LokiServer.is_ready", new_callable=PropertyMock)
+    def test__provide_loki(self, mock_is_ready, mock_version):
+        mock_is_ready.return_value = True
+        mock_version.return_value = "2.3.0"
+        self.assertEqual(type(self.harness.charm.unit.status), ActiveStatus)
