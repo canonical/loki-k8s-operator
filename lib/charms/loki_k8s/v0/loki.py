@@ -10,7 +10,7 @@ import logging
 from ops.relation import ConsumerBase, ProviderBase
 
 # The unique Charmhub library identifier, never change it
-LIBID = "Qwerty"  # TODO: get LIBID from charmhub
+LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
