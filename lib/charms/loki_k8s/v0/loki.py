@@ -17,7 +17,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class LokiProvider(ProviderBase):
         Returns:
             Loki push API URL as json string"""
 
-        loki_push_api = f"http://{self.unit_ip}:{self.charm.port}/loki/api/v1/push"
+        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 

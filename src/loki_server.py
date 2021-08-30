@@ -64,7 +64,7 @@ class LokiServer:
         # (2.3.0) that do not return its version: https://github.com/grafana/loki/issues/4133
         # This bug it was already addressed in PR: https://github.com/grafana/loki/pull/4135
         # but it's note released yet.
-        return "2.3.1"
+        return "2.3.0"
 
         info = self._build_info()
 
