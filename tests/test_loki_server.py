@@ -53,10 +53,10 @@ class TestLokiServer(unittest.TestCase):
         server_info = '{"version":"2.3.1","revision":"668622c81","branch":"k59","buildUser":"root@486a284bafb4","buildDate":"2021-08-25T19:04:36Z","goVersion":""}'
         mock_build_info.return_value = json.loads(server_info)
 
-        expected_version = "2.3.1"
+        expected_version = "2.3.0"
         self.assertEqual(server.version, expected_version)
 
-        non_expected_version = "2.3.0"
+        non_expected_version = "2.3.3"
         self.assertNotEqual(server.version, non_expected_version)
 
     def test_loki_push_api(self):

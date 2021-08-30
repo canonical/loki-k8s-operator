@@ -16,7 +16,7 @@ class FakeLokiCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._stored.set_default(num_events=0)
-        self.port = 3100
+        self._port = 3100
 
 
 class TestLokiProvider(unittest.TestCase):
