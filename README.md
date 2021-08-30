@@ -28,18 +28,6 @@ If required, you can remove the deployment completely:
 ```
 Note the `--destroy-storage` will delete any data stored by MySQL in its persistent store.
 
-### Config
-
-This charm implements the following optional configs:
-
-- `target`: Which component Loki runs. Possible options: all, querier, ingester, query-frontend, or distributor.
-
-And you can use it, like this:
-
-```bash
-    juju deploy loki-k8s --config target=all
-```
-
 
 ## Relations
 
