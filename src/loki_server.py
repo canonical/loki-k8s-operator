@@ -60,8 +60,8 @@ class LokiServer:
 
         # Un-comment the following return once new Loki 2.3.1 version is released.
         #
-        # We are hardcoding version here because there is and bug in last stable Loki version (2.3.0)
-        # that do not return its version: https://github.com/grafana/loki/issues/4133
+        # We are hardcoding version here because there is and bug in last stable Loki version
+        # (2.3.0) that do not return its version: https://github.com/grafana/loki/issues/4133
         # This bug it was already addressed in PR: https://github.com/grafana/loki/pull/4135
         # but it's note released yet.
         return "2.3.1"
