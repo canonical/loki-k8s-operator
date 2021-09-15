@@ -40,7 +40,6 @@ class LokiOperatorCharm(CharmBase):
         self.grafana_source_consumer = GrafanaSourceConsumer(
             charm=self,
             name="grafana-source",
-            consumes={"Grafana": ">=2.0.0"},
             refresh_event=self.on.loki_pebble_ready,
             source_type="loki",
             source_port=str(self._port),
@@ -81,8 +80,7 @@ class LokiOperatorCharm(CharmBase):
 
         if loki_server.is_ready:
             version = loki_server.version
-            self.loki_provider = LokiProvider(self, "logging", "loki", version)
-            self.loki_provider.ready()
+            self.loki_provider = LokiProvider(self, "logging")
             self.unit.status = ActiveStatus()
             logger.debug("Loki Provider is available. Loki version: %s", version)
 

@@ -7,7 +7,8 @@
 import json
 import logging
 
-from ops.relation import ConsumerBase, ProviderBase
+from ops.charm import CharmBase
+from ops.framework import Object, StoredState
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -17,17 +18,30 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 logger = logging.getLogger(__name__)
 
 
-class LokiProvider(ProviderBase):
+class RelationManagerBase(Object):
+    """Base class that represents relation ends ("provides" and "requires").
+    :class:`RelationManagerBase` is used to create a relation manager. This is done by inheriting
+    from :class:`RelationManagerBase` and customising the sub class as required.
+    Attributes:
+        name (str): consumer's relation name
+    """
+
+    def __init__(self, charm: CharmBase, relation_name):
+        super().__init__(charm, relation_name)
+        self.name = relation_name
+
+
+class LokiProvider(RelationManagerBase):
     """
     LokiProvider class
     """
 
-    def __init__(self, charm, relation_name: str, service: str, version: str):
+    def __init__(self, charm, relation_name: str):
         """A Loki service provider.
 
         Args:
@@ -36,15 +50,8 @@ class LokiProvider(ProviderBase):
                 instance of the Loki service.
             relation_name: string name of the relation that provides the
                 Loki logging service.
-            service: string name of service provided. This is used by
-                `LokiConsumer` to validate this service as
-                acceptable. Hence the string name must match one of the
-                acceptable service names in the `LokiConsumer`s
-                `consumes` argument. Typically this string is just "loki".
-            version: a string providing the semantic version of the Loki
-                application being provided.
         """
-        super().__init__(charm, relation_name, service, version)
+        super().__init__(charm, relation_name)
         self.charm = charm
         self._relation_name = relation_name
         events = self.charm.on[relation_name]
@@ -84,12 +91,14 @@ class LokiProvider(ProviderBase):
         return ""
 
 
-class LokiConsumer(ConsumerBase):
+class LokiConsumer(RelationManagerBase):
     """
     Loki Consumer class
     """
 
-    def __init__(self, charm, relation_name: str, consumes: dict, multi: bool = False):
+    _stored = StoredState()
+
+    def __init__(self, charm: CharmBase, relation_name: str):
         """Construct a Loki charm client.
 
         The `LokiConsumer` object provides configurations to a Loki client charm.
@@ -97,7 +106,7 @@ class LokiConsumer(ConsumerBase):
         Loki API endpoint to push logs.
         The `LokiConsumer` can be instantiated as follows:
 
-            self.loki_consumer = LokiConsumer(self, "logging", consumes={"loki": ">=2.3.0"})
+            self.loki_consumer = LokiConsumer(self, relation_name="logging")
 
         Args:
 
@@ -106,15 +115,8 @@ class LokiConsumer(ConsumerBase):
                 `self` in the instantiating class.
             relation_ name: a string name of the relation between `charm` and
                 the Loki charmed service.
-            consumes: a dictionary of acceptable logging service
-                providers. The keys of the dictionary are string names
-                of logging service providers. For loki, this
-                is typically "loki". The values of the
-                dictionary are corresponding minimal acceptable
-                semantic version specfications for the logging
-                service.
         """
-        super().__init__(charm, relation_name, consumes, multi)
+        super().__init__(charm, relation_name)
         self._stored.set_default(loki_push_api=None)
         self._charm = charm
         self._relation_name = relation_name
