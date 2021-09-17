@@ -38,11 +38,9 @@ storage:
 provides:
   logging:
     interface: loki_push_api
-
-requires: # change
-    grafana-source:
-        interface: grafana_datasource
-        optional: true
+  grafana-source:
+    interface: grafana_datasource
+    optional: true
 
 resources:
   loki-image:
