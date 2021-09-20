@@ -59,45 +59,28 @@ class LokiProvider(RelationManagerBase):
         super().__init__(charm, relation_name)
         self.charm = charm
         self._relation_name = relation_name
+        self.container = self.charm.unit.get_container(self.charm.model.name)
         events = self.charm.on[relation_name]
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
+        self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
-    ##############################################
-    #               RELATIONS                    #
-    ##############################################
     def _on_logging_relation_changed(self, event):
-        """Anytime there are changes in relations between Loki
-        provider and consumer charms the Loki charm is informed,
-        through a `RelationChanged` event.
-        The Loki charm then updates relation data with the Loki Push API url.
-        """
+        """IMPROVE DOCSTRING"""
 
         if event.relation.data[self.charm.unit].get("data") is None:
             event.relation.data[self.charm.unit]["data"] = self._loki_push_api
             logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
 
         if event.relation.data.get(event.relation.app) is not None:
-            logger.warning("Tenemos que guardar las alertas en el disco")
-            container = self.charm.unit.get_container("loki")
-            # container.remove_path(RULES_DIR, recursive=True)
+            logger.warning("Saving alerts on disk")
+            self._remove_alert_rules_files(self.container)
+            self._generate_alert_rules_files(self.container)
 
-            for rel_id, alert_rules in self.alerts().items():
-                filename = "juju_{}_{}_{}_rel_{}_alert.rules".format(
-                    alert_rules["model"],
-                    alert_rules["model_uuid"],
-                    alert_rules["application"],
-                    rel_id,
-                )
+    def _on_logging_relation_departed(self, event):
+        """IMPROVE DOCSTRING"""
+        if event.relation.data.get(event.relation.app) is not None:
+            self._remove_alert_rules_files(self.container)
 
-                path = os.path.join(RULES_DIR, filename)
-                rules = yaml.dump({"groups": alert_rules["groups"]})
-
-                container.push(path, rules, make_dirs=True)
-                logger.debug("Updated alert rules file %s", filename)
-
-    ##############################################
-    #               PROPERTIES                   #
-    ##############################################
     @property
     def _loki_push_api(self) -> str:
         """Fetch Loki push API URL
@@ -115,6 +98,27 @@ class LokiProvider(RelationManagerBase):
         if bind_address := self.charm.model.get_binding(self._relation_name).network.bind_address:
             return str(bind_address)
         return ""
+
+    def _remove_alert_rules_files(self, container) -> None:
+        """Remove alert rules files"""
+
+        for f in container.list_files(RULES_DIR):
+            container.remove_path(f.path, recursive=True)
+            logger.debug("Alert rule file '%s' deleted", f.path)
+
+    def _generate_alert_rules_files(self, container) -> None:
+        """Generate and upload alert rules files"""
+        for rel_id, alert_rules in self.alerts().items():
+            filename = "juju_{}_{}_{}_rel_{}_alert.rules".format(
+                alert_rules["model"],
+                alert_rules["model_uuid"],
+                alert_rules["application"],
+                rel_id,
+            )
+            path = os.path.join(RULES_DIR, filename)
+            rules = yaml.dump({"groups": alert_rules["groups"]})
+            container.push(path, rules, make_dirs=True)
+            logger.debug("Updated alert rules file %s", filename)
 
     def alerts(self) -> dict:
         """Fetch alerts for all relations.
