@@ -26,8 +26,6 @@ containers:
         location: /loki/boltdb-shipper-active
       - storage: loki-chunks
         location: /loki/chunks
-      - storage: rules
-        location: /loki/rules
 
 storage:
   active-index-directory:
@@ -36,9 +34,6 @@ storage:
   loki-chunks:
     type: filesystem
     description: Mount point in which Loki will store chunks (objects)
-  rules:
-    type: filesystem
-    description: Mount point in which Loki will store alert rules
 
 provides:
   logging:
