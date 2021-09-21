@@ -401,7 +401,7 @@ class LokiConsumer(RelationManagerBase):
     """
 
     _stored = StoredState()
-    _ALERT_RULES_PATH: str = None
+    _ALERT_RULES_PATH: str
 
     def __init__(
         self, charm: CharmBase, relation_name: str, alert_rules_path="src/loki_alert_rules"

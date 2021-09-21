@@ -21,6 +21,7 @@ from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus
 
+from kubernetes_service import K8sServicePatch, PatchFailed
 from loki_server import LokiServer
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ class LokiOperatorCharm(CharmBase):
     def __init__(self, *args):
         logger.debug("Initializing Charm")
         super().__init__(*args)
-        self._stored.set_default(provider_ready=False)
+        self._stored.set_default(provider_ready=False, k8s_service_patched=False)
+        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
         self.grafana_source_consumer = GrafanaSourceConsumer(
             charm=self,
@@ -50,6 +52,10 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #           CHARM HOOKS HANDLERS             #
     ##############################################
+    def _on_install(self, _):
+        """Handler for the install event during which we will update the K8s service."""
+        self._patch_k8s_service()
+
     def _on_loki_pebble_ready(self, event):
         """Define and start a workload using the Pebble API."""
         # Get a reference the container attribute on the PebbleReadyEvent
@@ -83,6 +89,20 @@ class LokiOperatorCharm(CharmBase):
             self.loki_provider = LokiProvider(self, "logging")
             self.unit.status = ActiveStatus()
             logger.debug("Loki Provider is available. Loki version: %s", version)
+
+    def _patch_k8s_service(self):
+        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
+        if self.unit.is_leader() and not self._stored.k8s_service_patched:
+            service_ports = [
+                (f"{self.app.name}", self._port, self._port),
+            ]
+            try:
+                K8sServicePatch.set_ports(self.app.name, service_ports)
+            except PatchFailed as e:
+                logger.error("Unable to patch the Kubernetes service: %s", str(e))
+            else:
+                self._stored.k8s_service_patched = True
+                logger.info("Successfully patched the Kubernetes service!")
 
 
 if __name__ == "__main__":
