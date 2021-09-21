@@ -198,8 +198,7 @@ class RelationManagerBase(Object):
 
 
 class LokiProvider(RelationManagerBase):
-    """A LokiProvider class
-    """
+    """A LokiProvider class"""
 
     def __init__(self, charm, relation_name: str):
         """A Loki service provider.
