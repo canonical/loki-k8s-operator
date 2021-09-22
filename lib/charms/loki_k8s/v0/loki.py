@@ -304,7 +304,7 @@ class LokiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        if event.relation.data.get(event.relation.app) is not None:
+        if event.relation.data.get(event.relation.app):
             self._remove_alert_rules_files(self.container)
 
     @property
