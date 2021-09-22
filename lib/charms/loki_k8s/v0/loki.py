@@ -484,9 +484,6 @@ class LokiConsumer(RelationManagerBase):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-        event.relation.data[self._charm.unit]["loki_host"] = str(
-            self._charm.model.get_binding(event.relation).network.bind_address
-        )
 
         if not self._charm.unit.is_leader():
             return
