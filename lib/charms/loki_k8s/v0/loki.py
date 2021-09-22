@@ -244,6 +244,14 @@ class RelationManagerBase(Object):
         self.name = relation_name
 
 
+class AlertRuleError(Exception):
+    """Custom exception to indicate that alert rule is not well formed"""
+
+    def __init__(self, message="Alert rule is not well formed"):
+        self.message = message
+        super().__init__(self.message)
+
+
 class LokiProvider(RelationManagerBase):
     """A LokiProvider class"""
 
@@ -509,14 +517,33 @@ class LokiConsumer(RelationManagerBase):
         topology = 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
             metadata["model"], metadata["model_uuid"], metadata["application"]
         )
-
-        if expr := rule.get("expr", None):
-            expr = expr.replace("%%juju_topology%%", topology)
-            rule["expr"] = expr
-        else:
-            raise KeyError
-
+        expr = rule["expr"]
+        expr = expr.replace("%%juju_topology%%", topology)
+        rule["expr"] = expr
         return rule
+
+    def _validate_alert_rule(self, rule: dict, rule_file: str):
+        """This method validates if an alert rule is well formed
+
+        Args:
+            rule: A dictionary containing an alert rule definition
+            rule_file: The rule_file name
+
+        Returns:
+            Raises an AlertRuleError exceprtion if the alert rule is not well formed
+        """
+
+        missing = ["alert", "expr"]
+
+        for field in missing:
+            if field not in rule.keys():
+                message = f"Alert rule '{rule_file.name}' is not well formed. Field '{field}' is missing"
+                raise AlertRuleError(message)
+
+        if rule["expr"].find("%%juju_topology%%") < 0:
+            message = (f"Alert rule '{rule_file.name}' is not well formed. " +
+                       "%%juju_topology%% placeholder is not present")
+            raise AlertRuleError(message)
 
     @property
     def loki_push_api(self):
@@ -549,14 +576,16 @@ class LokiConsumer(RelationManagerBase):
                 # Load a list of rules from file then add labels and filters
                 try:
                     rule = yaml.safe_load(rule_file)
+                    self._validate_alert_rule(rule, rule_file)
                     rule = self._label_alert_topology(rule)
                     rule = self._label_alert_expression(rule)
                     alerts.append(rule)
-                except KeyError:
-                    msg = f"Key 'expr' not found in alert rule file {rule_file.name}"
-                    self._charm.model.unit.status = BlockedStatus(msg)
-                except Exception as e:
-                    logger.error("Failed to read alert rules from %s: %s", path.name, str(e))
+                except AlertRuleError as e:
+                    self._charm.model.unit.status = BlockedStatus(str(e))
+                except FileNotFoundError as e:
+                    message = "Failed to read alert rules from %s: %s", path.name, str(e)
+                    logger.error(message)
+                    self._charm.model.unit.status = BlockedStatus(message)
 
         groups = []
         if alerts:
