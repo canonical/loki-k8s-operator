@@ -326,14 +326,25 @@ class LokiProvider(RelationManagerBase):
         return ""
 
     def _remove_alert_rules_files(self, container) -> None:
-        """Remove alert rules files from worload container RULES_DIR"""
+        """Remove alert rules files from worload container RULES_DIR
 
-        for f in container.list_files(RULES_DIR):
-            container.remove_path(f.path)
-            logger.debug("Deleting alert rule item '%s'", f.path)
+        Args:
+            container: Container which has alert rules files to be deleted
+        """
+
+        container.remove_path(RULES_DIR, recursive=True)
+        logger.debug("Previous Alert rules files deleted")
+        # Since container.remove_path deletes the directory itself with its files
+        # we should create it again.
+        os.makedirs(RULES_DIR, exist_ok=True)
 
     def _generate_alert_rules_files(self, container) -> None:
-        """Generate and upload alert rules files"""
+        """Generate and upload alert rules files
+
+        Args:
+            container: Container into which alert rules files are going to be uploaded
+        """
+
         for rel_id, alert_rules in self.alerts().items():
             filename = "juju_{}_{}_{}_rel_{}_alert.rules".format(
                 alert_rules["model"],
