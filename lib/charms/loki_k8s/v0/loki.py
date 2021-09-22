@@ -213,6 +213,7 @@ from pathlib import Path
 import yaml
 from ops.charm import CharmBase
 from ops.framework import Object, StoredState
+from ops.model import BlockedStatus
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -513,7 +514,7 @@ class LokiConsumer(RelationManagerBase):
             expr = expr.replace("%%juju_topology%%", topology)
             rule["expr"] = expr
         else:
-            logger.error("Invalid alert expression in %s", rule.get("alert"))
+            raise KeyError
 
         return rule
 
@@ -551,6 +552,9 @@ class LokiConsumer(RelationManagerBase):
                     rule = self._label_alert_topology(rule)
                     rule = self._label_alert_expression(rule)
                     alerts.append(rule)
+                except KeyError:
+                    msg = f"Key 'expr' not found in alert rule file {rule_file.name}"
+                    self._charm.model.unit.status = BlockedStatus(msg)
                 except Exception as e:
                     logger.error("Failed to read alert rules from %s: %s", path.name, str(e))
 

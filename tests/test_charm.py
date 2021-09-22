@@ -7,7 +7,7 @@ import unittest
 from typing import Dict
 from unittest.mock import PropertyMock, patch
 
-from ops.model import ActiveStatus
+from ops.model import BlockedStatus
 from ops.testing import Harness
 
 from charm import LokiOperatorCharm
@@ -59,8 +59,6 @@ class TestCharm(unittest.TestCase):
         self.assertTrue(service.is_running())
 
     @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    @patch("loki_server.LokiServer.is_ready", new_callable=PropertyMock)
-    def test__provide_loki(self, mock_is_ready, mock_version):
-        mock_is_ready.return_value = True
+    def test__provide_loki_blocked(self, mock_version):
         mock_version.return_value = "2.3.0"
-        self.assertEqual(type(self.harness.charm.unit.status), ActiveStatus)
+        self.assertEqual(type(self.harness.charm.unit.status), BlockedStatus)

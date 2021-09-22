@@ -5,7 +5,9 @@
 
 import json
 import unittest
-from unittest.mock import PropertyMock, patch
+from unittest.mock import patch
+
+import requests
 
 from loki_server import LokiServer
 
@@ -43,7 +45,7 @@ def mocked_requests_get_empty(*args, **kwargs):
 
 
 def mocked_requests_get_exception(*args, **kwargs):
-    raise Exception("Some error")
+    raise requests.exceptions.HTTPError("404")
 
 
 class TestLokiServer(unittest.TestCase):
@@ -68,18 +70,6 @@ class TestLokiServer(unittest.TestCase):
         expected_api_2 = "http://localhost:3100/loki/api/v1/push"
         self.assertEqual(server_2.loki_push_api, expected_api_2)
 
-    @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    def test_is_ready_true(self, mock_version):
-        mock_version.return_value = "2.3.1"
-        server = LokiServer()
-        self.assertTrue(server.is_ready)
-
-    @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    def test_is_ready_false(self, mock_version):
-        mock_version.return_value = ""
-        server = LokiServer()
-        self.assertFalse(server.is_ready)
-
     @patch("requests.get", side_effect=mocked_requests_get_ok)
     def test__build_info_ok(self, mock_get):
         server = LokiServer()
@@ -102,6 +92,7 @@ class TestLokiServer(unittest.TestCase):
 
     @patch("requests.get", side_effect=mocked_requests_get_exception)
     def test__build_info_exception(self, mock_get):
-        server = LokiServer()
-        json_data = server._build_info()
-        self.assertDictEqual({}, json_data)
+        with self.assertRaises(requests.exceptions.HTTPError) as context:
+            LokiServer()._build_info()
+
+        self.assertTrue("404" in str(context.exception))
