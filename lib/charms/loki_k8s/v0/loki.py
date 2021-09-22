@@ -522,7 +522,7 @@ class LokiConsumer(RelationManagerBase):
         rule["expr"] = expr
         return rule
 
-    def _validate_alert_rule(self, rule: dict, rule_file: str):
+    def _validate_alert_rule(self, rule: dict, rule_file):
         """This method validates if an alert rule is well formed
 
         Args:
@@ -537,12 +537,16 @@ class LokiConsumer(RelationManagerBase):
 
         for field in missing:
             if field not in rule.keys():
-                message = f"Alert rule '{rule_file.name}' is not well formed. Field '{field}' is missing"
+                message = (
+                    f"Alert rule '{rule_file.name}' is not well formed. Field '{field}' is missing"
+                )
                 raise AlertRuleError(message)
 
         if rule["expr"].find("%%juju_topology%%") < 0:
-            message = (f"Alert rule '{rule_file.name}' is not well formed. " +
-                       "%%juju_topology%% placeholder is not present")
+            message = (
+                f"Alert rule '{rule_file.name}' is not well formed. "
+                + "%%juju_topology%% placeholder is not present"
+            )
             raise AlertRuleError(message)
 
     @property
