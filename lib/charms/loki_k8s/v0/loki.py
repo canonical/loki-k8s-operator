@@ -283,8 +283,8 @@ class LokiProvider(RelationManagerBase):
             event.relation.data[self.charm.unit].update({"data": self._loki_push_api})
             logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
 
-        if event.relation.data.get(event.relation.app) is not None:
-            logger.debug("Saving alerts on disk")
+        if event.relation.data.get(event.relation.app).get("alert_rules") is not None:
+            logger.debug("Saving alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
 
