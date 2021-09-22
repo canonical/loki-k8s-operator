@@ -1,2 +1,3 @@
 git+https://github.com/canonical/operator/@master#egg=ops
+kubernetes
 requests
