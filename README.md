@@ -31,7 +31,18 @@ Note the `--destroy-storage` will delete any data stored by MySQL in its persist
 
 ## Relations
 
-This charm provides a `loki-push-api` relation so you can integrate this charm with others charms that requires a Loki logging stack.
+Currently supported relations are:
+
+- [Grafana](https://github.com/canonical/grafana-operator) aggregates
+  logs obtained by Loki and provides a versatile dashboard to
+  view these logs in configurable ways. Loki relates to
+  Grafana over the `grafana_datasource` interface.
+- [Alertmanager](https://github.com/canonical/alertmanager-operator)
+  receives alerts from Loki, aggregates and deduplicates them,
+  then forwards them to specified targets. Loki relates to
+  Alertmanager over the `alertmanager` interface.
+- In addition, this Loki charm allows relations with any
+  charm that supports the `loki_push_api` relation.
 
 
 ## OCI Images

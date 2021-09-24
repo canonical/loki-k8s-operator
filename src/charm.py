@@ -116,6 +116,11 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def _build_pebble_layer(self):
+        """Construct the pebble layer.
+
+        Returns:
+            a Pebble layer specification for the Loki workload container.
+        """
         pebble_layer = {
             "summary": "Loki layer",
             "description": "pebble config layer for Loki",
@@ -135,6 +140,8 @@ class LokiOperatorCharm(CharmBase):
     #             UTILITY METHODS                #
     ##############################################
     def _provide_loki(self):
+        """Gets LokiProvider instance into `self.loki_provider`
+        """
         try:
             version = LokiServer().version
             self.loki_provider = LokiProvider(self, "logging")
