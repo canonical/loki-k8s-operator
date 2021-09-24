@@ -12,17 +12,22 @@ develop a new k8s charm using the Operator Framework:
     https://discourse.charmhub.io/t/4208
 """
 
+import json
 import logging
+import yaml
 
+from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 from charms.loki_k8s.v0.loki import LokiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
 from kubernetes_service import K8sServicePatch, PatchFailed
 from loki_server import LokiServer, LokiServerError
+
+LOKI_CONFIG = "/etc/loki/local-config.yaml"
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +37,13 @@ class LokiOperatorCharm(CharmBase):
 
     _stored = StoredState()
     _port = 3100
+    _name = "loki"
 
     def __init__(self, *args):
-        logger.debug("Initializing Charm")
         super().__init__(*args)
-        self._stored.set_default(provider_ready=False, k8s_service_patched=False)
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
+        self.container = self.unit.get_container(self._name)
+        self._stored.set_default(provider_ready=False, k8s_service_patched=False, config="")
+        self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.grafana_source_consumer = GrafanaSourceConsumer(
             charm=self,
             name="grafana-source",
@@ -47,6 +51,10 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_port=str(self._port),
         )
+        self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
+        self.framework.observe(self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change)
         self.loki_provider = None
         self._provide_loki()
 
@@ -57,15 +65,56 @@ class LokiOperatorCharm(CharmBase):
         """Handler for the install event during which we will update the K8s service."""
         self._patch_k8s_service()
 
-    def _on_config_changed(self, _):
-        if self._stored.provider_ready:
-            self.unit.status = ActiveStatus()
+    def _on_config_changed(self, event):
+        self._configure(event)
 
     def _on_loki_pebble_ready(self, event):
-        """Define and start a workload using the Pebble API."""
-        # Get a reference the container attribute on the PebbleReadyEvent
-        container = event.workload
-        # Define an initial Pebble layer configuration
+        self._configure(event)
+
+    def _on_alertmanager_change(self, event):
+        self._configure(event)
+
+    def _configure(self, event):
+        """Configure Loki"""
+        restart = False
+
+        if not self.container.can_connect():
+            self.unit.status = WaitingStatus("Waiting for Pebble ready")
+            return False
+
+        current_layer = self.container.get_plan().services
+        new_layer = self._build_pebble_layer
+
+        if current_layer != new_layer:
+            restart = True
+
+        config = self._loki_config()
+
+        if yaml.safe_load(self._stored.config) != config:
+            self._stored.config = yaml.dump(config)
+            self.container.push(LOKI_CONFIG, self._stored.config)
+            logger.info("Pushed new configuration")
+            restart = True
+
+        if restart:
+            self.container.add_layer(self._name, new_layer, combine=True)
+            self.container.restart(self._name)
+            logger.info("Loki (re)started")
+
+        self.unit.status = ActiveStatus()
+
+    @property
+    def _loki_command(self):
+        """Construct command to launch Loki.
+
+        Returns:
+            a sting consisting of Loki command and associated
+            command line options.
+        """
+        return f"/usr/bin/loki -target=all -config.file={LOKI_CONFIG}"
+
+    @property
+    def _build_pebble_layer(self):
         pebble_layer = {
             "summary": "Loki layer",
             "description": "pebble config layer for Loki",
@@ -73,15 +122,13 @@ class LokiOperatorCharm(CharmBase):
                 "loki": {
                     "override": "replace",
                     "summary": "loki",
-                    "command": "/usr/bin/loki -target=all -config.file=/etc/loki/local-config.yaml",
+                    "command": self._loki_command,
                     "startup": "enabled",
                 },
             },
         }
-        # Add intial Pebble config layer using the Pebble API
-        container.add_layer("loki", pebble_layer, combine=True)
-        # Autostart any services that were defined with startup: enabled
-        container.autostart()
+
+        return pebble_layer
 
     ##############################################
     #             UTILITY METHODS                #
@@ -109,6 +156,36 @@ class LokiOperatorCharm(CharmBase):
             else:
                 self._stored.k8s_service_patched = True
                 logger.info("Successfully patched the Kubernetes service!")
+
+    def _alerting_config(self) -> str:
+        """Construct Loki altering configuration.
+
+        Returns:
+            a string consisting of comma-separated list of Alertmanager URLs
+            to send notifications to.
+        """
+        alerting_config = ""
+        alertmanagers = self.alertmanager_consumer.get_cluster_info()
+
+        if not alertmanagers:
+            logger.debug("No alertmanagers available")
+            return alerting_config
+
+        return ",".join([f"http://{am}" for am in alertmanagers])
+
+
+    def _loki_config(self) -> dict:
+        """Construct Loki configuration.
+
+        Returns:
+            Loki config in a dictionary
+        """
+        raw_config = self.container.pull(LOKI_CONFIG).read()
+        config = yaml.safe_load(raw_config)
+        alerting_config = self._alerting_config()
+        config["ruler"]["alertmanager_url"] = alerting_config
+
+        return config
 
 
 if __name__ == "__main__":
