@@ -12,7 +12,6 @@ develop a new k8s charm using the Operator Framework:
     https://discourse.charmhub.io/t/4208
 """
 
-import json
 import logging
 import yaml
 
@@ -54,7 +53,9 @@ class LokiOperatorCharm(CharmBase):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
-        self.framework.observe(self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change)
+        self.framework.observe(
+            self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
+        )
         self.loki_provider = None
         self._provide_loki()
 
@@ -172,7 +173,6 @@ class LokiOperatorCharm(CharmBase):
             return alerting_config
 
         return ",".join([f"http://{am}" for am in alertmanagers])
-
 
     def _loki_config(self) -> dict:
         """Construct Loki configuration.
