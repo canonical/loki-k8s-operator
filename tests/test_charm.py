@@ -70,8 +70,6 @@ table_manager:
   retention_period: 0s
 """
 
-MINIMAL_CONFIG = {"prometheus-image-path": "prom/prometheus"}
-
 
 class PushPullMock:
     def __init__(self):
