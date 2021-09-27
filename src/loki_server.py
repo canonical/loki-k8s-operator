@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class LokiServerError(Exception):
-    """Custom exception to indicate Loki server is not """
+    """Custom exception to indicate Loki server is not"""
 
 
 class LokiServerNotReadyError(Exception):

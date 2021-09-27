@@ -57,6 +57,7 @@ class LokiOperatorCharm(CharmBase):
             self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
         )
         self.loki_provider = None
+        self._loki_server = LokiServer()
         self._provide_loki()
 
     ##############################################
@@ -140,10 +141,9 @@ class LokiOperatorCharm(CharmBase):
     #             UTILITY METHODS                #
     ##############################################
     def _provide_loki(self):
-        """Gets LokiProvider instance into `self.loki_provider`
-        """
+        """Gets LokiProvider instance into `self.loki_provider`"""
         try:
-            version = LokiServer().version
+            version = self._loki_server.version
             self.loki_provider = LokiProvider(self, "logging")
             self._stored.provider_ready = True
             logger.debug("Loki Provider is available. Loki version: %s", version)
