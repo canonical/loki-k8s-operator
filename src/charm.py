@@ -21,10 +21,10 @@ from charms.loki_k8s.v0.loki import LokiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
 from kubernetes_service import K8sServicePatch, PatchFailed
-from loki_server import LokiServer, LokiServerError
+from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
 LOKI_CONFIG = "/etc/loki/local-config.yaml"
 
@@ -40,7 +40,7 @@ class LokiOperatorCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.container = self.unit.get_container(self._name)
+        self._container = self.unit.get_container(self._name)
         self._stored.set_default(provider_ready=False, k8s_service_patched=False, config="")
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.grafana_source_consumer = GrafanaSourceConsumer(
@@ -79,11 +79,11 @@ class LokiOperatorCharm(CharmBase):
         """Configure Loki"""
         restart = False
 
-        if not self.container.can_connect():
+        if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return False
 
-        current_layer = self.container.get_plan().services
+        current_layer = self._container.get_plan().services
         new_layer = self._build_pebble_layer
 
         if current_layer != new_layer:
@@ -93,13 +93,13 @@ class LokiOperatorCharm(CharmBase):
 
         if yaml.safe_load(self._stored.config) != config:
             self._stored.config = yaml.dump(config)
-            self.container.push(LOKI_CONFIG, self._stored.config)
+            self._container.push(LOKI_CONFIG, self._stored.config)
             logger.info("Pushed new configuration")
             restart = True
 
         if restart:
-            self.container.add_layer(self._name, new_layer, combine=True)
-            self.container.restart(self._name)
+            self._container.add_layer(self._name, new_layer, combine=True)
+            self._container.restart(self._name)
             logger.info("Loki (re)started")
 
         self.unit.status = ActiveStatus()
@@ -147,9 +147,10 @@ class LokiOperatorCharm(CharmBase):
             self.loki_provider = LokiProvider(self, "logging")
             self._stored.provider_ready = True
             logger.debug("Loki Provider is available. Loki version: %s", version)
+        except LokiServerNotReadyError as e:
+            self.unit.status = MaintenanceStatus(str(e))
         except LokiServerError as e:
             self.unit.status = BlockedStatus(str(e))
-            logger.error(str(e))
 
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
@@ -187,7 +188,7 @@ class LokiOperatorCharm(CharmBase):
         Returns:
             Loki config in a dictionary
         """
-        raw_config = self.container.pull(LOKI_CONFIG).read()
+        raw_config = self._container.pull(LOKI_CONFIG).read()
         config = yaml.safe_load(raw_config)
         alerting_config = self._alerting_config()
         config["ruler"]["alertmanager_url"] = alerting_config

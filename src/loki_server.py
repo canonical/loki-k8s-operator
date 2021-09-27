@@ -12,7 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class LokiServerError(Exception):
-    """Custom exception to indicate Loki server is not ready, regardless the reason."""
+    """Custom exception to indicate Loki server is not """
+
+
+class LokiServerNotReadyError(Exception):
+    """Custom exception to indicate Loki server is not yet ready."""
 
 
 class LokiServer:
@@ -68,7 +72,9 @@ class LokiServer:
             #  return = info.get("version", None)
             _ = self._build_info()
             return "2.3.0"
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.ConnectionError as e:
+            raise LokiServerNotReadyError(str(e))
+        except requests.exceptions.HTTPError as e:
             raise LokiServerError(str(e))
 
     @property
