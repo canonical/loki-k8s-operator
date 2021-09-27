@@ -45,13 +45,15 @@ For example a Loki charm may instantiate the
             ...
 
         def _provide_loki(self):
-            loki_server = LokiServer()
-
-            if loki_server.is_ready:
-                version = loki_server.version
+            try:
+                version = self._loki_server.version
                 self.loki_provider = LokiProvider(self, "logging")
-                self.unit.status = ActiveStatus()
+                self._stored.provider_ready = True
                 logger.debug("Loki Provider is available. Loki version: %s", version)
+            except LokiServerNotReadyError as e:
+                self.unit.status = MaintenanceStatus(str(e))
+            except LokiServerError as e:
+                self.unit.status = BlockedStatus(str(e))
 
 
 The `LokiProvider` object has two main responsabilities:
