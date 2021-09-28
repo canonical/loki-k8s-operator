@@ -22,6 +22,7 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.pebble import PathError, ProtocolError
 
 from kubernetes_service import K8sServicePatch, PatchFailed
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
@@ -92,11 +93,15 @@ class LokiOperatorCharm(CharmBase):
 
         config = self._loki_config()
 
-        if yaml.safe_load(self._stored.config) != config:
-            self._stored.config = yaml.dump(config)
-            self._container.push(LOKI_CONFIG, self._stored.config)
-            logger.info("Pushed new configuration")
-            restart = True
+        try:
+            if yaml.safe_load(self._stored.config) != config:
+                self._stored.config = yaml.dump(config)
+                self._container.push(LOKI_CONFIG, self._stored.config)
+                logger.info("Pushed new configuration")
+                restart = True
+        except (ProtocolError, PathError) as e:
+            self.unit.status = BlockedStatus(str(e))
+            return False
 
         if restart:
             self._container.add_layer(self._name, new_layer, combine=True)
