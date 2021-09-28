@@ -486,9 +486,6 @@ class LokiConsumer(RelationManagerBase):
                 charm must update its relation data.
         """
 
-        if not self._charm.unit.is_leader():
-            return
-
         if alert_groups := self._labeled_alert_groups:
             event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
                 {"groups": alert_groups}
