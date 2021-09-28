@@ -4,7 +4,7 @@ Loki integrates with the following:
 
 
 1. Any charm that supports the `loki_push_api` interface.
-This integration is done using the Loki Charm library. The documentation of
+You can integrate it using the Loki Charm library. The documentation of
 the charm library, available through [Charmhub](https://charmhub.io/loki-k8s)
 provides further details. The information
 exchanged through the `loki_push` interface can be broken down
