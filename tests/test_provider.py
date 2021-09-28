@@ -108,6 +108,4 @@ class TestLokiProvider(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "consumer/0")
         alerts = self.harness.charm.loki_provider.alerts()
         self.assertEqual(len(alerts), 1)
-        self.assertDictEqual(
-            alerts[0]["groups"][0]["rules"][0], ALERT_RULES["groups"][0]["rules"][0]
-        )
+        self.assertDictEqual(alerts[0]["groups"][0], ALERT_RULES["groups"][0])
