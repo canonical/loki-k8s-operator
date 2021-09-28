@@ -2,12 +2,40 @@
 # See LICENSE file for licensing details.
 
 import unittest
-from unittest.mock import PropertyMock, patch
+import json
 
 from charms.loki_k8s.v0.loki import LokiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
+from unittest.mock import PropertyMock, patch
+
+METADATA = {
+    "model": "consumer-model",
+    "model_uuid": "qwerty-1234",
+    "application": "promtail",
+}
+
+ALERT_RULES = {
+    "groups": [
+        {
+            "name": "None_f2c1b2a6-e006-11eb-ba80-0242ac130004_consumer-tester_alerts",
+            "rules": [
+                {
+                    "alert": "HighPercentageError",
+                    "expr": "sum(rate({%%juju_topology%%} |= 'error' [5m])) by (job)",
+                    "for": "0m",
+                    "labels": {
+                        "severity": "Low",
+                    },
+                    "annotations": {
+                        "summary": "High request latency",
+                    },
+                },
+            ],
+        }
+    ]
+}
 
 
 class FakeLokiCharm(CharmBase):
@@ -15,8 +43,19 @@ class FakeLokiCharm(CharmBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
-        self._stored.set_default(num_events=0)
         self._port = 3100
+        self.loki_provider = LokiProvider(self, "logging")
+
+    @property
+    def _loki_push_api(self) -> str:
+        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
+        data = {"loki_push_api": loki_push_api}
+        return json.dumps(data)
+
+    @property
+    def unit_ip(self) -> str:
+        """Returns unit's IP"""
+        return "10.1.2.3"
 
 
 class TestLokiProvider(unittest.TestCase):
@@ -29,6 +68,46 @@ class TestLokiProvider(unittest.TestCase):
     @patch("charms.loki_k8s.v0.loki.LokiProvider.unit_ip", new_callable=PropertyMock)
     def test_relation_data(self, mock_unit_ip):
         mock_unit_ip.return_value = "10.1.2.3"
-        provider = LokiProvider(self.harness.charm, "logging")
         expected_value = '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'
-        self.assertEqual(expected_value, provider._loki_push_api)
+        self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
+
+    @patch("charms.loki_k8s.v0.loki.LokiProvider._generate_alert_rules_files")
+    @patch("charms.loki_k8s.v0.loki.LokiProvider._remove_alert_rules_files")
+    @patch("charms.loki_k8s.v0.loki.LokiProvider.unit_ip", new_callable=PropertyMock)
+    def test__on_logging_relation_changed(self, mock_unit_ip, *unused):
+        with self.assertLogs(level="DEBUG") as logger:
+            mock_unit_ip.return_value = "10.1.2.3"
+            rel_id = self.harness.add_relation("logging", "promtail")
+            self.harness.add_relation_unit(rel_id, "promtail/0")
+            self.harness.update_relation_data(rel_id, "promtail/0", {})
+            self.assertEqual(
+                sorted(logger.output)[0],
+                'DEBUG:charms.loki_k8s.v0.loki:Saving Loki url in relation data {"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}',
+            )
+
+            self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
+            self.assertEqual(
+                sorted(logger.output)[1],
+                "DEBUG:charms.loki_k8s.v0.loki:Saving alerts rules to disk",
+            )
+
+    @patch("os.makedirs")
+    @patch("ops.testing._TestingPebbleClient.remove_path")
+    @patch("charms.loki_k8s.v0.loki.LokiProvider.unit_ip", new_callable=PropertyMock)
+    def test_alerts(self, mock_unit_ip, *unused):
+        mock_unit_ip.return_value = "10.1.2.3"
+        rel_id = self.harness.add_relation("logging", "consumer")
+        self.harness.update_relation_data(
+            rel_id,
+            "consumer",
+            {
+                "metadata": json.dumps(METADATA),
+                "alert_rules": json.dumps(ALERT_RULES),
+            },
+        )
+        self.harness.add_relation_unit(rel_id, "consumer/0")
+        alerts = self.harness.charm.loki_provider.alerts()
+        self.assertEqual(len(alerts), 1)
+        self.assertDictEqual(
+            alerts[0]["groups"][0]["rules"][0], ALERT_RULES["groups"][0]["rules"][0]
+        )
