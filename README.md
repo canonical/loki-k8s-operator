@@ -40,9 +40,9 @@ Currently supported relations are:
 - [Alertmanager](https://github.com/canonical/alertmanager-operator)
   receives alerts from Loki, aggregates and deduplicates them,
   then forwards them to specified targets. Loki relates to
-  Alertmanager over the `alertmanager` interface.
+  Alertmanager over the `alertmanager_dispatch` interface.
 - In addition, this Loki charm allows relations with any
-  charm that supports the `loki_push_api` relation.
+  charm that supports the `loki_push_api` relation interface.
 
 
 ## OCI Images
