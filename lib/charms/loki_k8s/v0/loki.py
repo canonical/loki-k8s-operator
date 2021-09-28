@@ -48,7 +48,6 @@ For example a Loki charm may instantiate the
             try:
                 version = self._loki_server.version
                 self.loki_provider = LokiProvider(self, "logging")
-                self._stored.provider_ready = True
                 logger.debug("Loki Provider is available. Loki version: %s", version)
             except LokiServerNotReadyError as e:
                 self.unit.status = MaintenanceStatus(str(e))

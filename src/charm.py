@@ -41,7 +41,7 @@ class LokiOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._stored.set_default(provider_ready=False, k8s_service_patched=False, config="")
+        self._stored.set_default(k8s_service_patched=False, config="")
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.grafana_source_consumer = GrafanaSourceConsumer(
             charm=self,
@@ -145,7 +145,6 @@ class LokiOperatorCharm(CharmBase):
         try:
             version = self._loki_server.version
             self.loki_provider = LokiProvider(self, "logging")
-            self._stored.provider_ready = True
             logger.debug("Loki Provider is available. Loki version: %s", version)
         except LokiServerNotReadyError as e:
             self.unit.status = MaintenanceStatus(str(e))
