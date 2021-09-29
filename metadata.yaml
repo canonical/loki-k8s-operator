@@ -42,6 +42,10 @@ provides:
     interface: grafana_datasource
     optional: true
 
+requires:
+  alertmanager:
+    interface: alertmanager_dispatch
+
 resources:
   loki-image:
     type: oci-image

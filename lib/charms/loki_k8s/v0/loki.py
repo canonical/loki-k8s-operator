@@ -45,13 +45,14 @@ For example a Loki charm may instantiate the
             ...
 
         def _provide_loki(self):
-            loki_server = LokiServer()
-
-            if loki_server.is_ready:
-                version = loki_server.version
+            try:
+                version = self._loki_server.version
                 self.loki_provider = LokiProvider(self, "logging")
-                self.unit.status = ActiveStatus()
                 logger.debug("Loki Provider is available. Loki version: %s", version)
+            except LokiServerNotReadyError as e:
+                self.unit.status = MaintenanceStatus(str(e))
+            except LokiServerError as e:
+                self.unit.status = BlockedStatus(str(e))
 
 
 The `LokiProvider` object has two main responsabilities:
@@ -484,9 +485,6 @@ class LokiConsumer(RelationManagerBase):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-
-        if not self._charm.unit.is_leader():
-            return
 
         if alert_groups := self._labeled_alert_groups:
             event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
