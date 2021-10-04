@@ -13,8 +13,8 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
-import yaml
 
+import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 from charms.loki_k8s.v0.loki import LokiProvider

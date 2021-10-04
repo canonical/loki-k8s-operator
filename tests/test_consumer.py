@@ -1,15 +1,15 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import unittest
 import json
-
-from charms.loki_k8s.v0.loki import LokiConsumer, AlertRuleError
+import unittest
 from pathlib import Path
+from unittest.mock import PropertyMock, patch
+
+from charms.loki_k8s.v0.loki import AlertRuleError, LokiConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
-from unittest.mock import PropertyMock, patch
 
 LABELED_ALERT_RULES = [
     {

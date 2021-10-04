@@ -4,13 +4,15 @@
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import unittest
-import yaml
-from charm import LokiOperatorCharm
-from loki_server import LokiServerError, LokiServerNotReadyError
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.testing import Harness
 from typing import Dict
 from unittest.mock import Mock, PropertyMock, patch
+
+import yaml
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.testing import Harness
+
+from charm import LokiOperatorCharm
+from loki_server import LokiServerError, LokiServerNotReadyError
 
 LOKI_CONFIG = """
 auth_enabled: false
