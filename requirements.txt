@@ -1,3 +1,3 @@
-git+https://github.com/canonical/operator/@master#egg=ops
+git+https://github.com/canonical/operator/@main#egg=ops
 kubernetes
 requests
