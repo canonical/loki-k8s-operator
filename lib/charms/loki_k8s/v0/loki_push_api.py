@@ -31,7 +31,7 @@ of information:
 For example a Loki charm may instantiate the
 `LokiProvider` in its constructor as follows
 
-    from charms.loki_k8s.v0.loki import LokiProvider
+    from charms.loki_k8s.v0.loki_push_api import LokiProvider
     from loki_server import LokiServer
     ...
 
@@ -127,7 +127,7 @@ For the simplest use cases, using the `LokiConsumer` object only requires
 instantiating it, typically in the constructor of your charm (the one which
 sends logs).
 
-    from charms.loki_k8s.v0.loki import LokiConsumer
+    from charms.loki_k8s.v0.loki_push_api import LokiConsumer
 
     class LokiClientCharm(CharmBase):
 

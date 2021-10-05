@@ -17,7 +17,7 @@ import logging
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
-from charms.loki_k8s.v0.loki import LokiProvider
+from charms.loki_k8s.v0.loki_push_api import LokiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
