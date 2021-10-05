@@ -4,7 +4,7 @@
 #
 # Learn more at: https://juju.is/docs/sdk
 
-"""## Overview.
+r"""## Overview.
 
 This document explains how to integrate with the Loki charm.
 It also explains how alternative implementations of the Loki charm
@@ -234,8 +234,10 @@ logger = logging.getLogger(__name__)
 
 class RelationManagerBase(Object):
     """Base class that represents relation ends ("provides" and "requires").
+
     :class:`RelationManagerBase` is used to create a relation manager. This is done by inheriting
     from :class:`RelationManagerBase` and customising the sub class as required.
+
     Attributes:
         name (str): consumer's relation name
     """
@@ -246,7 +248,7 @@ class RelationManagerBase(Object):
 
 
 class AlertRuleError(Exception):
-    """Custom exception to indicate that alert rule is not well formed"""
+    """Custom exception to indicate that alert rule is not well formed."""
 
     def __init__(self, message="Alert rule is not well formed"):
         self.message = message
@@ -254,13 +256,12 @@ class AlertRuleError(Exception):
 
 
 class LokiProvider(RelationManagerBase):
-    """A LokiProvider class"""
+    """A LokiProvider class."""
 
     def __init__(self, charm, relation_name: str):
         """A Loki service provider.
 
         Args:
-
             charm: a `CharmBase` instance that manages this
                 instance of the Loki service.
             relation_name: string name of the relation that provides the
@@ -287,7 +288,6 @@ class LokiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-
         if event.relation.data[self.charm.unit].get("data") is None:
             event.relation.data[self.charm.unit].update({"data": self._loki_push_api})
             logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
@@ -298,8 +298,7 @@ class LokiProvider(RelationManagerBase):
             self._generate_alert_rules_files(self.container)
 
     def _on_logging_relation_departed(self, event):
-        """Removes alert rules files when consumer charms
-        left the relation with Loki
+        """Removes alert rules files when consumer charms left the relation with Loki.
 
         Args:
             event: a `CharmEvent` in response to which the Loki
@@ -310,29 +309,28 @@ class LokiProvider(RelationManagerBase):
 
     @property
     def _loki_push_api(self) -> str:
-        """Fetch Loki push API URL
+        """Fetch Loki push API URL.
 
         Returns:
-            Loki push API URL as json string"""
-
+            Loki push API URL as json string
+        """
         loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
     @property
     def unit_ip(self) -> str:
-        """Returns unit's IP"""
+        """Returns unit's IP."""
         if bind_address := self.charm.model.get_binding(self._relation_name).network.bind_address:
             return str(bind_address)
         return ""
 
     def _remove_alert_rules_files(self, container) -> None:
-        """Remove alert rules files from worload container RULES_DIR
+        """Remove alert rules files from worload container RULES_DIR.
 
         Args:
             container: Container which has alert rules files to be deleted
         """
-
         container.remove_path(RULES_DIR, recursive=True)
         logger.debug("Previous Alert rules files deleted")
         # Since container.remove_path deletes the directory itself with its files
@@ -340,12 +338,11 @@ class LokiProvider(RelationManagerBase):
         os.makedirs(RULES_DIR, exist_ok=True)
 
     def _generate_alert_rules_files(self, container) -> None:
-        """Generate and upload alert rules files
+        """Generate and upload alert rules files.
 
         Args:
             container: Container into which alert rules files are going to be uploaded
         """
-
         for rel_id, alert_rules in self.alerts().items():
             filename = "juju_{}_{}_{}_rel_{}_alert.rules".format(
                 alert_rules["model"],
@@ -417,15 +414,16 @@ class LokiProvider(RelationManagerBase):
 
 
 class LokiConsumer(RelationManagerBase):
-    """
-    Loki Consumer class
-    """
+    """Loki Consumer class."""
 
     _stored = StoredState()
     _ALERT_RULES_PATH: str
 
     def __init__(
-        self, charm: CharmBase, relation_name: str, alert_rules_path="src/loki_alert_rules"
+        self,
+        charm: CharmBase,
+        relation_name: str = "logging",
+        alert_rules_path: str = "src/loki_alert_rules",
     ):
         """Construct a Loki charm client.
 
@@ -437,15 +435,16 @@ class LokiConsumer(RelationManagerBase):
             self.loki_consumer = LokiConsumer(self, relation_name="logging")
 
         Args:
-
-            charm: a `CharmBase` object that manages this
-                `LokiConsumer` object. Typically this is
+            charm: a `CharmBase` object that manages this `LokiConsumer` object. Typically this is
                 `self` in the instantiating class.
-            relation_ name: a string name of the relation between `charm` and
-                the Loki charmed service.
-            alert_rules_path: an optional path for the location of alert rules
-                files.  Defaults to "src/loki_alert_rules" at the top level
-                of the charm repository.
+            relation_ name: a string name of the relation between `charm` and the Loki
+                charmed service.
+            alert_rules_path: an optional path for the location of alert rules files.
+                Defaults to "src/loki_alert_rules" at the top level of the
+                charm repository.
+
+        Returns:
+            Nothing.
         """
         super().__init__(charm, relation_name)
         self._stored.set_default(loki_push_api=None)
@@ -485,7 +484,6 @@ class LokiConsumer(RelationManagerBase):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-
         if alert_groups := self._labeled_alert_groups:
             event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
                 {"groups": alert_groups}
@@ -529,7 +527,7 @@ class LokiConsumer(RelationManagerBase):
         return rule
 
     def _validate_alert_rule(self, rule: dict, rule_file):
-        """This method validates if an alert rule is well formed
+        """This method validates if an alert rule is well formed.
 
         Args:
             rule: A dictionary containing an alert rule definition
@@ -538,7 +536,6 @@ class LokiConsumer(RelationManagerBase):
         Returns:
             Raises an AlertRuleError exceprtion if the alert rule is not well formed
         """
-
         missing = ["alert", "expr"]
 
         for field in missing:
@@ -557,7 +554,7 @@ class LokiConsumer(RelationManagerBase):
 
     @property
     def loki_push_api(self):
-        """Fetch Loki Push API endpoint sent from LokiProvider throught relation data
+        """Fetch Loki Push API endpoint sent from LokiProvider throught relation data.
 
         Returns:
             Loki Push API endpoint

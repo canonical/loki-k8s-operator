@@ -14,6 +14,7 @@ class PatchFailed(RuntimeError):
 
 class K8sServicePatch:
     """A utility for patching the Kubernetes service set up by Juju.
+
     Attributes:
             namespace_file (str): path to the k8s namespace file in the charm container
     """
@@ -23,6 +24,7 @@ class K8sServicePatch:
     @staticmethod
     def namespace() -> str:
         """Read the Kubernetes namespace we're deployed in from the mounted service token.
+
         Returns:
             str: The current Kubernetes namespace
         """
@@ -32,6 +34,7 @@ class K8sServicePatch:
     @staticmethod
     def _k8s_auth():
         """Authenticate with the Kubernetes API using an in-cluster service token.
+
         Raises:
             PatchFailed: if no permissions to read cluster role
         """
@@ -55,9 +58,11 @@ class K8sServicePatch:
         app: str, service_ports: List[Tuple[str, int, int]]
     ) -> kubernetes.client.V1Service:
         """Property accessor to return a valid Kubernetes Service representation for Alertmanager.
+
         Args:
             app: app name
             service_ports: a list of tuples (name, port, target_port) for every service port.
+
         Returns:
             kubernetes.client.V1Service: A Kubernetes Service with correctly annotated metadata and
             ports.
@@ -84,6 +89,7 @@ class K8sServicePatch:
     @staticmethod
     def set_ports(app: str, service_ports: List[Tuple[str, int, int]]):
         """Patch the Kubernetes service created by Juju to map the correct port.
+
         Currently, Juju uses port 65535 for all endpoints. This can be observed via:
             kubectl describe services -n <model_name> | grep Port -C 2
         At runtime, pebble watches which ports are bound and we need to patch the gap for pebble
@@ -91,9 +97,11 @@ class K8sServicePatch:
         Typical usage example from within charm code (e.g. on_install):
             service_ports = [("my-app-api", 9093, 9093), ("my-app-ha", 9094, 9094)]
             K8sServicePatch.set_ports(self.app.name, service_ports)
+
         Args:
             app: app name
             service_ports: a list of tuples (name, port, target_port) for every service port.
+
         Raises:
             PatchFailed: if patching fails.
         """

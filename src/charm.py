@@ -13,8 +13,8 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
-import yaml
 
+import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
 from charms.loki_k8s.v0.loki import LokiProvider
@@ -83,7 +83,7 @@ class LokiOperatorCharm(CharmBase):
         self._configure(event)
 
     def _configure(self, event):
-        """Configure Loki"""
+        """Configure Loki charm."""
         restart = False
 
         if not self._container.can_connect():
@@ -151,7 +151,7 @@ class LokiOperatorCharm(CharmBase):
     #             UTILITY METHODS                #
     ##############################################
     def _provide_loki(self):
-        """Gets LokiProvider instance into `self.loki_provider`"""
+        """Gets LokiProvider instance into `self.loki_provider`."""
         try:
             version = self._loki_server.version
             self.loki_provider = LokiProvider(self, "logging")
