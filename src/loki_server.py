@@ -4,6 +4,9 @@
 #
 # Learn more at: https://juju.is/docs/sdk
 
+"""Helper for interacting with Loki throughout the charm's lifecycle."""
+
+
 import logging
 
 import requests
@@ -12,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class LokiServerError(Exception):
-    """Custom exception to indicate Loki server is not"""
+    """Custom exception to indicate Loki server is not."""
 
 
 class LokiServerNotReadyError(Exception):
@@ -20,10 +23,11 @@ class LokiServerNotReadyError(Exception):
 
 
 class LokiServer:
-    """Class to manage Loki server"""
+    """Class to manage Loki server."""
 
     def __init__(self, host="localhost", port=3100, timeout=2.0):
         """Utility to manage a Loki application.
+
         Args:
             host: host address of Loki application.
             port: port on which Loki service is exposed.
@@ -60,7 +64,6 @@ class LokiServer:
             If Loki instance is not reachable then a LokiServerError
             exception is raised
         """
-
         try:
             # Un-comment the following lines once new Loki 2.3.1 version is released.
             #
@@ -79,4 +82,9 @@ class LokiServer:
 
     @property
     def loki_push_api(self) -> str:
+        """Fetch Loki PUSH API endpoint.
+
+        Returns:
+            a string consisting of the Loki Push API ndpoint
+        """
         return f"http://{self.host}:{self.port}/loki/api/v1/push"
