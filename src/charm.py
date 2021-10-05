@@ -53,6 +53,7 @@ class LokiOperatorCharm(CharmBase):
         )
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
         self.framework.observe(
             self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
@@ -69,6 +70,10 @@ class LokiOperatorCharm(CharmBase):
         self._patch_k8s_service()
 
     def _on_config_changed(self, event):
+        self._configure(event)
+
+    def _on_upgrade_charm(self, event):
+        self._patch_k8s_service()
         self._configure(event)
 
     def _on_loki_pebble_ready(self, event):
