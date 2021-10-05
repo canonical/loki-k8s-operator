@@ -420,7 +420,10 @@ class LokiConsumer(RelationManagerBase):
     _ALERT_RULES_PATH: str
 
     def __init__(
-        self, charm: CharmBase, relation_name: str, alert_rules_path: str = "src/loki_alert_rules"
+        self,
+        charm: CharmBase,
+        relation_name: str = "logging",
+        alert_rules_path: str = "src/loki_alert_rules",
     ):
         """Construct a Loki charm client.
 
