@@ -467,10 +467,6 @@ class LokiConsumer(RelationManagerBase):
         if not self._charm.unit.is_leader():
             return
 
-        if event.unit is None:
-            # Workaround: Seems this is a Juju bug that sends event.unit == None
-            return
-
         if data := event.relation.data[event.unit].get("data"):
             self._stored.loki_push_api = json.loads(data)["loki_push_api"]
 
