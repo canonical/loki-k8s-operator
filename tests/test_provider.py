@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest.mock import PropertyMock, patch
 
-from charms.loki_k8s.v0.loki import LokiProvider
+from charms.loki_k8s.v0.loki_push_api import LokiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -65,15 +65,15 @@ class TestLokiProvider(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
-    @patch("charms.loki_k8s.v0.loki.LokiProvider.unit_ip", new_callable=PropertyMock)
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider.unit_ip", new_callable=PropertyMock)
     def test_relation_data(self, mock_unit_ip):
         mock_unit_ip.return_value = "10.1.2.3"
         expected_value = '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'
         self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
 
-    @patch("charms.loki_k8s.v0.loki.LokiProvider._generate_alert_rules_files")
-    @patch("charms.loki_k8s.v0.loki.LokiProvider._remove_alert_rules_files")
-    @patch("charms.loki_k8s.v0.loki.LokiProvider.unit_ip", new_callable=PropertyMock)
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider._generate_alert_rules_files")
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider._remove_alert_rules_files")
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider.unit_ip", new_callable=PropertyMock)
     def test__on_logging_relation_changed(self, mock_unit_ip, *unused):
         with self.assertLogs(level="DEBUG") as logger:
             mock_unit_ip.return_value = "10.1.2.3"
@@ -82,18 +82,18 @@ class TestLokiProvider(unittest.TestCase):
             self.harness.update_relation_data(rel_id, "promtail/0", {})
             self.assertEqual(
                 sorted(logger.output)[0],
-                'DEBUG:charms.loki_k8s.v0.loki:Saving Loki url in relation data {"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}',
+                'DEBUG:charms.loki_k8s.v0.loki_push_api:Saving Loki url in relation data {"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}',
             )
 
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
             self.assertEqual(
                 sorted(logger.output)[1],
-                "DEBUG:charms.loki_k8s.v0.loki:Saving alerts rules to disk",
+                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saving alerts rules to disk",
             )
 
     @patch("os.makedirs")
     @patch("ops.testing._TestingPebbleClient.remove_path")
-    @patch("charms.loki_k8s.v0.loki.LokiProvider.unit_ip", new_callable=PropertyMock)
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider.unit_ip", new_callable=PropertyMock)
     def test_alerts(self, mock_unit_ip, *unused):
         mock_unit_ip.return_value = "10.1.2.3"
         rel_id = self.harness.add_relation("logging", "consumer")

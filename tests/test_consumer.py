@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
 
-from charms.loki_k8s.v0.loki import AlertRuleError, LokiConsumer
+from charms.loki_k8s.v0.loki_push_api import AlertRuleError, LokiConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -77,7 +77,7 @@ class TestLokiConsumer(unittest.TestCase):
         rel_id = self.harness.add_relation("logging", "promtail")
         self.assertEqual(self.harness.update_relation_data(rel_id, "promtail", {}), None)
 
-    @patch("charms.loki_k8s.v0.loki.LokiConsumer._labeled_alert_groups", new_callable=PropertyMock)
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiConsumer._labeled_alert_groups", new_callable=PropertyMock)
     def test__on_logging_relation_changed(self, mock_alert_rules):
         mock_alert_rules.return_value = LABELED_ALERT_RULES
         self.harness.set_leader(True)
