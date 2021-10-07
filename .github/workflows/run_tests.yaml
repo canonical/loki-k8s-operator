@@ -45,7 +45,7 @@ jobs:
       uses: charmed-kubernetes/actions-operator@main
       with:
         provider: microk8s
-    - name: Run alertmanger tests
+    - name: Run Loki tests
       run: tox -e integration
     - name: Run lma bundle tests
       run: tox -e integration-lma
