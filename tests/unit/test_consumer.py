@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import json
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
@@ -10,6 +11,7 @@ from charms.loki_k8s.v0.loki_push_api import AlertRuleError, LokiConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
+
 
 LABELED_ALERT_RULES = [
     {
@@ -42,6 +44,17 @@ ONE_RULE = {
 
 class FakeConsumerCharm(CharmBase):
     _stored = StoredState()
+    metadata_yaml = textwrap.dedent(
+        """
+        containers:
+          promtail:
+            resource: promtail-image
+
+        requires:
+          logging:
+            interface: loki_push_api
+        """
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
@@ -62,7 +75,7 @@ class FakeConsumerCharm(CharmBase):
 
 class TestLokiConsumer(unittest.TestCase):
     def setUp(self):
-        self.harness = Harness(FakeConsumerCharm)
+        self.harness = Harness(FakeConsumerCharm, meta=FakeConsumerCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
