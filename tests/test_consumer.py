@@ -74,12 +74,19 @@ class TestLokiConsumer(unittest.TestCase):
         self.assertEqual(self.harness.update_relation_data(rel_id, "promtail/0", {}), None)
 
     def test__on_logging_relation_changed_no_unit(self):
+        self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
-        self.assertEqual(self.harness.update_relation_data(rel_id, "promtail", {}), None)
+        self.harness.add_relation_unit(rel_id, "promtail/0")
+        self.assertEqual(self.harness.update_relation_data(
+            rel_id,
+            "promtail",
+            {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+        ), None)
 
     @patch("charms.loki_k8s.v0.loki_push_api.LokiConsumer._labeled_alert_groups", new_callable=PropertyMock)
     def test__on_logging_relation_changed(self, mock_alert_rules):
         mock_alert_rules.return_value = LABELED_ALERT_RULES
+        LOKI_PUSH_API = "http://10.1.2.3:3100/loki/api/v1/push"
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
@@ -88,6 +95,7 @@ class TestLokiConsumer(unittest.TestCase):
             "promtail/0",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
+        self.assertEqual(self.harness.charm.loki_consumer._stored.loki_push_api, LOKI_PUSH_API)
 
     def test__label_alert_expression(self):
         labeled_alert = self.harness.charm.loki_consumer._label_alert_expression(ONE_RULE.copy())
