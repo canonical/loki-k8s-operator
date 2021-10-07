@@ -50,3 +50,4 @@ resources:
   loki-image:
     type: oci-image
     description: OCI image
+    upstream-source: grafana/loki
