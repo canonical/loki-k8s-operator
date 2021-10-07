@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import json
+import textwrap
 import unittest
 from unittest.mock import PropertyMock, patch
 
@@ -40,6 +41,29 @@ ALERT_RULES = {
 
 class FakeLokiCharm(CharmBase):
     _stored = StoredState()
+    metadata_yaml = textwrap.dedent(
+        """
+        containers:
+          loki:
+            resource: loki-image
+            mounts:
+              - storage: active-index-directory
+                location: /loki/boltdb-shipper-active
+              - storage: loki-chunks
+                location: /loki/chunks
+
+        provides:
+          logging:
+            interface: loki_push_api
+          grafana-source:
+            interface: grafana_datasource
+            optional: true
+
+        requires:
+          alertmanager:
+            interface: alertmanager_dispatch
+        """
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
@@ -54,13 +78,13 @@ class FakeLokiCharm(CharmBase):
 
     @property
     def unit_ip(self) -> str:
-        """Returns unit's IP"""
+        """Returns unit's IP."""
         return "10.1.2.3"
 
 
 class TestLokiProvider(unittest.TestCase):
     def setUp(self):
-        self.harness = Harness(FakeLokiCharm)
+        self.harness = Harness(FakeLokiCharm, meta=FakeLokiCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()

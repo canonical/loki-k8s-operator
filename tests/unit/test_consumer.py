@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import json
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
@@ -42,6 +43,17 @@ ONE_RULE = {
 
 class FakeConsumerCharm(CharmBase):
     _stored = StoredState()
+    metadata_yaml = textwrap.dedent(
+        """
+        containers:
+          promtail:
+            resource: promtail-image
+
+        requires:
+          logging:
+            interface: loki_push_api
+        """
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
@@ -56,13 +68,13 @@ class FakeConsumerCharm(CharmBase):
 
     @property
     def unit_ip(self) -> str:
-        """Returns unit's IP"""
+        """Returns unit's IP."""
         return "10.1.2.3"
 
 
 class TestLokiConsumer(unittest.TestCase):
     def setUp(self):
-        self.harness = Harness(FakeConsumerCharm)
+        self.harness = Harness(FakeConsumerCharm, meta=FakeConsumerCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
@@ -77,16 +89,22 @@ class TestLokiConsumer(unittest.TestCase):
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.assertEqual(self.harness.update_relation_data(
-            rel_id,
-            "promtail",
-            {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
-        ), None)
+        self.assertEqual(
+            self.harness.update_relation_data(
+                rel_id,
+                "promtail",
+                {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+            ),
+            None,
+        )
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiConsumer._labeled_alert_groups", new_callable=PropertyMock)
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiConsumer._labeled_alert_groups",
+        new_callable=PropertyMock,
+    )
     def test__on_logging_relation_changed(self, mock_alert_rules):
         mock_alert_rules.return_value = LABELED_ALERT_RULES
-        LOKI_PUSH_API = "http://10.1.2.3:3100/loki/api/v1/push"
+        loki_push_api = "http://10.1.2.3:3100/loki/api/v1/push"
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
@@ -95,7 +113,7 @@ class TestLokiConsumer(unittest.TestCase):
             "promtail/0",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        self.assertEqual(self.harness.charm.loki_consumer._stored.loki_push_api, LOKI_PUSH_API)
+        self.assertEqual(self.harness.charm.loki_consumer._stored.loki_push_api, loki_push_api)
 
     def test__label_alert_expression(self):
         labeled_alert = self.harness.charm.loki_consumer._label_alert_expression(ONE_RULE.copy())
