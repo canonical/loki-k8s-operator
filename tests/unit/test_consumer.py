@@ -12,7 +12,6 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
 
-
 LABELED_ALERT_RULES = [
     {
         "name": "loki_20ce8299-3634-4bef-8bd8-5ace6c8816b4_promtail-k8s_alerts",
@@ -69,7 +68,7 @@ class FakeConsumerCharm(CharmBase):
 
     @property
     def unit_ip(self) -> str:
-        """Returns unit's IP"""
+        """Returns unit's IP."""
         return "10.1.2.3"
 
 
@@ -90,16 +89,22 @@ class TestLokiConsumer(unittest.TestCase):
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.assertEqual(self.harness.update_relation_data(
-            rel_id,
-            "promtail",
-            {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
-        ), None)
+        self.assertEqual(
+            self.harness.update_relation_data(
+                rel_id,
+                "promtail",
+                {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+            ),
+            None,
+        )
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiConsumer._labeled_alert_groups", new_callable=PropertyMock)
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiConsumer._labeled_alert_groups",
+        new_callable=PropertyMock,
+    )
     def test__on_logging_relation_changed(self, mock_alert_rules):
         mock_alert_rules.return_value = LABELED_ALERT_RULES
-        LOKI_PUSH_API = "http://10.1.2.3:3100/loki/api/v1/push"
+        loki_push_api = "http://10.1.2.3:3100/loki/api/v1/push"
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
@@ -108,7 +113,7 @@ class TestLokiConsumer(unittest.TestCase):
             "promtail/0",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        self.assertEqual(self.harness.charm.loki_consumer._stored.loki_push_api, LOKI_PUSH_API)
+        self.assertEqual(self.harness.charm.loki_consumer._stored.loki_push_api, loki_push_api)
 
     def test__label_alert_expression(self):
         labeled_alert = self.harness.charm.loki_consumer._label_alert_expression(ONE_RULE.copy())

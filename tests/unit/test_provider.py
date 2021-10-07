@@ -78,7 +78,7 @@ class FakeLokiCharm(CharmBase):
 
     @property
     def unit_ip(self) -> str:
-        """Returns unit's IP"""
+        """Returns unit's IP."""
         return "10.1.2.3"
 
 
