@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import get_unit_address  # type: ignore[attr-defined]
+from helpers import get_unit_address  # type: ignore[import]
 
 log = logging.getLogger(__name__)
 
@@ -25,9 +25,7 @@ async def test_build_and_deploy(ops_test):
     """
     # build and deploy charm from local source folder
     charm_under_test = await ops_test.build_charm(".")
-    resources = {
-        "loki-image": METADATA["resources"]["loki-image"]["upstream-source"]
-    }
+    resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
     await ops_test.model.deploy(charm_under_test, resources=resources, application_name="loki")
 
     # due to a juju bug, occasionally some charms finish a startup sequence with "waiting for IP
@@ -48,6 +46,8 @@ async def test_loki_is_up(ops_test):
     url = f"http://{address}:3100"
     log.info("Loki public address: %s", url)
 
-    response = urllib.request.urlopen(f"{url}/loki/api/v1/status/buildinfo", data=None, timeout=2.0)
+    response = urllib.request.urlopen(
+        f"{url}/loki/api/v1/status/buildinfo", data=None, timeout=2.0
+    )
     assert response.code == 200
     assert "version" in json.loads(response.read())
