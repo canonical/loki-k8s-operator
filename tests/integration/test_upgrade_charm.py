@@ -15,8 +15,7 @@ from helpers import get_unit_address  # type: ignore[import]
 log = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-# app_name = "am"
-app_name = METADATA["name"]
+app_name = "loki"
 
 pytestmark = pytest.mark.skip(
     "upgrade charm does not work yet: add_local_charm keeps erroring out with 'ConnectionResetError: [Errno 104] Connection reset by peer'"
