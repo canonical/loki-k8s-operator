@@ -154,7 +154,7 @@ class LokiOperatorCharm(CharmBase):
         """Gets LokiProvider instance into `self.loki_provider`."""
         try:
             version = self._loki_server.version
-            self.loki_provider = LokiProvider(self, "logging")
+            self.loki_provider = LokiProvider(self)
             logger.debug("Loki Provider is available. Loki version: %s", version)
         except LokiServerNotReadyError as e:
             self.unit.status = MaintenanceStatus(str(e))
