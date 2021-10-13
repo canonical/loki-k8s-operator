@@ -32,6 +32,13 @@ of information:
   lib will automatically resolve the relation name inspecting the using the
   meta information of the charm.
 
+An example of this in `metadata.yaml` file should have the following section:
+
+    provides:
+      logging:
+        interface: loki_push_api
+
+
 For example a Loki charm may instantiate the
 `LokiProvider` in its constructor as follows
 
