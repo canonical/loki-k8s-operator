@@ -145,7 +145,7 @@ sends logs).
         def __init__(self, *args):
             super().__init__(*args)
             ...
-            self.loki = LokiPushApiConsumer(self)
+            self.loki_consumer = LokiPushApiConsumer(self)
 
 
 The `LokiPushApiConsumer` constructor requires two things:
