@@ -708,6 +708,8 @@ class LokiPushApiConsumer(RelationManagerBase):
 
         if event.unit is None:
             # Workaround: Seems this is a Juju bug that sends event.unit == None
+            # Remove this if when this issue is closed:
+            # https://github.com/canonical/loki-operator/issues/3
             return
 
         if data := event.relation.data[event.unit].get("data"):
