@@ -58,7 +58,7 @@ class FakeConsumerCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
-        self.loki_consumer = LokiConsumer(self, "logging")
+        self.loki_consumer = LokiConsumer(self)
 
     @property
     def _loki_push_api(self) -> str:

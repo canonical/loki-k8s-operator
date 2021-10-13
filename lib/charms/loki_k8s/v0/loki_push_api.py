@@ -216,15 +216,13 @@ data using the `alert_rules` key.
 import json
 import logging
 import os
-import sys
-from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 import yaml
-from ops.charm import CharmBase
+from ops.charm import CharmBase, RelationMeta, RelationRole
 from ops.framework import Object, StoredState
-from ops.model import BlockedStatus, ModelError
+from ops.model import BlockedStatus
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -234,7 +232,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 # Alert rules directory in workload container
 RULES_DIR = "/loki/rules"
@@ -242,52 +240,131 @@ RULES_DIR = "/loki/rules"
 logger = logging.getLogger(__name__)
 
 RELATION_INTERFACE_NAME = "loki_push_api"
+DEFAULT_RELATION_NAME = "logging"
+DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
 
 
-class RelationDirection(Enum):
-    """Relations can be either provided or required by a charm."""
+class RelationNotFoundError(Exception):
+    """Raised if there is no relation with the given name."""
 
-    PROVIDED = 1
-    REQUIRED = 2
+    def __init__(self, relation_name: str):
+        self.relation_name = relation_name
+        self.message = f"No relation named '{relation_name}' found"
+
+        super().__init__(self.message)
 
 
-def _get_single_relation_by_interface(
-    charm: CharmBase, relation_interface: str, relation_direction: RelationDirection
-) -> str:
-    """Retrive the only relation in the charm meta that uses the given interface.
+class RelationInterfaceMismatchError(Exception):
+    """Raised if the relation with the given name has a different interface."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_interface: str,
+        actual_relation_interface: str,
+    ):
+        self.relation_name = relation_name
+        self.expected_relation_interface = expected_relation_interface
+        self.actual_relation_interface = actual_relation_interface
+        self.message = (
+            f"The '{relation_name}' relation has '{actual_relation_interface}' as "
+            f"interface rather than the expected '{expected_relation_interface}'"
+        )
+
+        super().__init__(self.message)
+
+
+class RelationRoleMismatchError(Exception):
+    """Raised if the relation with the given name has a different direction."""
+
+    def __init__(
+        self,
+        relation_name: str,
+        expected_relation_role: RelationRole,
+        actual_relation_role: RelationRole,
+    ):
+        self.relation_name = relation_name
+        self.expected_relation_interface = expected_relation_role
+        self.actual_relation_role = actual_relation_role
+        self.message = (
+            f"The '{relation_name}' relation has role '{repr(actual_relation_role)}' "
+            f"rather than the expected '{repr(expected_relation_role)}'"
+        )
+
+        super().__init__(self.message)
+
+
+class InvalidAlertRuleFolderPathError(Exception):
+    """Raised if the alert rules folder cannot be found or is otherwise invalid."""
+
+    def __init__(
+        self,
+        alert_rules_absolute_path: str,
+        message: str,
+    ):
+        self.alert_rules_absolute_path = alert_rules_absolute_path
+        self.message = message
+
+        super().__init__(self.message)
+
+
+def _validate_relation_by_interface_and_direction(
+    charm: CharmBase,
+    relation_name: str,
+    expected_relation_interface: str,
+    expected_relation_role: RelationRole,
+):
+    """Verifies that a relation has the necessary characteristics.
+
+    Verifies that the `relation_name` provided: (1) exists in metadata.yaml,
+    (2) declares as interface the interface name passed as `relation_interface`
+    and (3) has the right "direction", i.e., it is a relation that `charm`
+    provides or requires.
 
     Args:
         charm: a `CharmBase` object to scan for the matching relation.
-        relation_interface: the string name of the relation interface to look up.
-            If `charm` has exactly one relation with this interface, the relation's
-            name is returned. If none or multiple relations with the provided interface
-            are found, this method will raise either an exception of type
-            NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
-            respectively.
-        relation_direction: whether the relation to look up is either one of the provided
-            or required relations.
+        relation_name: the name of the relation to be verified.
+        expected_relation_interface: the interface name to be matched by the
+            relation named `relation_name`.
+        expected_relation_role: whether the `relation_name` must be either
+            provided or required by `charm`.
+
+    Raises:
+        RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+            with the same name as provided via `relation_name` argument.
+        RelationInterfaceMismatchError: The relation with the same name as provided
+            via `relation_name` argument does not have the same relation interface
+            as specified via the `expected_relation_interface` argument.
+        RelationRoleMismatchError: If the relation with the same name as provided
+            via `relation_name` argument does not have the same role as specified
+            via the `expected_relation_role` argument.
     """
-    relations_with_right_direction = (
-        charm.meta.provides
-        if relation_direction == RelationDirection.PROVIDED
-        else charm.meta.requires
-    )
+    if relation_name not in charm.meta.relations:
+        raise RelationNotFoundError(relation_name)
 
-    relations = [
-        relation_name
-        for relation_name, relation_meta in relations_with_right_direction.items()
-        if relation_meta.interface_name == relation_interface
-    ]
+    relation: RelationMeta = charm.meta.relations[relation_name]
 
-    if len(relations) == 1:
-        return relations[0]
-    elif len(relations) == 0:
-        raise NoRelationWithInterfaceFoundError(charm, relation_interface)
+    actual_relation_interface = relation.interface_name
+    if actual_relation_interface != expected_relation_interface:
+        raise RelationInterfaceMismatchError(
+            relation_name, expected_relation_interface, actual_relation_interface
+        )
+
+    if expected_relation_role == RelationRole.provides:
+        if relation_name not in charm.meta.provides:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.provides, RelationRole.requires
+            )
+    elif expected_relation_role == RelationRole.requires:
+        if relation_name not in charm.meta.requires:
+            raise RelationRoleMismatchError(
+                relation_name, RelationRole.requires, RelationRole.provides
+            )
     else:
-        raise MultipleRelationsWithInterfaceFoundError(charm, relation_interface, relations)
+        raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
 
 
-def resolve_dir_against_main_path(*path_elements: str) -> Optional[str]:
+def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> str:
     """Resolve the provided path items against the directory of the main file.
 
     Look up the directory of the main .py file being executed. This is normally
@@ -295,14 +372,24 @@ def resolve_dir_against_main_path(*path_elements: str) -> Optional[str]:
     the provided path elements and, if the result path exists and is a directory,
     return its absolute path; otherwise, return `None`.
     """
-    charm_file = sys.path[0]
+    charm_dir = Path(charm.charm_dir)
+    if not charm_dir.exists() or not charm_dir.is_dir():
+        # Operator Framework does not currently expose a robust
+        # way to determine the top level charm source directory
+        # that is consistent across deployed charms and unit tests
+        # Hence for unit tests the current working directory is used
+        # TODO: updated this logic when the following ticket is resolved
+        # https://github.com/canonical/operator/issues/643
+        charm_dir = Path(os.getcwd())
 
-    default_alerts_dir = Path(charm_file).joinpath(*path_elements)
+    alerts_dir_path = charm_dir.absolute().joinpath(*path_elements)
 
-    if default_alerts_dir.exists() and default_alerts_dir.is_dir:
-        return str(default_alerts_dir.absolute())
+    if not alerts_dir_path.exists():
+        raise InvalidAlertRuleFolderPathError(str(alerts_dir_path), "directory does not exist")
+    if not alerts_dir_path.is_dir():
+        raise InvalidAlertRuleFolderPathError(str(alerts_dir_path), "is not a directory")
 
-    return None
+    return str(alerts_dir_path)
 
 
 class NoRelationWithInterfaceFoundError(Exception):
@@ -360,42 +447,32 @@ class AlertRuleError(Exception):
 class LokiProvider(RelationManagerBase):
     """A LokiProvider class."""
 
-    def __init__(self, charm, relation_name: Optional[str] = None):
+    def __init__(self, charm, relation_name: str = DEFAULT_RELATION_NAME):
         """A Loki service provider.
 
         Args:
             charm: a `CharmBase` instance that manages this
                 instance of the Loki service.
 
-            relation_interface: the string name of the relation interface to look up.
-                If `charm` has exactly one relation with this interface, the relation's
-                name is returned. If none or multiple relations with the provided interface
-                are found, this method will raise either an exception of type
-                NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
-                respectively.
+            relation_name: an optional string name of the relation between `charm`
+                and the Loki charmed service. The default is "logging".
+                It is strongly advised not to change the default, so that people
+                deploying your charm will have a consistent experience with all
+                other charms that consume metrics endpoints.
 
-        Returns:
-            Nothing.
+        Raises:
+            RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+                with the same name as provided via `relation_name` argument.
+            RelationInterfaceMismatchError: The relation with the same name as provided
+                via `relation_name` argument does not have the `loki_push_api` relation
+                interface.
+            RelationRoleMismatchError: If the relation with the same name as provided
+                via `relation_name` argument does not have the `RelationRole.requires`
+                role.
         """
-        if not relation_name:
-            try:
-                # Check if there is just one relation with the right interface
-                relation_name = _get_single_relation_by_interface(
-                    charm, RELATION_INTERFACE_NAME, RelationDirection.PROVIDED
-                )
-            except NoRelationWithInterfaceFoundError:
-                raise ModelError(
-                    f"No provided relation with the '{RELATION_INTERFACE_NAME}' interface found; "
-                    f"did you add a relation with the '{RELATION_INTERFACE_NAME}' interface in the charm's "
-                    "metadata.yaml file?"
-                )
-            except MultipleRelationsWithInterfaceFoundError as e:
-                raise ModelError(
-                    f"Multiple provided relations with the '{RELATION_INTERFACE_NAME}' interface found: "
-                    f"{e.relations}; you must specify which relation should be managed by this "
-                    f"{type(self)} by providing the `relation_name` argument."
-                )
-
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
+        )
         super().__init__(charm, relation_name)
         self.charm = charm
         self._relation_name = relation_name
@@ -551,8 +628,8 @@ class LokiConsumer(RelationManagerBase):
     def __init__(
         self,
         charm: CharmBase,
-        relation_name: Optional[str] = None,
-        alert_rules_path: Optional[str] = None,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
     ):
         """Construct a Loki charm client.
 
@@ -561,7 +638,7 @@ class LokiConsumer(RelationManagerBase):
         Loki API endpoint to push logs.
         The `LokiConsumer` can be instantiated as follows:
 
-            self.loki_consumer = LokiConsumer(self, relation_name="logging")
+            self.loki_consumer = LokiConsumer(self)
 
         Args:
             charm: a `CharmBase` object that manages this `LokiConsumer` object. Typically this is
@@ -572,34 +649,34 @@ class LokiConsumer(RelationManagerBase):
                 are found, this method will raise either an exception of type
                 NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
                 respectively.
-            alert_rules_path: an optional path for the location of alert rules files.
-                Defaults to "src/loki_alert_rules" at the top level of the
-                charm repository.
+            alert_rules_path: an optional path for the location of alert rules
+                files.  Defaults to "./loki_alert_rules",
+                resolved from the directory hosting the charm entry file.
+                The alert rules are automatically updated on charm upgrade.
 
-        Returns:
-            Nothing.
+
+        Raises:
+            RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+                with the same name as provided via `relation_name` argument.
+            RelationInterfaceMismatchError: The relation with the same name as provided
+                via `relation_name` argument does not have the `prometheus_scrape` relation
+                interface.
+            RelationRoleMismatchError: If the relation with the same name as provided
+                via `relation_name` argument does not have the `RelationRole.provides`
+                role.
         """
-        if not relation_name:
-            try:
-                # Check if there is just one relation with the right interface
-                relation_name = _get_single_relation_by_interface(
-                    charm, RELATION_INTERFACE_NAME, RelationDirection.REQUIRED
-                )
-            except NoRelationWithInterfaceFoundError:
-                raise ModelError(
-                    f"No required relation with the '{RELATION_INTERFACE_NAME}' interface found; "
-                    f"did you add a relation with the '{RELATION_INTERFACE_NAME}' interface in the charm's "
-                    "metadata.yaml file?"
-                )
-            except MultipleRelationsWithInterfaceFoundError as e:
-                raise ModelError(
-                    f"Multiple required relations with the '{RELATION_INTERFACE_NAME}' interface found: "
-                    f"{e.relations}; you must specify which relation should be managed by this "
-                    f"{type(self)} by providing the `relation_name` argument."
-                )
+        _validate_relation_by_interface_and_direction(
+            charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
+        )
 
-        if not alert_rules_path:
-            alert_rules_path = resolve_dir_against_main_path("loki_alert_rules")
+        try:
+            alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
+        except InvalidAlertRuleFolderPathError as e:
+            logger.warning(
+                "Invalid Prometheus alert rules folder at %s: %s",
+                e.alert_rules_absolute_path,
+                e.message,
+            )
 
         super().__init__(charm, relation_name)
         self._stored.set_default(loki_push_api=None)
