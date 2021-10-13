@@ -158,10 +158,9 @@ The `LokiConsumer` constructor requires two things:
 This charm library also supports gathering alerting rules from all
 related Loki clients charms and enabling corresponding alerts within the
 Loki charm. Alert rules are automatically gathered by `LokiConsumer` object
-from a directory defined in `DEFAULT_ALERT_RULES_RELATIVE_PATH`.
-This directory, conventionally named `loki_alert_rules`, must reside at the top
-level in the `src` folder of the consumer charm.
-Each file in this directory is assumed to be a single alert rule
+from a directory conventionally named `loki_alert_rules`.
+This directory must reside at the top level in the `src` folder of the
+consumer charm. Each file in this directory is assumed to be a single alert rule
 in YAML format. The file name must have the `.rule` extension.
 The format of this alert rule conforms to the
 [Loki docs](https://grafana.com/docs/loki/latest/rules/#alerting-rules).
