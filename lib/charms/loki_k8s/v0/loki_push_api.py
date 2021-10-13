@@ -648,8 +648,8 @@ class LokiPushApiConsumer(RelationManagerBase):
             self.loki_consumer = LokiPushApiConsumer(self)
 
         Args:
-            charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object. Typically this is
-                `self` in the instantiating class.
+            charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
+                Typically this is `self` in the instantiating class.
             relation_name: the string name of the relation interface to look up.
                 If `charm` has exactly one relation with this interface, the relation's
                 name is returned. If none or multiple relations with the provided interface
