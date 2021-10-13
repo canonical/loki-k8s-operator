@@ -6,7 +6,7 @@ import textwrap
 import unittest
 from unittest.mock import PropertyMock, patch
 
-from charms.loki_k8s.v0.loki_push_api import LokiProvider
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -68,7 +68,7 @@ class FakeLokiCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
-        self.loki_provider = LokiProvider(self, "logging")
+        self.loki_provider = LokiPushApiProvider(self, "logging")
 
     @property
     def _loki_push_api(self) -> str:
@@ -82,22 +82,26 @@ class FakeLokiCharm(CharmBase):
         return "10.1.2.3"
 
 
-class TestLokiProvider(unittest.TestCase):
+class TestLokiPushApiProvider(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(FakeLokiCharm, meta=FakeLokiCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider.unit_ip", new_callable=PropertyMock)
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
+    )
     def test_relation_data(self, mock_unit_ip):
         mock_unit_ip.return_value = "10.1.2.3"
         expected_value = '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'
         self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider._generate_alert_rules_files")
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider._remove_alert_rules_files")
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider.unit_ip", new_callable=PropertyMock)
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files")
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files")
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
+    )
     def test__on_logging_relation_changed(self, mock_unit_ip, *unused):
         with self.assertLogs(level="DEBUG") as logger:
             mock_unit_ip.return_value = "10.1.2.3"
@@ -117,7 +121,9 @@ class TestLokiProvider(unittest.TestCase):
 
     @patch("os.makedirs")
     @patch("ops.testing._TestingPebbleClient.remove_path")
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiProvider.unit_ip", new_callable=PropertyMock)
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
+    )
     def test_alerts(self, mock_unit_ip, *unused):
         mock_unit_ip.return_value = "10.1.2.3"
         rel_id = self.harness.add_relation("logging", "consumer")
