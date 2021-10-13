@@ -133,22 +133,22 @@ stores these files in the directory `/loki/rules` inside the Loki charm containe
 
 This Loki charm interacts with its clients using the Loki
 charm library. Charms seeking to send log to Loki,
-must do so using the `LokiConsumer` object from this charm library.
-For the simplest use cases, using the `LokiConsumer` object only requires
+must do so using the `LokiPushApiConsumer` object from this charm library.
+For the simplest use cases, using the `LokiPushApiConsumer` object only requires
 instantiating it, typically in the constructor of your charm (the one which
 sends logs).
 
-    from charms.loki_k8s.v0.loki_push_api import LokiConsumer
+    from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 
     class LokiClientCharm(CharmBase):
 
         def __init__(self, *args):
             super().__init__(*args)
             ...
-            self.loki = LokiConsumer(self)
+            self.loki = LokiPushApiConsumer(self)
 
 
-The `LokiConsumer` constructor requires two things:
+The `LokiPushApiConsumer` constructor requires two things:
 
 - A reference to the parent (LokiClientCharm) charm.
 
@@ -164,7 +164,7 @@ The `LokiConsumer` constructor requires two things:
 
 This charm library also supports gathering alerting rules from all
 related Loki clients charms and enabling corresponding alerts within the
-Loki charm. Alert rules are automatically gathered by `LokiConsumer` object
+Loki charm. Alert rules are automatically gathered by `LokiPushApiConsumer` object
 from a directory conventionally named `loki_alert_rules`.
 This directory must reside at the top level in the `src` folder of the
 consumer charm. Each file in this directory is assumed to be a single alert rule
@@ -190,7 +190,7 @@ annotations:
 
 It is **critical** to use the `%%juju_topology%%` filter in the
 expression for the alert rule shown above. This filter is a stub that
-is automatically replaced by the `LokiConsumer` following Loki Client's Juju
+is automatically replaced by the `LokiPushApiConsumer` following Loki Client's Juju
 topology (application, model and its UUID). Such a topology filter is
 essential to ensure that alert rules submitted by one provider charm
 generates alerts only for that same charm.  The Loki charm may
@@ -626,7 +626,7 @@ class LokiProvider(RelationManagerBase):
         return alerts
 
 
-class LokiConsumer(RelationManagerBase):
+class LokiPushApiConsumer(RelationManagerBase):
     """Loki Consumer class."""
 
     _stored = StoredState()
@@ -640,15 +640,15 @@ class LokiConsumer(RelationManagerBase):
     ):
         """Construct a Loki charm client.
 
-        The `LokiConsumer` object provides configurations to a Loki client charm.
+        The `LokiPushApiConsumer` object provides configurations to a Loki client charm.
         A charm instantiating this object needs Loki information, for instance the
         Loki API endpoint to push logs.
-        The `LokiConsumer` can be instantiated as follows:
+        The `LokiPushApiConsumer` can be instantiated as follows:
 
-            self.loki_consumer = LokiConsumer(self)
+            self.loki_consumer = LokiPushApiConsumer(self)
 
         Args:
-            charm: a `CharmBase` object that manages this `LokiConsumer` object. Typically this is
+            charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object. Typically this is
                 `self` in the instantiating class.
             relation_name: the string name of the relation interface to look up.
                 If `charm` has exactly one relation with this interface, the relation's
