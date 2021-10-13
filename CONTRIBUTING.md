@@ -85,9 +85,9 @@ The core implementation of this charm is represented by the [`LokiOperatorCharm`
 `LokiOperatorCharm` responds to the following events:
 
 - `loki_pebble_ready`: Here we set up pebble layer and start the service
-- `relation_joined` In this event (Provided by the object `LokiProvider`) we set the `loki_push_api` (`http://{self.unit_ip}:{self.charm.port}/loki/api/v1/push`) so it can be used by a Consumer charm that uses the `LokiConsumer` object.
+- `relation_joined` In this event (Provided by the object `LokiPushApiProvider`) we set the `loki_push_api` (`http://{self.unit_ip}:{self.charm.port}/loki/api/v1/push`) so it can be used by a Consumer charm that uses the `LokiPushApiConsumer` object.
 
-Both clases `LokiProvider` and `LokiConsumer` are provided by the [`Loki library`](lib/charms/loki_k8s/v0/loki.py)
+Both clases `LokiPushApiProvider` and `LokiPushApiConsumer` are provided by the [`Loki library`](lib/charms/loki_k8s/v0/loki.py)
 
 
 ## Design Choices

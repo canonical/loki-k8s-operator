@@ -17,7 +17,7 @@ import logging
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
-from charms.loki_k8s.v0.loki_push_api import LokiProvider
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -151,10 +151,10 @@ class LokiOperatorCharm(CharmBase):
     #             UTILITY METHODS                #
     ##############################################
     def _provide_loki(self):
-        """Gets LokiProvider instance into `self.loki_provider`."""
+        """Gets LokiPushApiProvider instance into `self.loki_provider`."""
         try:
             version = self._loki_server.version
-            self.loki_provider = LokiProvider(self)
+            self.loki_provider = LokiPushApiProvider(self)
             logger.debug("Loki Provider is available. Loki version: %s", version)
         except LokiServerNotReadyError as e:
             self.unit.status = MaintenanceStatus(str(e))

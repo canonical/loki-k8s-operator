@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
 
-from charms.loki_k8s.v0.loki_push_api import AlertRuleError, LokiConsumer
+from charms.loki_k8s.v0.loki_push_api import AlertRuleError, LokiPushApiConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -58,7 +58,7 @@ class FakeConsumerCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
-        self.loki_consumer = LokiConsumer(self)
+        self.loki_consumer = LokiPushApiConsumer(self)
 
     @property
     def _loki_push_api(self) -> str:
@@ -72,7 +72,7 @@ class FakeConsumerCharm(CharmBase):
         return "10.1.2.3"
 
 
-class TestLokiConsumer(unittest.TestCase):
+class TestLokiPushApiConsumer(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(FakeConsumerCharm, meta=FakeConsumerCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)
@@ -99,7 +99,7 @@ class TestLokiConsumer(unittest.TestCase):
         )
 
     @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiConsumer._labeled_alert_groups",
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiConsumer._labeled_alert_groups",
         new_callable=PropertyMock,
     )
     def test__on_logging_relation_changed(self, mock_alert_rules):
