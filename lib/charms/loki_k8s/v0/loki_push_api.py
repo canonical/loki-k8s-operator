@@ -38,6 +38,12 @@ An example of this in `metadata.yaml` file should have the following section:
       logging:
         interface: loki_push_api
 
+If you would like to use relation name other than `logging`,
+you will need to specify the relation name via the `relation_name`
+argument when instantiating the :class:`LokiPushApiProvider` object.
+However, it is strongly advised to keep the the default relation name,
+so that people deploying your charm will have a consistent experience
+with all other charms that provide Loki Push API.
 
 For example a Loki charm may instantiate the
 `LokiPushApiProvider` in its constructor as follows
