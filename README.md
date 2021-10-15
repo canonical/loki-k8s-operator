@@ -9,7 +9,7 @@ The [Loki](https://grafana.com/oss/loki/) operator provides an open-source fully
 
 ## Usage
 
-Create a Juju model for your operators, say "loki-k8s"
+Create a Juju model for your operators, say "lma"
 
 ```bash
     juju add-model lma
@@ -24,7 +24,7 @@ The Loki Operator may be deployed using the Juju command line
 If required, you can remove the deployment completely:
 
 ```bash
-    juju destroy-model -y loki-k8s --no-wait --force --destroy-storage
+    juju destroy-model -y lma --no-wait --force --destroy-storage
 ```
 Note the `--destroy-storage` will delete any data stored by MySQL in its persistent store.
 
