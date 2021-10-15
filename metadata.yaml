@@ -18,6 +18,8 @@ summary: |
 maintainers:
     - Jose Massón <jose.masson@canonical.com>
 
+docs: https://discourse.charmhub.io/t/loki-k8s-docs-index/5228
+
 containers:
   loki:
     resource: loki-image
