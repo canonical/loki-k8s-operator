@@ -26,7 +26,7 @@ If required, you can remove the deployment completely:
 ```bash
     juju destroy-model -y lma --no-wait --force --destroy-storage
 ```
-Note the `--destroy-storage` will delete any data stored by MySQL in its persistent store.
+Note the `--destroy-storage` will delete any data stored by Loki in its persistent store.
 
 
 ## Relations
