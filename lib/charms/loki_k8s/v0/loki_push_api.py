@@ -170,7 +170,10 @@ Anytime there are departures in relations between the consumer charm and Loki
 the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event, for instance:
 
 ```python
-self.framework.observe(self._loki_consumer.on.loki_push_api_endpoint_departed, self._on_loki_push_api_endpoint_departed)
+self.framework.observe(
+    self._loki_consumer.on.loki_push_api_endpoint_departed,
+    self._on_loki_push_api_endpoint_departed,
+)
 ```
 
 The consumer charm can then choose to update its configuration.
