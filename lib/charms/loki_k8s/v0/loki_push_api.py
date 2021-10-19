@@ -151,7 +151,7 @@ sends logs).
         def __init__(self, *args):
             super().__init__(*args)
             ...
-            self.loki_consumer = LokiPushApiConsumer(self)
+            self._loki_consumer = LokiPushApiConsumer(self)
 
 
 The `LokiPushApiConsumer` constructor requires two things:
@@ -165,6 +165,16 @@ The `LokiPushApiConsumer` constructor requires two things:
   required relation in metadata.yaml with the `loki_push_api` interface, as the
   lib will automatically resolve the relation name inspecting the using the
   meta information of the charm
+
+Anytime there are departures in relations between the consumer charm and Loki
+the consumer charm is informed, through a `LokiDepartedEvent` event, for instance:
+
+```python
+self.framework.observe(self._loki_consumer.on.loki_departed, self._on_loki_departed)
+```
+
+The consumer charm can then choose to update its configuration.
+
 
 ## Alerting Rules
 
@@ -234,7 +244,7 @@ from typing import Optional
 
 import yaml
 from ops.charm import CharmBase, RelationMeta, RelationRole
-from ops.framework import Object, StoredState
+from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.model import BlockedStatus
 
 # The unique Charmhub library identifier, never change it
@@ -457,6 +467,18 @@ class AlertRuleError(Exception):
         super().__init__(self.message)
 
 
+class LokiDepartedEvent(EventBase):
+    """Event emitted when Loki departed."""
+
+    pass
+
+
+class LoggingEvents(ObjectEvents):
+    """Event descriptor for events raised by `LokiPushApiProvider`."""
+
+    loki_departed = EventSource(LokiDepartedEvent)
+
+
 class LokiPushApiProvider(RelationManagerBase):
     """A LokiPushApiProvider class."""
 
@@ -635,6 +657,7 @@ class LokiPushApiProvider(RelationManagerBase):
 class LokiPushApiConsumer(RelationManagerBase):
     """Loki Consumer class."""
 
+    on = LoggingEvents()
     _stored = StoredState()
     _alert_rules_path: Optional[str]
 
@@ -651,7 +674,7 @@ class LokiPushApiConsumer(RelationManagerBase):
         Loki API endpoint to push logs.
         The `LokiPushApiConsumer` can be instantiated as follows:
 
-            self.loki_consumer = LokiPushApiConsumer(self)
+            self._loki_consumer = LokiPushApiConsumer(self)
 
         Args:
             charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
@@ -686,7 +709,7 @@ class LokiPushApiConsumer(RelationManagerBase):
             alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
         except InvalidAlertRuleFolderPathError as e:
             logger.warning(
-                "Invalid Prometheus alert rules folder at %s: %s",
+                "Invalid Loki alert rules folder at %s: %s",
                 e.alert_rules_absolute_path,
                 e.message,
             )
@@ -697,13 +720,14 @@ class LokiPushApiConsumer(RelationManagerBase):
         self._relation_name = relation_name
         self._alert_rules_path = alert_rules_path
         events = self._charm.on[relation_name]
-        self.framework.observe(events.relation_changed, self._on_logging_relaton_changed)
+        self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
+        self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
-    def _on_logging_relaton_changed(self, event):
+    def _on_logging_relation_changed(self, event):
         """Handle changes in related consumers.
 
         Anytime there are changes in the relation between Loki
-        and its consumers charms,
+        and its consumers charms.
 
         Args:
             event: a `CharmEvent` in response to which the consumer
@@ -723,6 +747,15 @@ class LokiPushApiConsumer(RelationManagerBase):
 
         event.relation.data[self._charm.app]["metadata"] = json.dumps(self._scrape_metadata)
         self._set_alert_rules(event)
+
+    def _on_logging_relation_departed(self, _):
+        """Handle departures in related consumers.
+
+        Anytime there are departures in relations between the consumer charm and Loki
+        the consumer charm is informed, through a `LokiDepartedEvent` event.
+        The consumer charm can then choose to update its configuration.
+        """
+        self.on.loki_departed.emit()
 
     def _set_alert_rules(self, event):
         """Set alert rules into relation data.
