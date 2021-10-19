@@ -167,10 +167,10 @@ The `LokiPushApiConsumer` constructor requires two things:
   meta information of the charm
 
 Anytime there are departures in relations between the consumer charm and Loki
-the consumer charm is informed, through a `LokiDepartedEvent` event, for instance:
+the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event, for instance:
 
 ```python
-self.framework.observe(self._loki_consumer.on.loki_departed, self._on_loki_departed)
+self.framework.observe(self._loki_consumer.on.loki_push_api_endpoint_departed, self._on_loki_push_api_endpoint_departed)
 ```
 
 The consumer charm can then choose to update its configuration.
@@ -467,7 +467,7 @@ class AlertRuleError(Exception):
         super().__init__(self.message)
 
 
-class LokiDepartedEvent(EventBase):
+class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
     pass
@@ -476,7 +476,7 @@ class LokiDepartedEvent(EventBase):
 class LoggingEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
-    loki_departed = EventSource(LokiDepartedEvent)
+    loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
 
 
 class LokiPushApiProvider(RelationManagerBase):
@@ -752,10 +752,10 @@ class LokiPushApiConsumer(RelationManagerBase):
         """Handle departures in related consumers.
 
         Anytime there are departures in relations between the consumer charm and Loki
-        the consumer charm is informed, through a `LokiDepartedEvent` event.
+        the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event.
         The consumer charm can then choose to update its configuration.
         """
-        self.on.loki_departed.emit()
+        self.on.loki_push_api_endpoint_departed.emit()
 
     def _set_alert_rules(self, event):
         """Set alert rules into relation data.
