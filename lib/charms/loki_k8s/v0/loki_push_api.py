@@ -476,10 +476,17 @@ class LokiPushApiEndpointDeparted(EventBase):
     pass
 
 
+class LokiPushApiEndpointJoined(EventBase):
+    """Event emitted when Loki joined."""
+
+    pass
+
+
 class LoggingEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
+    loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
 
 
 class LokiPushApiProvider(RelationManagerBase):
@@ -750,6 +757,7 @@ class LokiPushApiConsumer(RelationManagerBase):
 
         event.relation.data[self._charm.app]["metadata"] = json.dumps(self._scrape_metadata)
         self._set_alert_rules(event)
+        self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _):
         """Handle departures in related consumers.
