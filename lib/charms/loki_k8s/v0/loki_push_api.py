@@ -166,6 +166,18 @@ The `LokiPushApiConsumer` constructor requires two things:
   lib will automatically resolve the relation name inspecting the using the
   meta information of the charm
 
+Anytime the relation between a Loki provider charm and a Loki consumer charm is
+established a `LokiPushApiEndpointJoined` event is fired. In the consumer side
+is it possible to observe this event with:
+
+```python
+
+self.framework.observe(
+    self._loki_consumer.on.loki_push_api_endpoint_joined,
+    self._on_loki_push_api_endpoint_joined,
+)
+```
+
 Anytime there are departures in relations between the consumer charm and Loki
 the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event, for instance:
 
@@ -176,7 +188,7 @@ self.framework.observe(
 )
 ```
 
-The consumer charm can then choose to update its configuration.
+The consumer charm can then choose to update its configuration in both situations.
 
 
 ## Alerting Rules
