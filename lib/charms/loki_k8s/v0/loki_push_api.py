@@ -485,13 +485,9 @@ class AlertRuleError(Exception):
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
-    pass
-
 
 class LokiPushApiEndpointJoined(EventBase):
     """Event emitted when Loki joined."""
-
-    pass
 
 
 class LoggingEvents(ObjectEvents):
