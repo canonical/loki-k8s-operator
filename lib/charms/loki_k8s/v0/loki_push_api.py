@@ -713,7 +713,7 @@ class LokiPushApiConsumer(RelationManagerBase):
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
                 with the same name as provided via `relation_name` argument.
             RelationInterfaceMismatchError: The relation with the same name as provided
-                via `relation_name` argument does not have the `prometheus_scrape` relation
+                via `relation_name` argument does not have the `loki_push_api` relation
                 interface.
             RelationRoleMismatchError: If the relation with the same name as provided
                 via `relation_name` argument does not have the `RelationRole.provides`
