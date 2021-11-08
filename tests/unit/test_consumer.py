@@ -7,7 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
 
-from charms.loki_k8s.v0.loki_push_api import AlertRuleError, LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import (
+    AlertRuleError,
+    LokiPushApiConsumer,
+    _validate_alert_rule,
+)
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -131,21 +135,19 @@ class TestLokiPushApiConsumer(unittest.TestCase):
 
     def test__validate_alert_rule(self):
         thefile = Path("rulefile.rule")
-        self.assertIsNone(
-            self.harness.charm.loki_consumer._validate_alert_rule(ONE_RULE.copy(), thefile)
-        )
+        self.assertIsNone(_validate_alert_rule(ONE_RULE.copy(), thefile))
 
         with self.assertRaises(AlertRuleError):
             rule_1 = ONE_RULE.copy()
             del rule_1["alert"]
-            self.harness.charm.loki_consumer._validate_alert_rule(rule_1, thefile)
+            _validate_alert_rule(rule_1, thefile)
 
         with self.assertRaises(AlertRuleError):
             rule_2 = ONE_RULE.copy()
             del rule_2["expr"]
-            self.harness.charm.loki_consumer._validate_alert_rule(rule_2, thefile)
+            _validate_alert_rule(rule_2, thefile)
 
         with self.assertRaises(AlertRuleError):
             rule_3 = ONE_RULE.copy()
             rule_3["expr"] = "Missing Juju topology placeholder"
-            self.harness.charm.loki_consumer._validate_alert_rule(rule_3, thefile)
+            _validate_alert_rule(rule_3, thefile)

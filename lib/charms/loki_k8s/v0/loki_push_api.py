@@ -251,6 +251,7 @@ data using the `alert_rules` key.
 
 """
 
+import dataclasses
 import json
 import logging
 import os
@@ -400,6 +401,109 @@ def _validate_relation_by_interface_and_direction(
             )
     else:
         raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
+
+
+def _validate_alert_rule(rule: dict, rule_file):
+    """This method validates if an alert rule is well formed.
+
+    Args:
+        rule: A dictionary containing an alert rule definition
+        rule_file: The rule_file name
+
+    Returns:
+        Raises an AlertRuleError exception if the alert rule is not well formed
+    """
+    missing = ["alert", "expr"]
+
+    for field in missing:
+        if field not in rule.keys():
+            message = (
+                f"Alert rule '{rule_file.name}' is not well formed. Field '{field}' is missing"
+            )
+            raise AlertRuleError(message)
+
+    if rule["expr"].find("%%juju_topology%%") < 0:
+        message = (
+            f"Alert rule '{rule_file.name}' is not well formed. "
+            + "%%juju_topology%% placeholder is not present"
+        )
+        raise AlertRuleError(message)
+
+
+@dataclasses.dataclass(frozen=True)
+class JujuTopology:
+    """Dataclass for storing and formatting juju topology information."""
+
+    model: str
+    model_uuid: str
+    application: str
+    charm_name: str
+
+    @staticmethod
+    def from_charm(charm):
+        """Factory method for creating the topology dataclass from a given charm."""
+        return JujuTopology(
+            model=charm.model.name,
+            model_uuid=charm.model.uuid,
+            application=charm.model.app.name,
+            charm_name=charm.meta.name,
+        )
+
+    @staticmethod
+    def from_relation_data(data):
+        """Factory method for creating the topology dataclass from a relation data dict."""
+        return JujuTopology(
+            model=data["model"],
+            model_uuid=data["model_uuid"],
+            application=data["application"],
+            charm_name=data["charm_name"],
+        )
+
+    @property
+    def identifier(self) -> str:
+        """Format the topology information into a terse string."""
+        return f"{self.model}_{self.model_uuid}_{self.application}"
+
+    @property
+    def short_model_uuid(self):
+        """Obtain the short form of the model uuid."""
+        return self.model_uuid[:7]
+
+    @property
+    def scrape_identifier(self):
+        """Format the topology information into a scrape identifier."""
+        return "juju_{}_{}_{}".format(
+            self.model,
+            self.short_model_uuid,
+            self.application,
+        )
+
+    @property
+    def promql_labels(self) -> str:
+        """Format the topology information into a verbose string."""
+        return 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
+            self.model, self.model_uuid, self.application
+        )
+
+    def as_dict(self, short_uuid=False) -> dict:
+        """Format the topology information into a dict."""
+        as_dict = dataclasses.asdict(self)
+        if short_uuid:
+            as_dict["model_uuid"] = self.short_model_uuid
+        return as_dict
+
+    def as_dict_with_promql_labels(self):
+        """Format the topology information into a dict with keys having 'juju_' as prefix."""
+        return {
+            "juju_model": self.model,
+            "juju_model_uuid": self.model_uuid,
+            "juju_application": self.application,
+            "juju_charm": self.charm_name,
+        }
+
+    def render(self, template: str):
+        """Render a juju-topology template string with topology info."""
+        return template.replace("%%juju_topology%%", self.promql_labels)
 
 
 def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> str:
@@ -603,10 +707,8 @@ class LokiPushApiProvider(RelationManagerBase):
             container: Container into which alert rules files are going to be uploaded
         """
         for rel_id, alert_rules in self.alerts().items():
-            filename = "juju_{}_{}_{}_rel_{}_alert.rules".format(
-                alert_rules["model"],
-                alert_rules["model_uuid"],
-                alert_rules["application"],
+            filename = "{}_rel_{}_alert.rules".format(
+                JujuTopology.from_relation_data(alert_rules),
                 rel_id,
             )
             path = os.path.join(RULES_DIR, filename)
@@ -656,12 +758,11 @@ class LokiPushApiProvider(RelationManagerBase):
 
             if alert_rules and metadata:
                 try:
-                    alerts[relation.id] = {
-                        "groups": alert_rules["groups"],
-                        "model": metadata["model"],
-                        "model_uuid": metadata["model_uuid"][:7],
-                        "application": metadata["application"],
-                    }
+                    alerts[relation.id] = JujuTopology.from_relation_data(metadata).as_dict(
+                        short_uuid=True
+                    )
+                    alerts[relation.id].update(groups=alert_rules["groups"])
+
                 except KeyError as e:
                     logger.error(
                         "Relation %s has invalid data: '%s' key is missing",
@@ -733,6 +834,8 @@ class LokiPushApiConsumer(RelationManagerBase):
             )
 
         super().__init__(charm, relation_name)
+        self.topology = JujuTopology.from_charm(charm)
+
         self._stored.set_default(loki_push_api=None)
         self._charm = charm
         self._relation_name = relation_name
@@ -763,7 +866,7 @@ class LokiPushApiConsumer(RelationManagerBase):
         if data := event.relation.data[event.unit].get("data"):
             self._stored.loki_push_api = json.loads(data)["loki_push_api"]
 
-        event.relation.data[self._charm.app]["metadata"] = json.dumps(self._scrape_metadata)
+        event.relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         self._set_alert_rules(event)
         self.on.loki_push_api_endpoint_joined.emit()
 
@@ -798,11 +901,8 @@ class LokiPushApiConsumer(RelationManagerBase):
             a dictionary representing Loki alert rule with Juju
             topology labels.
         """
-        metadata = self._scrape_metadata
         labels = rule.get("labels", {})
-        labels["juju_model"] = metadata["model"]
-        labels["juju_model_uuid"] = metadata["model_uuid"]
-        labels["juju_application"] = metadata["application"]
+        labels.update(self.topology.as_dict_with_promql_labels())
         rule["labels"] = labels
         return rule
 
@@ -816,40 +916,8 @@ class LokiPushApiConsumer(RelationManagerBase):
             a dictionary representing a Loki alert rule that filters based
             on juju topology.
         """
-        metadata = self._scrape_metadata
-        topology = 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
-            metadata["model"], metadata["model_uuid"], metadata["application"]
-        )
-        expr = rule["expr"]
-        expr = expr.replace("%%juju_topology%%", topology)
-        rule["expr"] = expr
+        rule["expr"] = self.topology.render(rule["expr"])
         return rule
-
-    def _validate_alert_rule(self, rule: dict, rule_file):
-        """This method validates if an alert rule is well formed.
-
-        Args:
-            rule: A dictionary containing an alert rule definition
-            rule_file: The rule_file name
-
-        Returns:
-            Raises an AlertRuleError exceprtion if the alert rule is not well formed
-        """
-        missing = ["alert", "expr"]
-
-        for field in missing:
-            if field not in rule.keys():
-                message = (
-                    f"Alert rule '{rule_file.name}' is not well formed. Field '{field}' is missing"
-                )
-                raise AlertRuleError(message)
-
-        if rule["expr"].find("%%juju_topology%%") < 0:
-            message = (
-                f"Alert rule '{rule_file.name}' is not well formed. "
-                + "%%juju_topology%% placeholder is not present"
-            )
-            raise AlertRuleError(message)
 
     @property
     def loki_push_api(self):
@@ -881,7 +949,7 @@ class LokiPushApiConsumer(RelationManagerBase):
                         # Load a list of rules from file then add labels and filters
                         try:
                             rule = yaml.safe_load(rule_file)
-                            self._validate_alert_rule(rule, rule_file)
+                            _validate_alert_rule(rule, rule_file)
                             rule = self._label_alert_topology(rule)
                             rule = self._label_alert_expression(rule)
                             alerts.append(rule)
@@ -893,25 +961,13 @@ class LokiPushApiConsumer(RelationManagerBase):
                             self._charm.model.unit.status = BlockedStatus(message)
 
         if alerts:
-            metadata = self._scrape_metadata
             return [
                 {
-                    "name": "{model}_{model_uuid}_{application}_alerts".format(**metadata),
+                    "name": "{model}_{model_uuid}_{application}_alerts".format(
+                        **self.topology.as_dict()
+                    ),
                     "rules": alerts,
                 }
             ]
         else:
             return []
-
-    @property
-    def _scrape_metadata(self) -> dict:
-        """Generate scrape metadata.
-
-        Returns:
-            Scrape configutation metadata for this logging provider charm.
-        """
-        return {
-            "model": f"{self._charm.model.name}",
-            "model_uuid": f"{self._charm.model.uuid}",
-            "application": f"{self._charm.model.app.name}",
-        }

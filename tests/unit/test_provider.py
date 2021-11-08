@@ -15,6 +15,7 @@ METADATA = {
     "model": "consumer-model",
     "model_uuid": "qwerty-1234",
     "application": "promtail",
+    "charm_name": "charm-k8s",
 }
 
 ALERT_RULES = {
