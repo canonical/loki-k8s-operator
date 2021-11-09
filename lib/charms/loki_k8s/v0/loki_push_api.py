@@ -458,7 +458,7 @@ class JujuTopology:
         )
 
     @property
-    def promql_labels(self) -> str:
+    def logql_labels(self) -> str:
         """Format the topology information into a verbose string."""
         return 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
             self.model, self.model_uuid, self.application
@@ -471,7 +471,7 @@ class JujuTopology:
             as_dict["model_uuid"] = self.short_model_uuid
         return as_dict
 
-    def as_dict_with_promql_labels(self):
+    def as_dict_with_logql_labels(self):
         """Format the topology information into a dict with keys having 'juju_' as prefix."""
         return {
             "juju_model": self.model,
@@ -482,7 +482,7 @@ class JujuTopology:
 
     def render(self, template: str):
         """Render a juju-topology template string with topology info."""
-        return template.replace("%%juju_topology%%", self.promql_labels)
+        return template.replace("%%juju_topology%%", self.logql_labels)
 
 
 def load_alert_rule_from_file(
@@ -509,7 +509,7 @@ def load_alert_rule_from_file(
             # add "juju_" topology labels
             if "labels" not in rule:
                 rule["labels"] = {}
-            rule["labels"].update(topology.as_dict_with_promql_labels())
+            rule["labels"].update(topology.as_dict_with_logql_labels())
 
             # insert juju topology filters into a Loki alert rule
             rule["expr"] = topology.render(rule["expr"])
@@ -952,7 +952,7 @@ class LokiPushApiConsumer(RelationManagerBase):
             topology labels.
         """
         labels = rule.get("labels", {})
-        labels.update(self.topology.as_dict_with_promql_labels())
+        labels.update(self.topology.as_dict_with_logql_labels())
         rule["labels"] = labels
         return rule
 
