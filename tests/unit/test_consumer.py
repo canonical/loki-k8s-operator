@@ -4,14 +4,9 @@
 import json
 import textwrap
 import unittest
-from pathlib import Path
 from unittest.mock import PropertyMock, patch
 
-from charms.loki_k8s.v0.loki_push_api import (
-    AlertRuleError,
-    LokiPushApiConsumer,
-    _validate_alert_rule,
-)
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, _is_valid_rule
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
@@ -133,21 +128,17 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.assertTrue("juju_model_uuid" in labeled_alert_topology["labels"])
         self.assertTrue("juju_application" in labeled_alert_topology["labels"])
 
-    def test__validate_alert_rule(self):
-        thefile = Path("rulefile.rule")
-        self.assertIsNone(_validate_alert_rule(ONE_RULE.copy(), thefile))
+    def test__is_valid_rule(self):
+        self.assertTrue(_is_valid_rule(ONE_RULE.copy()))
 
-        with self.assertRaises(AlertRuleError):
-            rule_1 = ONE_RULE.copy()
-            del rule_1["alert"]
-            _validate_alert_rule(rule_1, thefile)
+        rule_1 = ONE_RULE.copy()
+        del rule_1["alert"]
+        self.assertFalse(_is_valid_rule(rule_1))
 
-        with self.assertRaises(AlertRuleError):
-            rule_2 = ONE_RULE.copy()
-            del rule_2["expr"]
-            _validate_alert_rule(rule_2, thefile)
+        rule_2 = ONE_RULE.copy()
+        del rule_2["expr"]
+        self.assertFalse(_is_valid_rule(rule_2))
 
-        with self.assertRaises(AlertRuleError):
-            rule_3 = ONE_RULE.copy()
-            rule_3["expr"] = "Missing Juju topology placeholder"
-            _validate_alert_rule(rule_3, thefile)
+        rule_3 = ONE_RULE.copy()
+        rule_3["expr"] = "Missing Juju topology placeholder"
+        self.assertFalse(_is_valid_rule(rule_3))
