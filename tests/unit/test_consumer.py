@@ -114,12 +114,6 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         )
         self.assertEqual(self.harness.charm.loki_consumer._stored.loki_push_api, loki_push_api)
 
-    def test__label_alert_expression(self):
-        labeled_alert = self.harness.charm.loki_consumer._label_alert_expression(ONE_RULE.copy())
-        self.assertTrue("juju_model" in labeled_alert["expr"])
-        self.assertTrue("juju_model_uuid" in labeled_alert["expr"])
-        self.assertTrue("juju_application" in labeled_alert["expr"])
-
     def test__label_alert_topology(self):
         labeled_alert_topology = self.harness.charm.loki_consumer._label_alert_topology(
             ONE_RULE.copy()
@@ -129,16 +123,16 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.assertTrue("juju_application" in labeled_alert_topology["labels"])
 
     def test__is_valid_rule(self):
-        self.assertTrue(_is_valid_rule(ONE_RULE.copy()))
+        self.assertTrue(_is_valid_rule(ONE_RULE.copy(), allow_free_standing=False))
 
         rule_1 = ONE_RULE.copy()
         del rule_1["alert"]
-        self.assertFalse(_is_valid_rule(rule_1))
+        self.assertFalse(_is_valid_rule(rule_1, allow_free_standing=False))
 
         rule_2 = ONE_RULE.copy()
         del rule_2["expr"]
-        self.assertFalse(_is_valid_rule(rule_2))
+        self.assertFalse(_is_valid_rule(rule_2, allow_free_standing=False))
 
         rule_3 = ONE_RULE.copy()
         rule_3["expr"] = "Missing Juju topology placeholder"
-        self.assertFalse(_is_valid_rule(rule_3))
+        self.assertFalse(_is_valid_rule(rule_3, allow_free_standing=False))

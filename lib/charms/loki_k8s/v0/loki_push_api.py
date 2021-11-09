@@ -390,7 +390,7 @@ def _validate_relation_by_interface_and_direction(
         raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
 
 
-def _is_valid_rule(rule: dict) -> bool:
+def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
     """This method validates if an alert rule is well formed.
 
     Args:
@@ -400,12 +400,13 @@ def _is_valid_rule(rule: dict) -> bool:
         True if the alert rule is well formed; False otherwise.
     """
     mandatory = ["alert", "expr"]
+    if any(field not in rule for field in mandatory):
+        return False
 
-    return (
-        False
-        if any(field not in rule for field in mandatory) or "%%juju_topology%%" not in rule["expr"]
-        else True
-    )
+    if not allow_free_standing and "%%juju_topology%%" not in rule["expr"]:
+        return False
+
+    return True
 
 
 @dataclasses.dataclass(frozen=True)
@@ -484,18 +485,22 @@ class JujuTopology:
         return template.replace("%%juju_topology%%", self.promql_labels)
 
 
-def load_alert_rule_from_file(path: Path, topology: JujuTopology) -> Optional[dict]:
+def load_alert_rule_from_file(
+    path: Path, topology: JujuTopology, allow_free_standing
+) -> Optional[dict]:
     """Load alert rule from a rules file.
 
     Args:
         path: path to a *.rule file with a single rule ("groups" super section omitted).
         topology: a `JujuTopology` instance.
+        allow_free_standing: whether or not to reject files that do not have the special
+          %%juju_topology%% template variable, which is the case for free-standing rules.
     """
     with path.open() as rule_file:
         # Load a list of rules from file then add labels and filters
         try:
             rule = yaml.safe_load(rule_file)
-            if not _is_valid_rule(rule):
+            if not _is_valid_rule(rule, allow_free_standing):
                 return None
         except Exception as e:
             logger.error("Failed to read alert rules from %s: %s", path.name, e)
@@ -513,7 +518,11 @@ def load_alert_rule_from_file(path: Path, topology: JujuTopology) -> Optional[di
 
 
 def load_alert_rules_from_dir(
-    dir_path: Union[str, Path], topology: JujuTopology, *, recursive: bool = False
+    dir_path: Union[str, Path],
+    topology: JujuTopology,
+    *,
+    recursive: bool = False,
+    allow_free_standing: bool = False,
 ) -> Tuple[List[dict], List[Path]]:
     """Load alert rules from rule files.
 
@@ -525,6 +534,8 @@ def load_alert_rules_from_dir(
         dir_path: directory containing *.rule files (alert rules without groups).
         topology: a `JujuTopology` instance.
         recursive: flag indicating whether to scan for rule files recursively.
+        allow_free_standing: whether or not to reject files that do not have the special
+          %%juju_topology%% template variable, which is the case for free-standing rules.
 
     Returns:
         A 2-tuple consisting:
@@ -554,7 +565,7 @@ def load_alert_rules_from_dir(
 
     invalid_files = []
     for path in filter(Path.is_file, Path(dir_path).glob("**/*.rule" if recursive else "*.rule")):
-        if rule := load_alert_rule_from_file(path, topology):
+        if rule := load_alert_rule_from_file(path, topology, allow_free_standing):
             logger.debug("Reading alert rule from %s", path)
             alerts[_group_name(path)].append(rule)
         else:
@@ -830,6 +841,7 @@ class LokiPushApiConsumer(RelationManagerBase):
         charm: CharmBase,
         relation_name: str = DEFAULT_RELATION_NAME,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        allow_free_standing_rules: bool = False,
     ):
         """Construct a Loki charm client.
 
@@ -868,6 +880,7 @@ class LokiPushApiConsumer(RelationManagerBase):
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
         alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
+        self.allow_free_standing_rules = allow_free_standing_rules
 
         super().__init__(charm, relation_name)
         self.topology = JujuTopology.from_charm(charm)
@@ -943,19 +956,6 @@ class LokiPushApiConsumer(RelationManagerBase):
         rule["labels"] = labels
         return rule
 
-    def _label_alert_expression(self, rule) -> dict:
-        """Insert juju topology filters into a Loki alert rule.
-
-        Args:
-            rule: a dictionary representing a Loki alert rule.
-
-        Returns:
-            a dictionary representing a Loki alert rule that filters based
-            on juju topology.
-        """
-        rule["expr"] = self.topology.render(rule["expr"])
-        return rule
-
     @property
     def loki_push_api(self):
         """Fetch Loki Push API endpoint sent from LokiPushApiProvider throught relation data.
@@ -977,14 +977,19 @@ class LokiPushApiConsumer(RelationManagerBase):
             a list of Loki alert rule groups.
         """
         alert_groups, invalid_files = load_alert_rules_from_dir(
-            self._alert_rules_path, self.topology, recursive=False
+            self._alert_rules_path,
+            self.topology,
+            recursive=False,
+            allow_free_standing=self.allow_free_standing_rules,
         )
 
         if invalid_files:
-            message = (
-                "Failed to read alert rules (must contain 'alert', 'expr', '%%juju_topology%%'): "
-                ",".join(map(str, invalid_files))
-            )
+            must_contain = ["'alert'", "'expr'"]
+            if self.allow_free_standing_rules:
+                must_contain.append("'%%juju_topology%%'")
+            message = "Failed to read alert rules (must contain {}): ".format(
+                ", ".join(must_contain)
+            ) + ", ".join(map(str, invalid_files))
             self._charm.model.unit.status = BlockedStatus(message)
 
         elif not alert_groups:
