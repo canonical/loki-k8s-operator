@@ -334,20 +334,6 @@ class RelationRoleMismatchError(Exception):
         super().__init__(self.message)
 
 
-class InvalidAlertRuleFolderPathError(Exception):
-    """Raised if the alert rules folder cannot be found or is otherwise invalid."""
-
-    def __init__(
-        self,
-        alert_rules_absolute_path: str,
-        message: str,
-    ):
-        self.alert_rules_absolute_path = alert_rules_absolute_path
-        self.message = message
-
-        super().__init__(self.message)
-
-
 def _validate_relation_by_interface_and_direction(
     charm: CharmBase,
     relation_name: str,
@@ -585,8 +571,8 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
 
     Look up the directory of the main .py file being executed. This is normally
     going to be the charm.py file of the charm including this library. Then, resolve
-    the provided path elements and, if the result path exists and is a directory,
-    return its absolute path; otherwise, return `None`.
+    the provided path elements and return its absolute path, without checking for existence or
+     validity.
     """
     charm_dir = Path(charm.charm_dir)
     if not charm_dir.exists() or not charm_dir.is_dir():
@@ -599,12 +585,6 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
         charm_dir = Path(os.getcwd())
 
     alerts_dir_path = charm_dir.absolute().joinpath(*path_elements)
-
-    if not alerts_dir_path.exists():
-        raise InvalidAlertRuleFolderPathError(str(alerts_dir_path), "directory does not exist")
-    if not alerts_dir_path.is_dir():
-        raise InvalidAlertRuleFolderPathError(str(alerts_dir_path), "is not a directory")
-
     return str(alerts_dir_path)
 
 
@@ -650,14 +630,6 @@ class RelationManagerBase(Object):
     def __init__(self, charm: CharmBase, relation_name):
         super().__init__(charm, relation_name)
         self.name = relation_name
-
-
-class AlertRuleError(Exception):
-    """Custom exception to indicate that alert rule is not well formed."""
-
-    def __init__(self, message="Alert rule is not well formed"):
-        self.message = message
-        super().__init__(self.message)
 
 
 class LokiPushApiEndpointDeparted(EventBase):
@@ -852,7 +824,6 @@ class LokiPushApiConsumer(RelationManagerBase):
 
     on = LoggingEvents()
     _stored = StoredState()
-    _alert_rules_path: Optional[str]
 
     def __init__(
         self,
@@ -896,16 +867,7 @@ class LokiPushApiConsumer(RelationManagerBase):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
-
-        try:
-            alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
-        except InvalidAlertRuleFolderPathError as e:
-            logger.warning(
-                "Invalid Loki alert rules folder at %s: %s",
-                e.alert_rules_absolute_path,
-                e.message,
-            )
-            # TODO set alert_rules_path to something or remove try/except?
+        alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
 
         super().__init__(charm, relation_name)
         self.topology = JujuTopology.from_charm(charm)
@@ -1026,6 +988,7 @@ class LokiPushApiConsumer(RelationManagerBase):
             self._charm.model.unit.status = BlockedStatus(message)
 
         elif not alert_groups:
+            """No invalid files, but also no alerts found (path might be invalid)"""
             self._charm.model.unit.status = BlockedStatus(
                 "No alert rules found in " + self._alert_rules_path
             )
