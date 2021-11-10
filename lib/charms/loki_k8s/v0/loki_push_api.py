@@ -556,11 +556,12 @@ def load_alert_rules_from_dir(
         relpath = os.path.relpath(os.path.dirname(path), dir_path)
 
         # Generate group name:
-        #  - prefix, from the relative path of the rule file;
         #  - name, from juju topology
+        #  - suffix, from the relative path of the rule file;
         return (
+            f"{topology.identifier}_"
             f"{'' if relpath == '.' else relpath.replace(os.path.sep, '_') + '_'}"
-            f"{topology.identifier}_alerts"
+            "alerts"
         )
 
     invalid_files = []
