@@ -251,11 +251,13 @@ data using the `alert_rules` key.
 
 """
 
+import dataclasses
 import json
 import logging
 import os
+from collections import defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple, Union
 
 import yaml
 from ops.charm import CharmBase, RelationMeta, RelationRole
@@ -332,20 +334,6 @@ class RelationRoleMismatchError(Exception):
         super().__init__(self.message)
 
 
-class InvalidAlertRuleFolderPathError(Exception):
-    """Raised if the alert rules folder cannot be found or is otherwise invalid."""
-
-    def __init__(
-        self,
-        alert_rules_absolute_path: str,
-        message: str,
-    ):
-        self.alert_rules_absolute_path = alert_rules_absolute_path
-        self.message = message
-
-        super().__init__(self.message)
-
-
 def _validate_relation_by_interface_and_direction(
     charm: CharmBase,
     relation_name: str,
@@ -402,13 +390,201 @@ def _validate_relation_by_interface_and_direction(
         raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
 
 
+def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
+    """This method validates if an alert rule is well formed.
+
+    Args:
+        rule: A dictionary containing an alert rule definition
+
+    Returns:
+        True if the alert rule is well formed; False otherwise.
+    """
+    mandatory = ["alert", "expr"]
+    if any(field not in rule for field in mandatory):
+        return False
+
+    if not allow_free_standing and "%%juju_topology%%" not in rule["expr"]:
+        return False
+
+    return True
+
+
+@dataclasses.dataclass(frozen=True)
+class JujuTopology:
+    """Dataclass for storing and formatting juju topology information."""
+
+    model: str
+    model_uuid: str
+    application: str
+    charm_name: str
+
+    @staticmethod
+    def from_charm(charm):
+        """Factory method for creating the topology dataclass from a given charm."""
+        return JujuTopology(
+            model=charm.model.name,
+            model_uuid=charm.model.uuid,
+            application=charm.model.app.name,
+            charm_name=charm.meta.name,
+        )
+
+    @staticmethod
+    def from_relation_data(data):
+        """Factory method for creating the topology dataclass from a relation data dict."""
+        return JujuTopology(
+            model=data["model"],
+            model_uuid=data["model_uuid"],
+            application=data["application"],
+            charm_name=data["charm_name"],
+        )
+
+    @property
+    def identifier(self) -> str:
+        """Format the topology information into a terse string."""
+        return f"{self.model}_{self.model_uuid}_{self.application}"
+
+    @property
+    def short_model_uuid(self):
+        """Obtain the short form of the model uuid."""
+        return self.model_uuid[:7]
+
+    @property
+    def scrape_identifier(self):
+        """Format the topology information into a scrape identifier."""
+        return "juju_{}_{}_{}".format(
+            self.model,
+            self.short_model_uuid,
+            self.application,
+        )
+
+    @property
+    def logql_labels(self) -> str:
+        """Format the topology information into a verbose string."""
+        return 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
+            self.model, self.model_uuid, self.application
+        )
+
+    def as_dict(self, short_uuid=False) -> dict:
+        """Format the topology information into a dict."""
+        as_dict = dataclasses.asdict(self)
+        if short_uuid:
+            as_dict["model_uuid"] = self.short_model_uuid
+        return as_dict
+
+    def as_dict_with_logql_labels(self):
+        """Format the topology information into a dict with keys having 'juju_' as prefix."""
+        return {
+            "juju_model": self.model,
+            "juju_model_uuid": self.model_uuid,
+            "juju_application": self.application,
+            "juju_charm": self.charm_name,
+        }
+
+    def render(self, template: str):
+        """Render a juju-topology template string with topology info."""
+        return template.replace("%%juju_topology%%", self.logql_labels)
+
+
+def load_alert_rule_from_file(
+    path: Path, topology: JujuTopology, allow_free_standing
+) -> Optional[dict]:
+    """Load alert rule from a rules file.
+
+    Args:
+        path: path to a *.rule file with a single rule ("groups" super section omitted).
+        topology: a `JujuTopology` instance.
+        allow_free_standing: whether or not to reject files that do not have the special
+          %%juju_topology%% template variable, which is the case for free-standing rules.
+    """
+    with path.open() as rule_file:
+        # Load a list of rules from file then add labels and filters
+        try:
+            rule = yaml.safe_load(rule_file)
+            if not _is_valid_rule(rule, allow_free_standing):
+                return None
+        except Exception as e:
+            logger.error("Failed to read alert rules from %s: %s", path.name, e)
+            return None
+        else:
+            # add "juju_" topology labels
+            if "labels" not in rule:
+                rule["labels"] = {}
+            rule["labels"].update(topology.as_dict_with_logql_labels())
+
+            # insert juju topology filters into a Loki alert rule
+            rule["expr"] = topology.render(rule["expr"])
+
+            return rule
+
+
+def load_alert_rules_from_dir(
+    dir_path: Union[str, Path],
+    topology: JujuTopology,
+    *,
+    recursive: bool = False,
+    allow_free_standing: bool = False,
+) -> Tuple[List[dict], List[Path]]:
+    """Load alert rules from rule files.
+
+    All rules from files for the same directory are loaded into a single
+    group. The generated name of this group includes juju topology.
+    By default, only the top directory is scanned; for nested scanning, pass `recursive=True`.
+
+    Args:
+        dir_path: directory containing *.rule files (alert rules without groups).
+        topology: a `JujuTopology` instance.
+        recursive: flag indicating whether to scan for rule files recursively.
+        allow_free_standing: whether or not to reject files that do not have the special
+          %%juju_topology%% template variable, which is the case for free-standing rules.
+
+    Returns:
+        A 2-tuple consisting:
+        - a list of prometheus alert rule groups
+        - a list of invalid rules files
+    """
+    alerts = defaultdict(list)
+
+    def _group_name(path) -> str:
+        """Generate group name from path and topology.
+
+        The group name is made up of the relative path between the root dir_path, the file path,
+        and topology identifier.
+
+        Args:
+            path: path to rule file.
+        """
+        relpath = os.path.relpath(os.path.dirname(path), dir_path)
+
+        # Generate group name:
+        #  - name, from juju topology
+        #  - suffix, from the relative path of the rule file;
+        return (
+            f"{topology.identifier}_"
+            f"{'' if relpath == '.' else relpath.replace(os.path.sep, '_') + '_'}"
+            "alerts"
+        )
+
+    invalid_files = []
+    for path in filter(Path.is_file, Path(dir_path).glob("**/*.rule" if recursive else "*.rule")):
+        if rule := load_alert_rule_from_file(path, topology, allow_free_standing):
+            logger.debug("Reading alert rule from %s", path)
+            alerts[_group_name(path)].append(rule)
+        else:
+            invalid_files.append(path)
+
+    # Gather all alerts into a list of groups since Prometheus
+    # requires alerts be part of some group
+    groups = [{"name": k, "rules": v} for k, v in alerts.items()]
+    return groups, invalid_files
+
+
 def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> str:
     """Resolve the provided path items against the directory of the main file.
 
     Look up the directory of the main .py file being executed. This is normally
     going to be the charm.py file of the charm including this library. Then, resolve
-    the provided path elements and, if the result path exists and is a directory,
-    return its absolute path; otherwise, return `None`.
+    the provided path elements and return its absolute path, without checking for existence or
+     validity.
     """
     charm_dir = Path(charm.charm_dir)
     if not charm_dir.exists() or not charm_dir.is_dir():
@@ -421,12 +597,6 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
         charm_dir = Path(os.getcwd())
 
     alerts_dir_path = charm_dir.absolute().joinpath(*path_elements)
-
-    if not alerts_dir_path.exists():
-        raise InvalidAlertRuleFolderPathError(str(alerts_dir_path), "directory does not exist")
-    if not alerts_dir_path.is_dir():
-        raise InvalidAlertRuleFolderPathError(str(alerts_dir_path), "is not a directory")
-
     return str(alerts_dir_path)
 
 
@@ -472,14 +642,6 @@ class RelationManagerBase(Object):
     def __init__(self, charm: CharmBase, relation_name):
         super().__init__(charm, relation_name)
         self.name = relation_name
-
-
-class AlertRuleError(Exception):
-    """Custom exception to indicate that alert rule is not well formed."""
-
-    def __init__(self, message="Alert rule is not well formed"):
-        self.message = message
-        super().__init__(self.message)
 
 
 class LokiPushApiEndpointDeparted(EventBase):
@@ -603,10 +765,8 @@ class LokiPushApiProvider(RelationManagerBase):
             container: Container into which alert rules files are going to be uploaded
         """
         for rel_id, alert_rules in self.alerts().items():
-            filename = "juju_{}_{}_{}_rel_{}_alert.rules".format(
-                alert_rules["model"],
-                alert_rules["model_uuid"],
-                alert_rules["application"],
+            filename = "{}_rel_{}_alert.rules".format(
+                JujuTopology.from_relation_data(alert_rules),
                 rel_id,
             )
             path = os.path.join(RULES_DIR, filename)
@@ -656,12 +816,11 @@ class LokiPushApiProvider(RelationManagerBase):
 
             if alert_rules and metadata:
                 try:
-                    alerts[relation.id] = {
-                        "groups": alert_rules["groups"],
-                        "model": metadata["model"],
-                        "model_uuid": metadata["model_uuid"][:7],
-                        "application": metadata["application"],
-                    }
+                    alerts[relation.id] = JujuTopology.from_relation_data(metadata).as_dict(
+                        short_uuid=True
+                    )
+                    alerts[relation.id].update(groups=alert_rules["groups"])
+
                 except KeyError as e:
                     logger.error(
                         "Relation %s has invalid data: '%s' key is missing",
@@ -677,13 +836,13 @@ class LokiPushApiConsumer(RelationManagerBase):
 
     on = LoggingEvents()
     _stored = StoredState()
-    _alert_rules_path: Optional[str]
 
     def __init__(
         self,
         charm: CharmBase,
         relation_name: str = DEFAULT_RELATION_NAME,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        allow_free_standing_rules: bool = False,
     ):
         """Construct a Loki charm client.
 
@@ -704,10 +863,9 @@ class LokiPushApiConsumer(RelationManagerBase):
                 NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
                 respectively.
             alert_rules_path: an optional path for the location of alert rules
-                files.  Defaults to "./loki_alert_rules",
+                files. Defaults to "./src/loki_alert_rules",
                 resolved from the directory hosting the charm entry file.
                 The alert rules are automatically updated on charm upgrade.
-
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -722,17 +880,12 @@ class LokiPushApiConsumer(RelationManagerBase):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
-
-        try:
-            alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
-        except InvalidAlertRuleFolderPathError as e:
-            logger.warning(
-                "Invalid Loki alert rules folder at %s: %s",
-                e.alert_rules_absolute_path,
-                e.message,
-            )
+        alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
+        self.allow_free_standing_rules = allow_free_standing_rules
 
         super().__init__(charm, relation_name)
+        self.topology = JujuTopology.from_charm(charm)
+
         self._stored.set_default(loki_push_api=None)
         self._charm = charm
         self._relation_name = relation_name
@@ -763,7 +916,7 @@ class LokiPushApiConsumer(RelationManagerBase):
         if data := event.relation.data[event.unit].get("data"):
             self._stored.loki_push_api = json.loads(data)["loki_push_api"]
 
-        event.relation.data[self._charm.app]["metadata"] = json.dumps(self._scrape_metadata)
+        event.relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         self._set_alert_rules(event)
         self.on.loki_push_api_endpoint_joined.emit()
 
@@ -787,6 +940,7 @@ class LokiPushApiConsumer(RelationManagerBase):
             event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
                 {"groups": alert_groups}
             )
+        # TODO: else json.dumps({}) ?
 
     def _label_alert_topology(self, rule) -> dict:
         """Insert juju topology labels into an alert rule.
@@ -798,58 +952,10 @@ class LokiPushApiConsumer(RelationManagerBase):
             a dictionary representing Loki alert rule with Juju
             topology labels.
         """
-        metadata = self._scrape_metadata
         labels = rule.get("labels", {})
-        labels["juju_model"] = metadata["model"]
-        labels["juju_model_uuid"] = metadata["model_uuid"]
-        labels["juju_application"] = metadata["application"]
+        labels.update(self.topology.as_dict_with_logql_labels())
         rule["labels"] = labels
         return rule
-
-    def _label_alert_expression(self, rule) -> dict:
-        """Insert juju topology filters into a Loki alert rule.
-
-        Args:
-            rule: a dictionary representing a Loki alert rule.
-
-        Returns:
-            a dictionary representing a Loki alert rule that filters based
-            on juju topology.
-        """
-        metadata = self._scrape_metadata
-        topology = 'juju_model="{}", juju_model_uuid="{}", juju_application="{}"'.format(
-            metadata["model"], metadata["model_uuid"], metadata["application"]
-        )
-        expr = rule["expr"]
-        expr = expr.replace("%%juju_topology%%", topology)
-        rule["expr"] = expr
-        return rule
-
-    def _validate_alert_rule(self, rule: dict, rule_file):
-        """This method validates if an alert rule is well formed.
-
-        Args:
-            rule: A dictionary containing an alert rule definition
-            rule_file: The rule_file name
-
-        Returns:
-            Raises an AlertRuleError exceprtion if the alert rule is not well formed
-        """
-        missing = ["alert", "expr"]
-
-        for field in missing:
-            if field not in rule.keys():
-                message = (
-                    f"Alert rule '{rule_file.name}' is not well formed. Field '{field}' is missing"
-                )
-                raise AlertRuleError(message)
-
-        if rule["expr"].find("%%juju_topology%%") < 0:
-            message = (
-                f"Alert rule '{rule_file.name}' is not well formed. "
-                + "%%juju_topology%% placeholder is not present"
-            )
-            raise AlertRuleError(message)
 
     @property
     def loki_push_api(self):
@@ -871,47 +977,26 @@ class LokiPushApiConsumer(RelationManagerBase):
         Returns:
             a list of Loki alert rule groups.
         """
-        alerts = []
+        alert_groups, invalid_files = load_alert_rules_from_dir(
+            self._alert_rules_path,
+            self.topology,
+            recursive=False,
+            allow_free_standing=self.allow_free_standing_rules,
+        )
 
-        if self._alert_rules_path:
-            for path in Path(self._alert_rules_path).glob("*.rule"):
-                if path.is_file():
-                    logger.debug("Reading alert rule from %s", path)
-                    with path.open() as rule_file:
-                        # Load a list of rules from file then add labels and filters
-                        try:
-                            rule = yaml.safe_load(rule_file)
-                            self._validate_alert_rule(rule, rule_file)
-                            rule = self._label_alert_topology(rule)
-                            rule = self._label_alert_expression(rule)
-                            alerts.append(rule)
-                        except AlertRuleError as e:
-                            self._charm.model.unit.status = BlockedStatus(str(e))
-                        except FileNotFoundError as e:
-                            message = "Failed to read alert rules from %s: %s", path.name, str(e)
-                            logger.error(message)
-                            self._charm.model.unit.status = BlockedStatus(message)
+        if invalid_files:
+            must_contain = ["'alert'", "'expr'"]
+            if self.allow_free_standing_rules:
+                must_contain.append("'%%juju_topology%%'")
+            message = "Failed to read alert rules (must contain {}): ".format(
+                ", ".join(must_contain)
+            ) + ", ".join(map(str, invalid_files))
+            self._charm.model.unit.status = BlockedStatus(message)
 
-        if alerts:
-            metadata = self._scrape_metadata
-            return [
-                {
-                    "name": "{model}_{model_uuid}_{application}_alerts".format(**metadata),
-                    "rules": alerts,
-                }
-            ]
-        else:
-            return []
+        elif not alert_groups:
+            """No invalid files, but also no alerts found (path might be invalid)"""
+            self._charm.model.unit.status = BlockedStatus(
+                "No alert rules found in " + self._alert_rules_path
+            )
 
-    @property
-    def _scrape_metadata(self) -> dict:
-        """Generate scrape metadata.
-
-        Returns:
-            Scrape configutation metadata for this logging provider charm.
-        """
-        return {
-            "model": f"{self._charm.model.name}",
-            "model_uuid": f"{self._charm.model.uuid}",
-            "application": f"{self._charm.model.app.name}",
-        }
+        return alert_groups
