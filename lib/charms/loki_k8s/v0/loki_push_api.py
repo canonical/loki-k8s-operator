@@ -272,10 +272,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 4
-
-# Alert rules directory in workload container
-RULES_DIR = "/loki/rules"
+LIBPATCH = 5
 
 logger = logging.getLogger(__name__)
 
@@ -662,7 +659,9 @@ class LoggingEvents(ObjectEvents):
 class LokiPushApiProvider(RelationManagerBase):
     """A LokiPushApiProvider class."""
 
-    def __init__(self, charm, relation_name: str = DEFAULT_RELATION_NAME):
+    def __init__(
+        self, charm, relation_name: str = DEFAULT_RELATION_NAME, *, rules_dir="/loki/rules"
+    ):
         """A Loki service provider.
 
         Args:
@@ -691,6 +690,13 @@ class LokiPushApiProvider(RelationManagerBase):
         super().__init__(charm, relation_name)
         self.charm = charm
         self._relation_name = relation_name
+
+        # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
+        # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
+        # https://grafana.com/docs/loki/latest/rules/#ruler-storage
+        tenant_id = "fake"
+        self._rules_dir = os.path.join(rules_dir, tenant_id)
+
         self.container = self.charm.unit.get_container("loki")
         events = self.charm.on[relation_name]
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
@@ -747,16 +753,16 @@ class LokiPushApiProvider(RelationManagerBase):
         return ""
 
     def _remove_alert_rules_files(self, container) -> None:
-        """Remove alert rules files from worload container RULES_DIR.
+        """Remove alert rules files from workload container.
 
         Args:
             container: Container which has alert rules files to be deleted
         """
-        container.remove_path(RULES_DIR, recursive=True)
+        container.remove_path(self._rules_dir, recursive=True)
         logger.debug("Previous Alert rules files deleted")
         # Since container.remove_path deletes the directory itself with its files
         # we should create it again.
-        os.makedirs(RULES_DIR, exist_ok=True)
+        os.makedirs(self._rules_dir, exist_ok=True)
 
     def _generate_alert_rules_files(self, container) -> None:
         """Generate and upload alert rules files.
@@ -769,7 +775,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 JujuTopology.from_relation_data(alert_rules),
                 rel_id,
             )
-            path = os.path.join(RULES_DIR, filename)
+            path = os.path.join(self._rules_dir, filename)
             rules = yaml.dump({"groups": alert_rules["groups"]})
             container.push(path, rules, make_dirs=True)
             logger.debug("Updated alert rules file %s", filename)

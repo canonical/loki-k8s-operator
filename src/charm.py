@@ -13,6 +13,8 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
+import os
+import textwrap
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
@@ -27,7 +29,10 @@ from ops.pebble import PathError, ProtocolError
 from kubernetes_service import K8sServicePatch, PatchFailed
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
+# Paths in workload container
 LOKI_CONFIG = "/etc/loki/local-config.yaml"
+LOKI_DIR = "/loki"
+RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
 logger = logging.getLogger(__name__)
 
@@ -100,9 +105,10 @@ class LokiOperatorCharm(CharmBase):
 
         try:
             if yaml.safe_load(self._stored.config) != config:
-                self._stored.config = yaml.dump(config)
-                self._container.push(LOKI_CONFIG, self._stored.config)
+                config_as_yaml = yaml.safe_dump(config)
+                self._container.push(LOKI_CONFIG, config_as_yaml)
                 logger.info("Pushed new configuration")
+                self._stored.config = config_as_yaml
                 restart = True
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
@@ -123,7 +129,7 @@ class LokiOperatorCharm(CharmBase):
             a sting consisting of Loki command and associated
             command line options.
         """
-        return f"/usr/bin/loki -target=all -config.file={LOKI_CONFIG}"
+        return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
 
     @property
     def _build_pebble_layer(self):
@@ -194,15 +200,47 @@ class LokiOperatorCharm(CharmBase):
     def _loki_config(self) -> dict:
         """Construct Loki configuration.
 
-        Returns:
-            Loki config in a dictionary
-        """
-        raw_config = self._container.pull(LOKI_CONFIG).read()
-        config = yaml.safe_load(raw_config)
-        alerting_config = self._alerting_config()
-        config["ruler"]["alertmanager_url"] = alerting_config
+        Some minimal configuration is required for Loki to start, including: storage paths, schema,
+        ring.
 
-        return config
+        Returns:
+            Dictionary representation of the Loki YAML config
+        """
+        config = textwrap.dedent(
+            f"""
+            target: all
+            auth_enabled: false
+
+            server:
+              http_listen_port: {self._port}
+
+            common:
+              path_prefix: {LOKI_DIR}
+              storage:
+                filesystem:
+                  chunks_directory: {os.path.join(LOKI_DIR, "chunks")}
+                  rules_directory: {RULES_DIR}
+              replication_factor: 1
+              ring:
+                instance_addr: {self.loki_provider.unit_ip if self.loki_provider else ""}
+                kvstore:
+                  store: inmemory
+
+            schema_config:
+              configs:
+                - from: 2020-10-24
+                  store: boltdb-shipper
+                  object_store: filesystem
+                  schema: v11
+                  index:
+                    prefix: index_
+                    period: 24h
+
+            ruler:
+              alertmanager_url: {self._alerting_config()}
+        """
+        )
+        return yaml.safe_load(config)
 
 
 if __name__ == "__main__":
