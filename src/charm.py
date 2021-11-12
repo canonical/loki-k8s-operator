@@ -105,9 +105,10 @@ class LokiOperatorCharm(CharmBase):
 
         try:
             if yaml.safe_load(self._stored.config) != config:
-                self._container.push(LOKI_CONFIG, config)
+                config_as_yaml = yaml.safe_dump(config)
+                self._container.push(LOKI_CONFIG, config_as_yaml)
                 logger.info("Pushed new configuration")
-                self._stored.config = yaml.dump(config)
+                self._stored.config = config_as_yaml
                 restart = True
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
