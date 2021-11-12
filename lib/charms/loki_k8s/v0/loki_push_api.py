@@ -691,9 +691,11 @@ class LokiPushApiProvider(RelationManagerBase):
         self.charm = charm
         self._relation_name = relation_name
 
-        # If Loki is run in single-tenant mode, all the chunks are put in a folder named fake
+        # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
-        self._rules_dir = os.path.join(rules_dir, "fake")
+        # https://grafana.com/docs/loki/latest/rules/#ruler-storage
+        tenant_id = "fake"
+        self._rules_dir = os.path.join(rules_dir, tenant_id)
 
         self.container = self.charm.unit.get_container("loki")
         events = self.charm.on[relation_name]

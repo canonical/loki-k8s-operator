@@ -221,7 +221,7 @@ class LokiOperatorCharm(CharmBase):
                   rules_directory: {RULES_DIR}
               replication_factor: 1
               ring:
-                instance_addr: {self.loki_provider.unit_ip or ""}
+                instance_addr: {self.loki_provider.unit_ip if self.loki_provider else ""}
                 kvstore:
                   store: inmemory
 
