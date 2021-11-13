@@ -332,7 +332,13 @@ from urllib.request import urlopen
 from zipfile import ZipFile
 
 import yaml
-from ops.charm import CharmBase, RelationMeta, RelationRole, RelationChangedEvent, RelationDepartedEvent
+from ops.charm import (
+    CharmBase,
+    RelationChangedEvent,
+    RelationDepartedEvent,
+    RelationMeta,
+    RelationRole,
+)
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.model import BlockedStatus
 
