@@ -4,15 +4,36 @@
 #
 # Learn more at: https://juju.is/docs/sdk
 
+
 r"""## Overview.
 
-This document explains how to integrate with the Loki charm.
-It also explains how alternative implementations of the Loki charm
-may maintain the same interface and be backward compatible with all
-currently integrated charms. Finally this document is the
-authoritative reference on the structure of relation data that is
-shared between Loki charms and any other charm that intends to
-provide a scrape target for Loki.
+This document explains how to use the four principal objects this library provides:
+
+
+- `LokiPushApiProvider`: This object is ment to be used by any charmed operator that needs to
+implement the provider side of the `loki_push_api` relation interface.
+For instance a Loki charm.
+
+- `LokiPushApiConsumer`: This object is ment to be used by any charmed operator that needs to
+send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
+For instance a Promtail or Grafana agent charm that needs to send logs to Loki.
+
+- `LogProxyProvider`: This object is ment to be used by any charmed operator that needs to act
+as a Log Proxy to Loki by implementing the provider side of `log_proxy` relation interface.
+For instance a Grafana agent or Promtail charmed operator that receives logs from a workload
+and forward them to Loki.
+
+- `LogProxyConsumer`: This object is ment to be used by any K8s charmed operator that needs to
+send log to Loki through a Log Proxy by implementing the consumer side of `log_proxy` relation
+interface.
+Filtering logs in Loki is largely performed on the basis of labels.
+In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
+generates telemetry like logs.
+In order to be able to control the labels on the logs pushedm this object injects a Pebble layer
+that runs Promtail in the worload container, injecting Juju topology labels into the
+logs on the fly.
+
+
 
 ## LokiPushApiProvider Library Usage
 
@@ -255,7 +276,7 @@ data using the `alert_rules` key.
 Let's say that we have a workload charm that produce logs and we need to send those logs to a
 workload implementing the `loki_push_api` interface, like `Loki` or `Grafana Agent`.
 
-Adopting this library in a charmed operator consist of two steps:
+Adopting this object in a charmed operator consist of two steps:
 
 
 1. Use the `LogProxyConsumer` class by instanting it in the `__init__` method of the
@@ -307,7 +328,7 @@ Once the library is implemented in a charmed operator and a relation is establis
 the charm that implemets the `loki_push_api` interface, the library will inject a
 Pebble layer that runs Promtail in the worload container to send logs.
 
-Because the library can raise a `PromtailDigestError` when:
+The object can raise a `PromtailDigestError` when:
 
 - Promtail binary cannot be downloaded.
 - No `container_name` parameter has been specified and the Pod has more than 1 container.
@@ -315,6 +336,38 @@ Because the library can raise a `PromtailDigestError` when:
 
 that's why in the above example, the instanciation is made in a `try/except` block
 to handle these situations conveniently.
+
+
+## LogProxyProvider Library Usage
+
+This object is ment to be used by any charmed operator that needs to act
+as a Log Proxy to Loki by implementing the provider side of `log_proxy` relation interface.
+For instance a Grafana agent or Promtail charmed operator that receives logs from a workload
+and forward them to Loki.
+
+Adopting this object in a charmed operator consist of two steps:
+
+1. Use the `LogProxyProvider` class by instanting it in the `__init__` method of the
+   charmed operator:
+
+   ```python
+   from charms.loki_k8s.v0.loki_push_api import LogProxyProvider
+
+   ...
+
+       def __init__(self, *args):
+           ...
+           self._log_proxy = LogProxyProvider(self)
+   ```
+
+2. Modify the `metadata.yaml` file to add:
+
+   - The `log_proxy` relation in the `provider` section:
+     ```yaml
+     provides:
+       log_proxy:
+         interface: loki_push_api
+     ```
 """
 
 import dataclasses
