@@ -674,6 +674,8 @@ class LokiPushApiProvider(RelationManagerBase):
                 deploying your charm will have a consistent experience with all
                 other charms that consume metrics endpoints.
 
+            rules_dir: path in workload container where rule files are to be stored.
+
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
                 with the same name as provided via `relation_name` argument.
