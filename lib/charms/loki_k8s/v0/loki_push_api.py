@@ -692,7 +692,7 @@ class LokiPushApiProvider(RelationManagerBase):
         super().__init__(charm, relation_name)
         self.charm = charm
         self._relation_name = relation_name
-        self.container = self.charm.unit.get_container("loki")
+        self.container = self.charm._container
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/

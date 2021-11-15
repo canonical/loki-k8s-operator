@@ -69,6 +69,14 @@ class FakeLokiCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
+        self._container = type(
+            "FakeContainer",
+            (object,),
+            {
+                "make_dir": lambda *a, **kw: None,
+                "remove_path": lambda *a, **kw: None,
+            },
+        )
         with patch("ops.testing._TestingPebbleClient.make_dir"):
             self.loki_provider = LokiPushApiProvider(self, "logging")
 
