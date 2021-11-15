@@ -69,7 +69,8 @@ class FakeLokiCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
-        self.loki_provider = LokiPushApiProvider(self, "logging")
+        with patch("ops.testing._TestingPebbleClient.make_dir"):
+            self.loki_provider = LokiPushApiProvider(self, "logging")
 
     @property
     def _loki_push_api(self) -> str:
@@ -90,14 +91,16 @@ class TestLokiPushApiProvider(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
+    @patch("ops.testing._TestingPebbleClient.make_dir")
     @patch(
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
     )
-    def test_relation_data(self, mock_unit_ip):
+    def test_relation_data(self, mock_unit_ip, *unused):
         mock_unit_ip.return_value = "10.1.2.3"
         expected_value = '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'
         self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
 
+    @patch("ops.testing._TestingPebbleClient.make_dir")
     @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files")
     @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files")
     @patch(
@@ -120,6 +123,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saving alerts rules to disk",
             )
 
+    @patch("ops.testing._TestingPebbleClient.make_dir")
     @patch("os.makedirs")
     @patch("ops.testing._TestingPebbleClient.remove_path")
     @patch(
