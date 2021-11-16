@@ -135,8 +135,9 @@ class TestCharm(unittest.TestCase):
         self.harness.update_config(yaml.safe_load(LOKI_CONFIG))
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
+    @patch("ops.testing._TestingPebbleClient.make_dir")
     @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    def test__provide_loki(self, mock_version):
+    def test__provide_loki(self, mock_version, *unused):
         mock_version.return_value = "3.14159"
 
         with self.assertLogs(level="DEBUG") as logger:
@@ -158,8 +159,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._provide_loki()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
+    @patch("ops.testing._TestingPebbleClient.make_dir")
     @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    def test__loki_config(self, mock_version):
+    def test__loki_config(self, mock_version, *unused):
         mock_version.return_value = "3.14159"
 
         with self.assertLogs(level="DEBUG") as logger:

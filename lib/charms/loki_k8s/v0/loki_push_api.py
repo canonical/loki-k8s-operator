@@ -272,7 +272,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 logger = logging.getLogger(__name__)
 
@@ -674,6 +674,8 @@ class LokiPushApiProvider(RelationManagerBase):
                 deploying your charm will have a consistent experience with all
                 other charms that consume metrics endpoints.
 
+            rules_dir: path in workload container where rule files are to be stored.
+
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
                 with the same name as provided via `relation_name` argument.
@@ -690,14 +692,17 @@ class LokiPushApiProvider(RelationManagerBase):
         super().__init__(charm, relation_name)
         self.charm = charm
         self._relation_name = relation_name
+        self.container = self.charm._container
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
         # https://grafana.com/docs/loki/latest/rules/#ruler-storage
         tenant_id = "fake"
         self._rules_dir = os.path.join(rules_dir, tenant_id)
+        # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
+        # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
+        self.container.make_dir(self._rules_dir, make_parents=True)
 
-        self.container = self.charm.unit.get_container("loki")
         events = self.charm.on[relation_name]
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
@@ -772,7 +777,7 @@ class LokiPushApiProvider(RelationManagerBase):
         """
         for rel_id, alert_rules in self.alerts().items():
             filename = "{}_rel_{}_alert.rules".format(
-                JujuTopology.from_relation_data(alert_rules),
+                JujuTopology.from_relation_data(alert_rules).identifier,
                 rel_id,
             )
             path = os.path.join(self._rules_dir, filename)
