@@ -510,23 +510,7 @@ class LogProxyConsumer(RelationManagerBase):
             A dict representing the `scrape_configs` section.
         """
         # TODO: use the JujuTopology object
-        return {
-            "scrape_configs": [
-                {
-                    "job_name": "system",
-                    "static_configs": self._generate_static_configs(),
-                }
-            ]
-        }
-
-    def _generate_static_configs(self) -> list:
-        """Generates static_configs section.
-
-        Returns:
-            - a list of dictionaries representing static_configs section
-        """
-        static_configs = []
-        config: dict = {
+        config = {
             "targets": ["localhost"],
             "labels": {
                 "job": "juju_{}_{}_{}".format(
@@ -537,6 +521,23 @@ class LogProxyConsumer(RelationManagerBase):
                 "__path__": "",
             },
         }
+
+        return {
+            "scrape_configs": [
+                {
+                    "job_name": "system",
+                    "static_configs": self._generate_static_configs(config),
+                }
+            ]
+        }
+
+    def _generate_static_configs(self, config: dict) -> list:
+        """Generates static_configs section.
+
+        Returns:
+            - a list of dictionaries representing static_configs section
+        """
+        static_configs = []
 
         for _file in self._log_files:
             conf = deepcopy(config)
