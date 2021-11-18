@@ -5,18 +5,12 @@ import textwrap
 import unittest
 from unittest.mock import patch
 
-from charms.loki_k8s.v0.log_proxy import LogProxyConsumer
+from charms.loki_k8s.v0.log_proxy import LogProxyConsumer, PromtailDigestError
 from deepdiff import DeepDiff  # type: ignore
 from ops.charm import CharmBase
 from ops.framework import StoredState
+from ops.model import Container
 from ops.testing import Harness
-
-METADATA = {
-    "model": "consumer-model",
-    "model_uuid": "qwerty-1234",
-    "application": "promtail",
-    "charm_name": "charm-k8s",
-}
 
 LOG_FILES = [
     "/var/log/apache2/access.log",
@@ -24,11 +18,12 @@ LOG_FILES = [
     "/var/log/test.log",
 ]
 
-INIT_CONFIG: dict = {"clients": []}
+HTTP_LISTEN_PORT = 9080
+GRPC_LISTEN_PORT = 9095
 
 CONFIG = {
     "clients": [{"url": "http://10.20.30.1:3500/loki/api/v1/push"}],
-    "server": {"http_listen_port": 9080, "grpc_listen_port": 9095},
+    "server": {"http_listen_port": HTTP_LISTEN_PORT, "grpc_listen_port": GRPC_LISTEN_PORT},
     "positions": {"filename": "/opt/promtail/positions.yaml"},
     "scrape_configs": [
         {
@@ -63,15 +58,17 @@ CONFIG = {
 WORKLOAD_BINARY_DIR = "/opt/promtail"
 WORKLOAD_POSITIONS_PATH = "{}/positions.yaml".format(WORKLOAD_BINARY_DIR)
 
-HTTP_LISTEN_PORT = 9080
-GRPC_LISTEN_PORT = 9095
-
 
 class ConsumerCharm(CharmBase):
     _stored = StoredState()
     metadata_yaml = textwrap.dedent(
         """
         name: loki-k8s
+        containers:
+          loki:
+            resource: loki-image
+          promtail:
+            resource: promtail-image
         requires:
           log_proxy:
             interface: loki_push_api
@@ -163,3 +160,23 @@ class TestLogProxyConsumer(unittest.TestCase):
 
         conf = self.harness.charm._log_proxy._remove_client(CONFIG, agent_url1)
         self.assertEqual(DeepDiff(conf, expected_config, ignore_order=True), {})
+
+    def test__get_container(self):
+        # Container do not exist
+        container_name = "loki_container"
+
+        with self.assertRaises(PromtailDigestError) as context:
+            self.harness.charm._log_proxy._get_container(container_name)
+
+        self.assertEqual(f"container '{container_name}' not found", str(context.exception))
+
+        # Container exist
+        container_name = "loki"
+        self.assertIs(
+            type(self.harness.charm._log_proxy._get_container(container_name)), Container
+        )
+
+        # More than 1 container in Pod
+        container_name = ""
+        with self.assertRaises(PromtailDigestError) as context:
+            self.harness.charm._log_proxy._get_container(container_name)
