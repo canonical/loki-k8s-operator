@@ -223,7 +223,6 @@ class LogProxyConsumer(RelationManagerBase):
         self.framework.observe(
             self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed
         )
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
 
     def _on_log_proxy_relation_created(self, event):
         """Event handler for the `log_proxy_relation_created`."""
@@ -264,10 +263,6 @@ class LogProxyConsumer(RelationManagerBase):
             self._container.stop(WORKLOAD_SERVICE_NAME)
         else:
             self._container.restart(WORKLOAD_SERVICE_NAME)
-
-    def _on_upgrade_charm(self, event):
-        # TODO: Implement it ;-)
-        pass
 
     def _get_container(self, container_name):
         """Gets a single container by name or using the only container running in the Pod.
@@ -557,7 +552,6 @@ class LogProxyProvider(RelationManagerBase):
         self.framework.observe(
             self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed
         )
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
 
     def _on_log_proxy_relation_changed(self, event):
         if event.relation.data[self._charm.unit].get("data") is None:
@@ -565,9 +559,6 @@ class LogProxyProvider(RelationManagerBase):
             data.update(json.loads(self._loki_push_api))
             data.update(json.loads(self._promtail_binary_url))
             event.relation.data[self._charm.unit].update({"data": json.dumps(data)})
-
-    def _on_upgrade_charm(self, event):
-        pass
 
     @property
     def _promtail_binary_url(self) -> str:
