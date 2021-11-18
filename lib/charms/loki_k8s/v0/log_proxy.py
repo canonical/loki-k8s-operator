@@ -9,19 +9,19 @@ r"""## Overview.
 
 This document explains how to use the two principal objects this library provides:
 
-- `LogProxyProvider`: This object is ment to be used by any charmed operator that needs to act
+- `LogProxyProvider`: This object is meant to be used by any charmed operator that needs to act
 as a Log Proxy to Loki by implementing the provider side of `log_proxy` relation interface.
 For instance a Grafana agent or Promtail charmed operator that receives logs from a workload
 and forward them to Loki.
 
-- `LogProxyConsumer`: This object is ment to be used by any K8s charmed operator that needs to
+- `LogProxyConsumer`: This object is meant to be used by any K8s charmed operator that needs to
 send log to Loki through a Log Proxy by implementing the consumer side of `log_proxy` relation
 interface.
 Filtering logs in Loki is largely performed on the basis of labels.
 In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
 generates telemetry like logs.
 In order to be able to control the labels on the logs pushedm this object injects a Pebble layer
-that runs Promtail in the worload container, injecting Juju topology labels into the
+that runs Promtail in the workload container, injecting Juju topology labels into the
 logs on the fly.
 
 ## LogProxyConsumer Library Usage
@@ -78,8 +78,8 @@ Adopting this object in a charmed operator consist of two steps:
      ```
 
 Once the library is implemented in a charmed operator and a relation is established with
-the charm that implemets the `loki_push_api` interface, the library will inject a
-Pebble layer that runs Promtail in the worload container to send logs.
+the charm that implements the `loki_push_api` interface, the library will inject a
+Pebble layer that runs Promtail in the workload container to send logs.
 
 The object can raise a `PromtailDigestError` when:
 
@@ -87,13 +87,13 @@ The object can raise a `PromtailDigestError` when:
 - No `container_name` parameter has been specified and the Pod has more than 1 container.
 - The sha256 sum mismatch for promtail binary.
 
-that's why in the above example, the instanciation is made in a `try/except` block
+that's why in the above example, the instantiation is made in a `try/except` block
 to handle these situations conveniently.
 
 
 ## LogProxyProvider Library Usage
 
-This object is ment to be used by any charmed operator that needs to act
+This object is meant to be used by any charmed operator that needs to act
 as a Log Proxy to Loki by implementing the provider side of `log_proxy` relation interface.
 For instance a Grafana agent or Promtail charmed operator that receives logs from a workload
 and forward them to Loki.
