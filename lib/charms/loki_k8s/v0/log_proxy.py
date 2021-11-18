@@ -137,6 +137,7 @@ from zipfile import ZipFile
 import yaml
 from ops.charm import CharmBase, RelationChangedEvent, RelationDepartedEvent
 from ops.framework import Object, StoredState
+from ops.model import ModelError
 
 logger = logging.getLogger(__name__)
 
@@ -283,8 +284,13 @@ class LogProxyConsumer(RelationManagerBase):
             PromtailDigestError if no `container_name` is passed and there is more than one
                 container in the Pod.
         """
-        if container_name is not None:
-            return self._charm.unit.get_container(container_name)
+        try:
+            if container_name is not None:
+                return self._charm.unit.get_container(container_name)
+        except ModelError as e:
+            msg = str(e)
+            logger.warning(msg)
+            raise PromtailDigestError(msg)
 
         containers = dict(self._charm.model.unit.containers)
 
