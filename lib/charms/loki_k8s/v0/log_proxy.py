@@ -279,25 +279,25 @@ class LogProxyConsumer(RelationManagerBase):
             PromtailDigestError if no `container_name` is passed and there is more than one
                 container in the Pod.
         """
-        try:
-            if container_name is not None:
+        if container_name is not None:
+            try:
                 return self._charm.unit.get_container(container_name)
-        except ModelError as e:
-            msg = str(e)
-            logger.warning(msg)
+            except ModelError as e:
+                msg = str(e)
+                logger.warning(msg)
+                raise PromtailDigestError(msg)
+        else:
+            containers = dict(self._charm.model.unit.containers)
+
+            if len(containers) == 1:
+                return self._charm.unit.get_container([*containers].pop())
+
+            msg = (
+                "No 'container_name' parameter has been specified; since this charmed operator"
+                " is not running exactly one container, it must be specified which container"
+                " to get logs from."
+            )
             raise PromtailDigestError(msg)
-
-        containers = dict(self._charm.model.unit.containers)
-
-        if len(containers) == 1:
-            return self._charm.unit.get_container([*containers].pop())
-
-        msg = (
-            "No 'container_name' parameter has been specified; since this charmed operator"
-            " is not running exactly one container, it must be specified which container"
-            " to get logs from."
-        )
-        raise PromtailDigestError(msg)
 
     def _add_pebble_layer(self):
         """Adds Pebble layer that manages Promtail service in Workload container."""
@@ -376,8 +376,7 @@ class LogProxyConsumer(RelationManagerBase):
             agent_url = json.loads(event.relation.data[event.unit].get("data"))["loki_push_api"]
             grafana_agents[str(event.unit)] = agent_url
             self._stored.grafana_agents = json.dumps(grafana_agents)
-
-        if isinstance(event, RelationDepartedEvent):
+        elif isinstance(event, RelationDepartedEvent):
             agent_url = grafana_agents.pop(str(event.unit))
             self._stored.grafana_agents = json.dumps(grafana_agents)
 
@@ -420,13 +419,14 @@ class LogProxyConsumer(RelationManagerBase):
             A yaml string with Promtail config.
         """
         config = {}
+        current_config = self._current_config.copy()
+
         if isinstance(event, RelationChangedEvent):
             agent_url = json.loads(event.relation.data[event.unit].get("data"))["loki_push_api"]
-            config = self._add_client(self._current_config, agent_url)
-
-        if isinstance(event, RelationDepartedEvent):
+            config = self._add_client(current_config, agent_url)
+        elif isinstance(event, RelationDepartedEvent):
             agent_url = json.loads(self._stored.grafana_agents)[str(event.unit)]
-            config = self._remove_client(self._current_config, agent_url)
+            config = self._remove_client(current_config, agent_url)
 
         return yaml.safe_dump(config)
 
@@ -470,7 +470,9 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             Updated Promtail configuration.
         """
-        if clients := current_config.get("clients"):
+        clients = current_config.get("clients", None)
+
+        if clients:
             clients = [c for c in clients if c != {"url": agent_url}]
             current_config["clients"] = clients
             return current_config
