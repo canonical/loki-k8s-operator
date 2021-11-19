@@ -95,46 +95,14 @@ class TestLogProxyConsumer(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
-    def test__cli_args(self):
-        expected_args = "-config.file=/etc/promtail/promtail_config.yaml"
-        self.assertEqual(self.harness.charm._log_proxy._cli_args, expected_args)
+    def test__cli_args_with_config_file_parameter(self):
+        self.assertIn("-config.file=", self.harness.charm._log_proxy._cli_args)
 
-    def test__initial_config(self):
-        expected = {
-            "server": {"http_listen_port": 9080, "grpc_listen_port": 9095},
-            "positions": {"filename": "/opt/promtail/positions.yaml"},
-            "scrape_configs": [
-                {
-                    "job_name": "system",
-                    "static_configs": [
-                        {
-                            "targets": ["localhost"],
-                            "labels": {
-                                "job": "juju_MODEL_123456_loki-k8s",
-                                "__path__": "/var/log/apache2/access.log",
-                            },
-                        },
-                        {
-                            "targets": ["localhost"],
-                            "labels": {
-                                "job": "juju_MODEL_123456_loki-k8s",
-                                "__path__": "/var/log/alternatives.log",
-                            },
-                        },
-                        {
-                            "targets": ["localhost"],
-                            "labels": {
-                                "job": "juju_MODEL_123456_loki-k8s",
-                                "__path__": "/var/log/test.log",
-                            },
-                        },
-                    ],
-                }
-            ],
-        }
-        self.assertEqual(self.harness.charm._log_proxy._initial_config, expected)
+    def test__initial_config_sections(self):
+        expected_sections = {"positions", "scrape_configs", "server"}
+        self.assertEqual(set(self.harness.charm._log_proxy._initial_config), expected_sections)
 
-    def test__add_client(self):
+    def test__add_client_with_client_section(self):
         agent_url1 = "http://10.20.30.1:3500/loki/api/v1/push"
         agent_url2 = "http://10.20.30.2:3500/loki/api/v1/push"
 
@@ -144,6 +112,9 @@ class TestLogProxyConsumer(unittest.TestCase):
         conf = self.harness.charm._log_proxy._add_client(CONFIG, agent_url2)
         self.assertEqual(DeepDiff(conf, expected_config, ignore_order=True), {})
 
+    def test__add_client_without_client_section(self):
+        agent_url1 = "http://10.20.30.1:3500/loki/api/v1/push"
+        agent_url2 = "http://10.20.30.2:3500/loki/api/v1/push"
         CONFIG.pop("clients")
         expected_config2 = CONFIG.copy()
         expected_config2["clients"] = [{"url": agent_url1}, {"url": agent_url2}]
@@ -161,7 +132,7 @@ class TestLogProxyConsumer(unittest.TestCase):
         conf = self.harness.charm._log_proxy._remove_client(CONFIG, agent_url1)
         self.assertEqual(DeepDiff(conf, expected_config, ignore_order=True), {})
 
-    def test__get_container(self):
+    def test__get_container_container_name_not_exist(self):
         # Container do not exist
         container_name = "loki_container"
 
@@ -170,13 +141,15 @@ class TestLogProxyConsumer(unittest.TestCase):
 
         self.assertEqual(f"container '{container_name}' not found", str(context.exception))
 
+    def test__get_container_container_name_exist(self):
         # Container exist
         container_name = "loki"
         self.assertIs(
             type(self.harness.charm._log_proxy._get_container(container_name)), Container
         )
 
+    def test__get_container_more_than_one_container(self):
         # More than 1 container in Pod
         container_name = ""
-        with self.assertRaises(PromtailDigestError) as context:
+        with self.assertRaises(PromtailDigestError):
             self.harness.charm._log_proxy._get_container(container_name)
