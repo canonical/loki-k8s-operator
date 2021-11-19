@@ -126,7 +126,7 @@ class LokiOperatorCharm(CharmBase):
         """Construct command to launch Loki.
 
         Returns:
-            a sting consisting of Loki command and associated
+            a string consisting of Loki command and associated
             command line options.
         """
         return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
