@@ -9,25 +9,25 @@ r"""## Overview.
 
 This document explains how to use the two principal objects this library provides:
 
-- `LogProxyProvider`: This object is meant to be used by any charmed operator that needs to act
-as a Log Proxy to Loki by implementing the provider side of `log_proxy` relation interface.
+- `LogProxyProvider`: This object can be used by any charmed operator that needs to act
+as a Log Proxy to Loki by implementing the provider side of `loki_push_api` relation interface.
 For instance a Grafana agent or Promtail charmed operator that receives logs from a workload
 and forward them to Loki.
 
-- `LogProxyConsumer`: This object is meant to be used by any K8s charmed operator that needs to
-send log to Loki through a Log Proxy by implementing the consumer side of `log_proxy` relation
-interface.
+- `LogProxyConsumer`: This object can be used by any K8s charmed operator that needs to
+send log to Loki through a Log Proxy by implementing the consumer side of the `loki_push_api`
+relation interface.
 Filtering logs in Loki is largely performed on the basis of labels.
 In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
 generates telemetry like logs.
-In order to be able to control the labels on the logs pushedm this object injects a Pebble layer
+In order to be able to control the labels on the logs pushed this object injects a Pebble layer
 that runs Promtail in the workload container, injecting Juju topology labels into the
 logs on the fly.
 
 ## LogProxyConsumer Library Usage
 
-Let's say that we have a workload charm that produce logs and we need to send those logs to a
-workload implementing the `loki_push_api` interface, like `Loki` or `Grafana Agent`.
+Let's say that we have a workload charm that produces logs and we need to send those logs to a
+workload implementing the `loki_push_api` interface, such as `Loki` or `Grafana Agent`.
 
 Adopting this object in a charmed operator consist of two steps:
 
