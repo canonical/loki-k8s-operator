@@ -317,8 +317,8 @@ class LogProxyConsumer(RelationManagerBase):
 
     def _create_directories(self) -> None:
         """Creates the directories for Promtail binary and config file."""
-        self._container.exec(["mkdir", "-p", WORKLOAD_BINARY_DIR])
-        self._container.exec(["mkdir", "-p", WORKLOAD_CONFIG_DIR])
+        self._container.make_dir(path=WORKLOAD_BINARY_DIR, make_parents=True)
+        self._container.make_dir(path=WORKLOAD_CONFIG_DIR, make_parents=True)
 
     def _obtain_promtail(self, event) -> None:
         if self._is_promtail_binary_in_workload():
