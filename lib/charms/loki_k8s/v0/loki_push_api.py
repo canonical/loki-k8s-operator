@@ -256,16 +256,15 @@ data using the `alert_rules` key.
 
 """
 
-import dataclasses
 import json
 import logging
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import yaml
-from ops.charm import CharmBase, RelationMeta, RelationRole
+from ops.charm import CharmBase, RelationRole
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.model import BlockedStatus
 
@@ -277,7 +276,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +290,7 @@ class RelationNotFoundError(ValueError):
 
     def __init__(self, relation_name: str):
         self.relation_name = relation_name
-        self.message = f"No relation named '{relation_name}' found"
+        self.message = "No relation named '{}' found".format(relation_name)
 
         super().__init__(self.message)
 
@@ -309,10 +308,10 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            f"The '{relation_name}' relation has '{actual_relation_interface}' as "
-            f"interface rather than the expected '{expected_relation_interface}'"
+            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
+                relation_name, actual_relation_interface, expected_relation_interface
+            )
         )
-
         super().__init__(self.message)
 
 
@@ -328,11 +327,9 @@ class RelationRoleMismatchError(Exception):
         self.relation_name = relation_name
         self.expected_relation_interface = expected_relation_role
         self.actual_relation_role = actual_relation_role
-        self.message = (
-            f"The '{relation_name}' relation has role '{repr(actual_relation_role)}' "
-            f"rather than the expected '{repr(expected_relation_role)}'"
+        self.message = "The '{}' relation has role '{}' rather than the expected '{}'".format(
+            relation_name, repr(actual_relation_role), repr(expected_relation_role)
         )
-
         super().__init__(self.message)
 
 
@@ -370,7 +367,7 @@ def _validate_relation_by_interface_and_direction(
     if relation_name not in charm.meta.relations:
         raise RelationNotFoundError(relation_name)
 
-    relation: RelationMeta = charm.meta.relations[relation_name]
+    relation = charm.meta.relations[relation_name]
 
     actual_relation_interface = relation.interface_name
     if actual_relation_interface != expected_relation_interface:
@@ -389,7 +386,7 @@ def _validate_relation_by_interface_and_direction(
                 relation_name, RelationRole.requires, RelationRole.provides
             )
     else:
-        raise Exception(f"Unexpected RelationDirection: {expected_relation_role}")
+        raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
 
 def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
@@ -411,14 +408,14 @@ def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
     return True
 
 
-@dataclasses.dataclass(frozen=True)
 class JujuTopology:
-    """Dataclass for storing and formatting juju topology information."""
+    """Class for storing and formatting juju topology information."""
 
-    model: str
-    model_uuid: str
-    application: str
-    charm_name: str
+    def __init__(self, model: str, model_uuid: str, application: str, charm_name: str):
+        self.model = model
+        self.model_uuid = model_uuid
+        self.application = application
+        self.charm_name = charm_name
 
     @staticmethod
     def from_charm(charm):
@@ -443,7 +440,7 @@ class JujuTopology:
     @property
     def identifier(self) -> str:
         """Format the topology information into a terse string."""
-        return f"{self.model}_{self.model_uuid}_{self.application}"
+        return "{}_{}_{}".format(self.model, self.model_uuid, self.application)
 
     @property
     def short_model_uuid(self):
@@ -468,10 +465,12 @@ class JujuTopology:
 
     def as_dict(self, short_uuid=False) -> dict:
         """Format the topology information into a dict."""
-        as_dict = dataclasses.asdict(self)
-        if short_uuid:
-            as_dict["model_uuid"] = self.short_model_uuid
-        return as_dict
+        return {
+            "model": self.model,
+            "model_uuid": self.model_uuid,
+            "application": self.application,
+            "charm_name": self.charm_name,
+        }
 
     def as_dict_with_logql_labels(self):
         """Format the topology information into a dict with keys having 'juju_' as prefix."""
@@ -520,7 +519,7 @@ def load_alert_rule_from_file(
 
 
 def load_alert_rules_from_dir(
-    dir_path: Union[str, Path],
+    dir_path: str,
     topology: JujuTopology,
     *,
     recursive: bool = False,
@@ -560,10 +559,8 @@ def load_alert_rules_from_dir(
         # Generate group name:
         #  - name, from juju topology
         #  - suffix, from the relative path of the rule file;
-        return (
-            f"{topology.identifier}_"
-            f"{'' if relpath == '.' else relpath.replace(os.path.sep, '_') + '_'}"
-            "alerts"
+        return "{}_{}alerts".format(
+            topology.identifier, "" if relpath == "." else relpath.replace(os.path.sep, "_") + "_"
         )
 
     invalid_files = []
@@ -609,8 +606,9 @@ class NoRelationWithInterfaceFoundError(Exception):
         self.charm = charm
         self.relation_interface = relation_interface
         self.message = (
-            f"No relations with interface '{relation_interface}' found in the meta "
-            f"of the '{charm.meta.name}' charm"
+            "No relations with interface '{}' found in the meta of the '{}' charm".format(
+                relation_interface, charm.meta.name
+            )
         )
 
         super().__init__(self.message)
@@ -624,10 +622,10 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         self.relation_interface = relation_interface
         self.relations = relations
         self.message = (
-            f"Multiple relations with interface '{relation_interface}' found in the meta "
-            f"of the '{charm.name}' charm."
+            "Multiple relations with interface '{}' found in the meta of the '{}' charm.".format(
+                relation_interface, charm.name
+            )
         )
-
         super().__init__(self.message)
 
 
@@ -751,7 +749,7 @@ class LokiPushApiProvider(RelationManagerBase):
         Returns:
             Loki push API URL as json string
         """
-        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
+        loki_push_api = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self.charm._port)
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
