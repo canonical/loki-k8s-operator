@@ -65,16 +65,8 @@ class LokiServer:
             exception is raised
         """
         try:
-            # Un-comment the following lines once new Loki 2.3.1 version is released.
-            #
-            # We are hardcoding version here because there is and bug in last stable Loki version
-            # (2.3.0) that do not return its version: https://github.com/grafana/loki/issues/4133
-            # This bug it was already addressed in PR: https://github.com/grafana/loki/pull/4135
-            # but it's note released yet.
-            #  info = self._build_info()
-            #  return = info.get("version", None)
-            _ = self._build_info()
-            return "2.3.0"
+            info = self._build_info()
+            return info.get("version", None)
         except requests.exceptions.ConnectionError as e:
             raise LokiServerNotReadyError(str(e))
         except requests.exceptions.HTTPError as e:
