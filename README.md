@@ -1,6 +1,6 @@
 # Loki Operator for K8s
 
-![tests](https://github.com/canonical/loki-operator/actions/workflows/run-tests.yaml/badge.svg)
+[![Test Suite](https://github.com/canonical/loki-operator/actions/workflows/run_tests.yaml/badge.svg)](https://github.com/canonical/loki-operator/actions/workflows/run_tests.yaml)
 
 ## Description
 
