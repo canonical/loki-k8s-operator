@@ -8,7 +8,7 @@ from typing import Dict
 from unittest.mock import Mock, PropertyMock, patch
 
 import yaml
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
 from charm import LokiOperatorCharm
@@ -151,7 +151,7 @@ class TestCharm(unittest.TestCase):
     def test__provide_loki_not_ready(self, mock_version):
         mock_version.side_effect = LokiServerNotReadyError
         self.harness.charm._provide_loki()
-        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
+        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
     @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
     def test__provide_loki_server_error(self, mock_version):
