@@ -23,7 +23,7 @@ from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import PathError, ProtocolError
 
 from kubernetes_service import K8sServicePatch, PatchFailed
@@ -163,7 +163,7 @@ class LokiOperatorCharm(CharmBase):
             self.loki_provider = LokiPushApiProvider(self)
             logger.debug("Loki Provider is available. Loki version: %s", version)
         except LokiServerNotReadyError as e:
-            self.unit.status = MaintenanceStatus(str(e))
+            self.unit.status = WaitingStatus(str(e))
         except LokiServerError as e:
             self.unit.status = BlockedStatus(str(e))
 
