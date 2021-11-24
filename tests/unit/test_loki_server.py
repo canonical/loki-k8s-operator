@@ -22,7 +22,7 @@ def mocked_requests_get_ok(*args, **kwargs):
             return self.json_data
 
     response = {
-        "version": "2.3.1",
+        "version": "2.4.1",
         "revision": "668622c81",
         "branch": "k59",
         "buildUser": "root@486a284bafb4",
@@ -52,10 +52,10 @@ class TestLokiServer(unittest.TestCase):
     @patch("loki_server.LokiServer._build_info")
     def test__version(self, mock_build_info):
         server = LokiServer()
-        server_info = '{"version":"2.3.1","revision":"668622c81","branch":"k59","buildUser":"root@486a284bafb4","buildDate":"2021-08-25T19:04:36Z","goVersion":""}'
+        server_info = '{"version":"2.4.1","revision":"668622c81","branch":"k59","buildUser":"root@486a284bafb4","buildDate":"2021-08-25T19:04:36Z","goVersion":""}'
         mock_build_info.return_value = json.loads(server_info)
 
-        expected_version = "2.3.0"
+        expected_version = "2.4.1"
         self.assertEqual(server.version, expected_version)
 
         non_expected_version = "2.3.3"
@@ -75,7 +75,7 @@ class TestLokiServer(unittest.TestCase):
         server = LokiServer()
         json_data = server._build_info()
         expected_data = {
-            "version": "2.3.1",
+            "version": "2.4.1",
             "revision": "668622c81",
             "branch": "k59",
             "buildUser": "root@486a284bafb4",
