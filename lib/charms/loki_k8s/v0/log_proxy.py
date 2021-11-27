@@ -81,6 +81,20 @@ Once the library is implemented in a charmed operator and a relation is establis
 the charm that implements the `loki_push_api` interface, the library will inject a
 Pebble layer that runs Promtail in the workload container to send logs.
 
+The defaul behaivour is that Promtail binary that is injected into the workload container
+is downloaded from internet, but in some scenarios workload containers cannot reach internet.
+In this situation Promtail binary must be uploaded to charmhub (Follow the instructions: https://juju.is/docs/sdk/publishing-resources)
+and the following section added to `resources` section in metadata.yaml
+
+```yaml
+resources:
+  promtail-bin:
+      type: file
+      description: Promtail binary for logging
+      filename: promtail-linux-amd64
+```
+
+
 The object can raise a `PromtailDigestError` when:
 
 - Promtail binary cannot be downloaded.
