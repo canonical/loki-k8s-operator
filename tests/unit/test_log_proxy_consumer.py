@@ -211,7 +211,7 @@ class TestLogProxyConsumer(unittest.TestCase):
                 self.assertEqual(
                     sorted(logger.output),
                     [
-                        "DEBUG:charms.loki_k8s.v0.log_proxy:Promtail binary file has been obtained from an attached resource."
+                        "INFO:charms.loki_k8s.v0.log_proxy:Promtail binary file has been obtained from an attached resource."
                     ],
                 )
 
