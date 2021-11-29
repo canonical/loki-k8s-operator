@@ -230,12 +230,6 @@ class TestLogProxyConsumer(unittest.TestCase):
         self.assertTrue(self.harness.charm._log_proxy._promtail_must_be_downloaded())
 
     def test__promtail_must_be_downloaded_in_workload_sha256_match(self):
-        self.harness.charm._log_proxy._is_promtail_binary_in_workload = MagicMock(
-            return_value=True
-        )
-        self.harness.charm._log_proxy._get_promtail_bin_from_workload = MagicMock(
-            return_value=True
-        )
         self.harness.charm._log_proxy._sha256sums_matches = MagicMock(return_value=True)
 
         with self.assertLogs(level="DEBUG") as logger:
