@@ -180,15 +180,15 @@ class TestLogProxyConsumer(unittest.TestCase):
         with patch("builtins.open", mocked_open, create=True):
             self.assertFalse(self.harness.charm._log_proxy._sha256sums_matches("file", sha256sum))
 
-    def test__is_promtail_binary_in_workload_not(self):
-        self.harness.charm._log_proxy._container = MagicMock()
-        self.harness.charm._log_proxy._container.list_files.return_value = ["file1", "file2"]
-        self.assertFalse(self.harness.charm._log_proxy._is_promtail_binary_in_workload())
+    @patch("pathlib.Path.is_file")
+    def test__is_promtail_binary_in_charm_not(self, mock_is_file):
+        mock_is_file.return_value = False
+        self.assertFalse(self.harness.charm._log_proxy._is_promtail_binary_in_charm())
 
-    def test__is_promtail_binary_in_workload_yes(self):
-        self.harness.charm._log_proxy._container = MagicMock()
-        self.harness.charm._log_proxy._container.list_files.return_value = ["file1"]
-        self.assertTrue(self.harness.charm._log_proxy._is_promtail_binary_in_workload())
+    @patch("pathlib.Path.is_file")
+    def test__is_promtail_binary_in_workload_yes(self, mock_is_file):
+        mock_is_file.return_value = True
+        self.assertTrue(self.harness.charm._log_proxy._is_promtail_binary_in_charm())
 
     def test__is_promtail_attached_model_error(self):
         self.harness.charm._log_proxy._charm.model.resources.fetch = MagicMock(
@@ -206,7 +206,7 @@ class TestLogProxyConsumer(unittest.TestCase):
         with patch("builtins.open", mocked_open, create=True):
             self.assertTrue(self.harness.charm._log_proxy._is_promtail_attached())
 
-            with self.assertLogs(level="DEBUG") as logger:
+            with self.assertLogs(level="INFO") as logger:
                 self.harness.charm._log_proxy._is_promtail_attached()
                 self.assertEqual(
                     sorted(logger.output),
@@ -216,9 +216,7 @@ class TestLogProxyConsumer(unittest.TestCase):
                 )
 
     def test__promtail_must_be_downloaded_not_in_workload(self):
-        self.harness.charm._log_proxy._is_promtail_binary_in_workload = MagicMock(
-            return_value=False
-        )
+        self.harness.charm._log_proxy._is_promtail_binary_in_charm = MagicMock(return_value=False)
         self.assertTrue(self.harness.charm._log_proxy._promtail_must_be_downloaded())
 
     def test__promtail_must_be_downloaded_in_workload_sha256_dont_match(self):
@@ -245,6 +243,6 @@ class TestLogProxyConsumer(unittest.TestCase):
             self.assertEqual(
                 sorted(logger.output),
                 [
-                    "DEBUG:charms.loki_k8s.v0.log_proxy:Promtail binary file is already in the the workload container."
+                    "DEBUG:charms.loki_k8s.v0.log_proxy:Promtail binary file is already in the the charm container."
                 ],
             )

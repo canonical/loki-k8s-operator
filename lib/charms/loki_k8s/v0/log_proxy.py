@@ -345,13 +345,15 @@ class LogProxyConsumer(RelationManagerBase):
         if self._is_promtail_attached():
             return
 
-        if not self._promtail_must_be_downloaded():
-            return
+        if self._promtail_must_be_downloaded():
+            self._download_and_push_promtail_to_workload(event)
+        else:
+            self._push_binary_to_workload()
 
-        if self._download_promtail(event):
-            with open(BINARY_PATH, "rb") as f:
-                self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
-                logger.debug("Promtail binary file has been pushed to workload container.")
+    def _push_binary_to_workload(self, resource_path=BINARY_PATH) -> None:
+        with open(resource_path, "rb") as f:
+            self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
+            logger.debug("Promtail binary file has been pushed to workload container.")
 
     def _is_promtail_attached(self) -> bool:
         """Checks whether Promtail binary is attached to the charm or not.
@@ -364,10 +366,8 @@ class LogProxyConsumer(RelationManagerBase):
         except ModelError:
             return False
 
-        with open(resource_path, "rb") as f:
-            self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
-
         logger.info("Promtail binary file has been obtained from an attached resource.")
+        self._push_binary_to_workload(resource_path)
         return True
 
     def _promtail_must_be_downloaded(self) -> bool:
@@ -376,22 +376,14 @@ class LogProxyConsumer(RelationManagerBase):
         Returns:
             a boolean representing whether Promtail binary must be downloaded or not.
         """
-        if not self._is_promtail_binary_in_workload():
+        if not self._is_promtail_binary_in_charm():
             return True
-        else:
-            self._get_promtail_bin_from_workload()
 
         if not self._sha256sums_matches(BINARY_PATH, BINARY_SHA256SUM):
             return True
 
-        logger.debug("Promtail binary file is already in the the workload container.")
+        logger.debug("Promtail binary file is already in the the charm container.")
         return False
-
-    def _get_promtail_bin_from_workload(self) -> None:
-        """Gets the Promtail binary from the workload container into the charm container."""
-        binary = self._container.pull(WORKLOAD_BINARY_PATH, encoding=None).read()
-        with open(BINARY_PATH, "wb") as f:
-            f.write(binary)
 
     def _sha256sums_matches(self, file_path: str, sha256sum: str) -> bool:
         """Checks whether a file's sha256sum matches or not with an specific sha256sum.
@@ -422,29 +414,31 @@ class LogProxyConsumer(RelationManagerBase):
             logger.error(msg)
             return False
 
-    def _is_promtail_binary_in_workload(self) -> bool:
-        """Check if Promtail binary is already stored in workload container.
+    def _is_promtail_binary_in_charm(self) -> bool:
+        """Check if Promtail binary is already stored in charm container.
 
         Returns:
             a boolean representing whether Promtail is present or not.
         """
-        cont = self._container.list_files(WORKLOAD_BINARY_DIR, pattern=WORKLOAD_BINARY_FILE_NAME)
-        return True if len(cont) == 1 else False
+        return True if Path(BINARY_PATH).is_file() else False
 
-    def _download_promtail(self, event) -> bool:
-        """Downloads Promtail zip file and unzip it.
-
-        Returns:
-            True if zip file was downloaded and unzipped, else returns false.
-        """
+    def _download_and_push_promtail_to_workload(self, event) -> None:
+        """Downloads Promtail zip file and push binary to workload."""
         url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
 
         with urlopen(url) as r:
             file_bytes = r.read()
+            with open(BINARY_ZIP_PATH, "wb") as f:
+                f.write(file_bytes)
+                logger.info(
+                    "Promtail binary zip file has been downloaded and stored in: %s",
+                    BINARY_ZIP_PATH,
+                )
+
             ZipFile(BytesIO(file_bytes)).extractall(BINARY_DIR)
             logger.debug("Promtail binary file has been downloaded.")
 
-        return True if Path(BINARY_PATH).is_file() else False
+        self._push_binary_to_workload()
 
     def _update_agents_list(self, event):
         """Updates the active Grafana agents list.
