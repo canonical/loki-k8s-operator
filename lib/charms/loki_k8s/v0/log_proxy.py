@@ -364,7 +364,7 @@ class LogProxyConsumer(RelationManagerBase):
         with open(resource_path, "rb") as f:
             self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
 
-        logger.debug("Promtail binary file has been obtained from an attached resource.")
+        logger.info("Promtail binary file has been obtained from an attached resource.")
         return True
 
     def _promtail_must_be_downloaded(self) -> bool:
