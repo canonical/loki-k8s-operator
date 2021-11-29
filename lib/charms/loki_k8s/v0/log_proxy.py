@@ -83,9 +83,7 @@ Pebble layer that runs Promtail in the workload container to send logs.
 
 The default behaivour is that Promtail binary that is injected into the workload container
 is downloaded from internet, but in some scenarios workload containers cannot reach internet.
-In this situation Promtail binary must be uploaded to charmhub (Follow the instructions:
-https://juju.is/docs/sdk/publishing-resources)
-and the following section added to `resources` section in metadata.yaml
+In this situation the following section should be added to `resources` section in metadata.yaml
 
 ```yaml
 resources:
@@ -95,6 +93,11 @@ resources:
       filename: promtail-linux-amd64
 ```
 
+And the charm should be deployed this way:
+
+```
+juju deploy ./you_charm.charm --resource promtail-bin=/tmp/promtail-linux-amd64
+```
 
 The object can raise a `PromtailDigestError` when:
 
