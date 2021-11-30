@@ -98,7 +98,7 @@ resources:
 And the charm should be deployed this way:
 
 ```
-juju deploy ./you_charm.charm --resource promtail-bin=/tmp/promtail-linux-amd64
+juju deploy ./your_charm.charm --resource promtail-bin=/tmp/promtail-linux-amd64
 ```
 
 The object can raise a `PromtailDigestError` when:
