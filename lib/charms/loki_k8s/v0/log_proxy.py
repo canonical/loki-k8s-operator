@@ -167,7 +167,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 PROMTAIL_BINARY_ZIP_URL = (
     "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
