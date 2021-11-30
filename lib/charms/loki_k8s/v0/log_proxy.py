@@ -83,7 +83,7 @@ Pebble layer that runs Promtail in the workload container to send logs.
 
 The default behaivour is that Promtail binary that is injected into the workload container
 is downloaded from internet, but in some scenarios workload containers cannot reach internet.
-To enable people operating in these situations, the following section should be added to the 
+To enable people operating in these situations, the following section should be added to the
 `resources` section of your charm's `metadata.yaml`, which will allow operators to attach a binary
 at runtime should they need, rather than rely on fetching from the internet.
 
