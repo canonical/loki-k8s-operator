@@ -356,7 +356,7 @@ class LogProxyConsumer(RelationManagerBase):
     def _push_binary_to_workload(self, resource_path=BINARY_PATH) -> None:
         with open(resource_path, "rb") as f:
             self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
-            logger.debug("Promtail binary file has been pushed to workload container.")
+            logger.debug("The promtail binary file has been pushed to the workload container.")
 
     def _is_promtail_attached(self) -> bool:
         """Checks whether Promtail binary is attached to the charm or not.
