@@ -81,11 +81,10 @@ Once the library is implemented in a charmed operator and a relation is establis
 the charm that implements the `loki_push_api` interface, the library will inject a
 Pebble layer that runs Promtail in the workload container to send logs.
 
-The default behaivour is that Promtail binary that is injected into the workload container
-is downloaded from internet, but in some scenarios workload containers cannot reach internet.
-To enable people operating in these situations, the following section should be added to the
-`resources` section of your charm's `metadata.yaml`, which will allow operators to attach a binary
-at runtime should they need, rather than rely on fetching from the internet.
+By default, the promtail binary injected into the container will be downloaded from the internet.
+If for any reason, the container has limited network access, you may allow charm
+administrators to provide their own promtail binary at runtime by adding the following snippet to
+your charm metadata:
 
 ```yaml
 resources:
