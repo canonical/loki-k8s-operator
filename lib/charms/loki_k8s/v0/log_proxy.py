@@ -426,7 +426,7 @@ class LogProxyConsumer(RelationManagerBase):
         return True if Path(BINARY_PATH).is_file() else False
 
     def _download_and_push_promtail_to_workload(self, event) -> None:
-        """Downloads Promtail zip file and push binary to workload."""
+        """Downloads a Promtail zip file and pushes the binary to the workload."""
         url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
 
         with urlopen(url) as r:
