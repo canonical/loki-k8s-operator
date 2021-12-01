@@ -94,7 +94,7 @@ resources:
       filename: promtail-linux-amd64
 ```
 
-And the charm should be deployed this way:
+Which would then allow operators to deploy the charm this way:
 
 ```
 juju deploy \
