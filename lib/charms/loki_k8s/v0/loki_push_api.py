@@ -149,15 +149,16 @@ For the simplest use cases, using the `LokiPushApiConsumer` object only requires
 instantiating it, typically in the constructor of your charm (the one which
 sends logs).
 
-    from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+```python
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 
-    class LokiClientCharm(CharmBase):
+class LokiClientCharm(CharmBase):
 
-        def __init__(self, *args):
-            super().__init__(*args)
-            ...
-            self._loki_consumer = LokiPushApiConsumer(self)
-
+    def __init__(self, *args):
+        super().__init__(*args)
+        ...
+        self._loki_consumer = LokiPushApiConsumer(self)
+```
 
 The `LokiPushApiConsumer` constructor requires two things:
 
@@ -209,7 +210,7 @@ The format of this alert rule conforms to the
 [Loki docs](https://grafana.com/docs/loki/latest/rules/#alerting-rules).
 An example of the contents of one such file is shown below.
 
-```
+```yaml
 alert: HighPercentageError
 expr: |
   sum(rate({%%juju_topology%%} |= "error" [5m])) by (job)
@@ -246,6 +247,30 @@ automatically added to every alert
 - `juju_model_uuid`
 - `juju_application`
 
+
+Whether alert rules files does not contain the keys `alert` or `expr` or
+there is no alert rules file in `alert_rules_path` a `loki_push_api_alert_rules_error` event
+is emitted.
+To handle these situations the event must be observed in the `LokiClientCharm` charm.py file:
+
+
+```python
+class LokiClientCharm(CharmBase):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        ...
+        self._loki_consumer = LokiPushApiConsumer(self)
+
+        self.framework.observe(
+            self._loki_consumer.on.loki_push_api_alert_rules_error,
+            self._alert_rules_error
+        )
+
+    def _alert_rules_error(self, event):
+        self.unit.status = BlockedStatus(event.message)
+```
+
 ## Relation Data
 
 The Loki charm uses both application and unit relation data to
@@ -266,7 +291,6 @@ from typing import List, Optional, Tuple
 import yaml
 from ops.charm import CharmBase, RelationRole
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from ops.model import BlockedStatus
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -276,13 +300,20 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 8
 
 logger = logging.getLogger(__name__)
 
 RELATION_INTERFACE_NAME = "loki_push_api"
 DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
+
+
+class AlertRulesError(Exception):
+    """Raised if there is an error with alert rules."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
 
 
 class RelationNotFoundError(ValueError):
@@ -565,7 +596,9 @@ def load_alert_rules_from_dir(
 
     invalid_files = []
     for path in filter(Path.is_file, Path(dir_path).glob("**/*.rule" if recursive else "*.rule")):
-        if rule := load_alert_rule_from_file(path, topology, allow_free_standing):
+        rule = load_alert_rule_from_file(path, topology, allow_free_standing)
+
+        if rule:
             logger.debug("Reading alert rule from %s", path)
             alerts[_group_name(path)].append(rule)
         else:
@@ -644,6 +677,22 @@ class RelationManagerBase(Object):
         self.name = relation_name
 
 
+class LokiPushApiAlertRulesError(EventBase):
+    """Event emitted when an AlertRulesError exception is raised."""
+
+    def __init__(self, handle, message):
+        super().__init__(handle)
+        self.message = message
+
+    def snapshot(self):
+        """Save message information."""
+        return {"message": self.message}
+
+    def restore(self, snapshot):
+        """Restore message information."""
+        self.message = snapshot["message"]
+
+
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -655,6 +704,7 @@ class LokiPushApiEndpointJoined(EventBase):
 class LoggingEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
+    loki_push_api_alert_rules_error = EventSource(LokiPushApiAlertRulesError)
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
     loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
 
@@ -670,7 +720,6 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             charm: a `CharmBase` instance that manages this
                 instance of the Loki service.
-
             relation_name: an optional string name of the relation between `charm`
                 and the Loki charmed service. The default is "logging".
                 It is strongly advised not to change the default, so that people
@@ -756,7 +805,9 @@ class LokiPushApiProvider(RelationManagerBase):
     @property
     def unit_ip(self) -> str:
         """Returns unit's IP."""
-        if bind_address := self.charm.model.get_binding(self._relation_name).network.bind_address:
+        bind_address = self.charm.model.get_binding(self._relation_name).network.bind_address
+
+        if bind_address:
             return str(bind_address)
         return ""
 
@@ -926,12 +977,17 @@ class LokiPushApiConsumer(RelationManagerBase):
             # Remove this if when this issue is closed:
             # https://github.com/canonical/loki-operator/issues/3
             return
+        data = event.relation.data[event.unit].get("data")
 
-        if data := event.relation.data[event.unit].get("data"):
+        if data:
             self._stored.loki_push_api = json.loads(data)["loki_push_api"]
 
         event.relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-        self._set_alert_rules(event)
+        try:
+            self._set_alert_rules(event)
+        except AlertRulesError as e:
+            self.on.loki_push_api_alert_rules_error.emit(message=str(e))
+
         self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _):
@@ -950,7 +1006,9 @@ class LokiPushApiConsumer(RelationManagerBase):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-        if alert_groups := self._labeled_alert_groups:
+        alert_groups = self._labeled_alert_groups
+
+        if alert_groups:
             event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
                 {"groups": alert_groups}
             )
@@ -1005,12 +1063,11 @@ class LokiPushApiConsumer(RelationManagerBase):
             message = "Failed to read alert rules (must contain {}): ".format(
                 ", ".join(must_contain)
             ) + ", ".join(map(str, invalid_files))
-            self._charm.model.unit.status = BlockedStatus(message)
+            raise AlertRulesError(message)
 
         elif not alert_groups:
             """No invalid files, but also no alerts found (path might be invalid)"""
-            self._charm.model.unit.status = BlockedStatus(
-                "No alert rules found in " + self._alert_rules_path
-            )
+            message = "No alert rules found in {}".format(self._alert_rules_path)
+            raise AlertRulesError(message)
 
         return alert_groups
