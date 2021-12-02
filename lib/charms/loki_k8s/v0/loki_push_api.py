@@ -941,6 +941,16 @@ class LokiPushApiConsumer(RelationManagerBase):
             RelationRoleMismatchError: If the relation with the same name as provided
                 via `relation_name` argument does not have the `RelationRole.provides`
                 role.
+
+        Emits:
+            loki_push_api_endpoint_joined: This event is emitted when the relation between the
+                charmed operator that implements `LokiPushApiProvider` (Loki charm for instance) and
+                the charmed operator that implements `LokiPushApiConsumer` is established.
+            loki_push_api_endpoint_departed: This event is emitted when the relation between the
+                charmed operator that implements `LokiPushApiProvider` (Loki charm for instance) and
+                the charmed operator that implements `LokiPushApiConsumer` is removed.
+             loki_push_api_alert_rules_error: This event is emitted whether alert rules files does
+                not contain the keys `alert` or `expr` or there is no alert rules file in `alert_rules_path`.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
