@@ -937,8 +937,8 @@ class LokiPushApiConsumer(RelationManagerBase):
 
         Emits:
             loki_push_api_endpoint_joined: This event is emitted when the relation between the
-                charmed operator that implements `LokiPushApiProvider` (Loki charm for instance)
-                and the charmed operator that implements `LokiPushApiConsumer` is established.
+                charmed operator that instantiates `LokiPushApiProvider` (Loki charm for instance)
+                and the charmed operator that instantiates `LokiPushApiConsumer` is established.
             loki_push_api_endpoint_departed: This event is emitted when the relation between the
                 charmed operator that implements `LokiPushApiProvider` (Loki charm for instance)
                 and the charmed operator that implements `LokiPushApiConsumer` is removed.
