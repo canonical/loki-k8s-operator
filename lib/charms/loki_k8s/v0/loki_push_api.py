@@ -309,13 +309,6 @@ DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
 
 
-class AlertRulesError(Exception):
-    """Raised if there is an error with alert rules."""
-
-    def __init__(self, message: str):
-        super().__init__(message)
-
-
 class RelationNotFoundError(ValueError):
     """Raised if there is no relation with the given name."""
 
