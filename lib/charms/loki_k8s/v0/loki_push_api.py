@@ -979,6 +979,12 @@ class LokiPushApiConsumer(RelationManagerBase):
         Args:
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
+
+        Emits:
+            loki_push_api_endpoint_joined: Once the relation is established, this event is emitted.
+            loki_push_api_alert_rules_error: This event is emitted whether alert rules files does
+                not contain the keys `alert` or `expr` or there is no alert rules file in
+                `alert_rules_path`.
         """
         if not self._charm.unit.is_leader():
             return
@@ -988,17 +994,22 @@ class LokiPushApiConsumer(RelationManagerBase):
             # Remove this if when this issue is closed:
             # https://github.com/canonical/loki-operator/issues/3
             return
-        data = event.relation.data[event.unit].get("data")
 
-        if data:
-            self._stored.loki_push_api = json.loads(data)["loki_push_api"]
+        self._store_loki_push_api(event)
+
+        alert_groups, invalid_files = load_alert_rules_from_dir(
+            self._alert_rules_path,
+            self.topology,
+            recursive=False,
+            allow_free_standing=self.allow_free_standing_rules,
+        )
+        alert_rules_error_message = self._check_alert_rules(alert_groups, invalid_files)
+
+        if alert_rules_error_message:
+            self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
 
         event.relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-        try:
-            self._set_alert_rules(event)
-        except AlertRulesError as e:
-            self.on.loki_push_api_alert_rules_error.emit(message=str(e))
-
+        event.relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
         self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _):
@@ -1010,20 +1021,38 @@ class LokiPushApiConsumer(RelationManagerBase):
         """
         self.on.loki_push_api_endpoint_departed.emit()
 
-    def _set_alert_rules(self, event):
-        """Set alert rules into relation data.
+    def _store_loki_push_api(self, event) -> None:
+        """Stores loki_push_api in StoredState."""
+        data = event.relation.data[event.unit].get("data")
+
+        if data:
+            self._stored.loki_push_api = json.loads(data)["loki_push_api"]
+
+    def _check_alert_rules(self, alert_groups, invalid_files) -> str:
+        """Check alert rules.
 
         Args:
-            event: a `CharmEvent` in response to which the consumer
-                charm must update its relation data.
-        """
-        alert_groups = self._labeled_alert_groups
+            alert_groups: a list of prometheus alert rule groups.
+            invalid_files: a list of invalid rules files.
 
-        if alert_groups:
-            event.relation.data[self._charm.app]["alert_rules"] = json.dumps(
-                {"groups": alert_groups}
-            )
-        # TODO: else json.dumps({}) ?
+        Returns:
+            A string with the validation message. The message is not empty whether there are
+            invalid alert rules files or there are no alert rules groups.
+        """
+        message = ""
+
+        if invalid_files:
+            must_contain = ["'alert'", "'expr'"]
+            if self.allow_free_standing_rules:
+                must_contain.append("'%%juju_topology%%'")
+
+            message = "Failed to read alert rules (must contain {}): ".format(
+                ", ".join(must_contain)
+            ) + ", ".join(map(str, invalid_files))
+        elif not alert_groups:
+            message = "No alert rules found in {}".format(self._alert_rules_path)
+
+        return message
 
     def _label_alert_topology(self, rule) -> dict:
         """Insert juju topology labels into an alert rule.
@@ -1048,37 +1077,3 @@ class LokiPushApiConsumer(RelationManagerBase):
             Loki Push API endpoint
         """
         return self._stored.loki_push_api
-
-    @property
-    def _labeled_alert_groups(self) -> list:
-        """Load alert rules from rule files.
-
-        All rules from files for a consumer charm are loaded into a single
-        group. The generated name of this group includes Juju topology
-        prefixes.
-
-        Returns:
-            a list of Loki alert rule groups.
-        """
-        alert_groups, invalid_files = load_alert_rules_from_dir(
-            self._alert_rules_path,
-            self.topology,
-            recursive=False,
-            allow_free_standing=self.allow_free_standing_rules,
-        )
-
-        if invalid_files:
-            must_contain = ["'alert'", "'expr'"]
-            if self.allow_free_standing_rules:
-                must_contain.append("'%%juju_topology%%'")
-            message = "Failed to read alert rules (must contain {}): ".format(
-                ", ".join(must_contain)
-            ) + ", ".join(map(str, invalid_files))
-            raise AlertRulesError(message)
-
-        elif not alert_groups:
-            """No invalid files, but also no alerts found (path might be invalid)"""
-            message = "No alert rules found in {}".format(self._alert_rules_path)
-            raise AlertRulesError(message)
-
-        return alert_groups

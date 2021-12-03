@@ -98,11 +98,11 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         )
 
     @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiConsumer._labeled_alert_groups",
+        "charms.loki_k8s.v0.loki_push_api.load_alert_rules_from_dir",
         new_callable=PropertyMock,
     )
     def test__on_logging_relation_changed(self, mock_alert_rules):
-        mock_alert_rules.return_value = LABELED_ALERT_RULES
+        mock_alert_rules.return_value = (LABELED_ALERT_RULES, [])
         loki_push_api = "http://10.1.2.3:3100/loki/api/v1/push"
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
