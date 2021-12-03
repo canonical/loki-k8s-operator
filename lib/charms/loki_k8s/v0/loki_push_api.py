@@ -974,9 +974,8 @@ class LokiPushApiConsumer(RelationManagerBase):
 
         Emits:
             loki_push_api_endpoint_joined: Once the relation is established, this event is emitted.
-            loki_push_api_alert_rules_error: This event is emitted whether alert rules files does
-                not contain the keys `alert` or `expr` or there is no alert rules file in
-                `alert_rules_path`.
+            loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
+                file is encountered or if `alert_rules_path` is empty.
         """
         if not self._charm.unit.is_leader():
             return
