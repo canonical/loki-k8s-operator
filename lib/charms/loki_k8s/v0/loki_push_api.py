@@ -955,7 +955,8 @@ class LokiPushApiConsumer(RelationManagerBase):
         self._charm = charm
         self._relation_name = relation_name
         self._alert_rules_path = alert_rules_path
-        self._is_multi = self._charm.meta.relations[self._relation_name].limit != 1
+        limit = self._charm.meta.relations[self._relation_name].limit
+        self._is_multi = True if type(limit) == int and limit > 0 else False
 
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
