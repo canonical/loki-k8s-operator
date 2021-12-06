@@ -105,7 +105,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
     )
     def test_relation_data(self, mock_unit_ip, *unused):
         mock_unit_ip.return_value = "10.1.2.3"
-        expected_value = '{"loki_push_api": {"url": "http://10.1.2.3:3100/loki/api/v1/push"}}'
+        expected_value = '{"url": "http://10.1.2.3:3100/loki/api/v1/push"}'
         self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
 
     @patch("ops.testing._TestingPebbleClient.make_dir")
