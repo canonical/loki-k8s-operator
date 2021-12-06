@@ -795,7 +795,9 @@ class LokiPushApiProvider(RelationManagerBase):
     @property
     def unit_ip(self) -> str:
         """Returns unit's IP."""
-        if bind_address := self._charm.model.get_binding(self._relation_name).network.bind_address:
+        bind_address = self._charm.model.get_binding(self._relation_name).network.bind_address
+
+        if bind_address:
             return str(bind_address)
         return ""
 
