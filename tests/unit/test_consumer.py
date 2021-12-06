@@ -110,12 +110,14 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.harness.update_relation_data(
             rel_id,
             "promtail",
-            {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+            {"loki_push_api": '{"url": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
 
         self.assertEqual(
-            self.harness.charm.loki_consumer._stored.loki_push_api.get(rel_id), loki_push_api
+            self.harness.charm.loki_consumer._stored.loki_push_api.get(rel_id)["url"],
+            loki_push_api,
         )
+        self.assertEqual(self.harness.charm.loki_consumer.loki_push_api[0], {"url": loki_push_api})
 
     @patch("charms.loki_k8s.v0.loki_push_api.LoggingEvents.loki_push_api_endpoint_joined")
     def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self, mock_events):

@@ -271,7 +271,7 @@ from typing import List, Optional, Tuple
 import yaml
 from ops.charm import CharmBase, RelationEvent, RelationRole
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from ops.model import BlockedStatus, Relation
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -730,10 +730,28 @@ class LokiPushApiProvider(RelationManagerBase):
         self.container.make_dir(self._rules_dir, make_parents=True)
 
         events = self._charm.on[relation_name]
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
     def _on_logging_relation_changed(self, event):
+        """Handle changes in related consumers.
+
+        Anytime there are changes in the relation between Loki
+        and its consumers charms.
+
+        Args:
+            event: a `CharmEvent` in response to which the consumer
+                charm must update its relation data.
+        """
+        if isinstance(event, RelationEvent):
+            self._process_logging_relation_changed(event.relation)
+        else:
+            # Upgrade event or other charm-level event
+            for relation in self._charm.model.relations[self._relation_name]:
+                self._process_logging_relation_changed(relation)
+
+    def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
 
         Anytime there are changes in relations between Loki
@@ -743,13 +761,13 @@ class LokiPushApiProvider(RelationManagerBase):
         consumer charms forwards,
 
         Args:
-            event: a `CharmEvent` in response to which the Loki
-                charm must update its relation data.
+            relation: the `Relation` instance to update.
         """
-        event.relation.data[self._charm.app].update({"data": self._loki_push_api})
-        logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
+        if self._charm.unit.is_leader():
+            relation.data[self._charm.app].update({"loki_push_api": self._loki_push_api})
+            logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
 
-        if event.relation.data.get(event.relation.app).get("alert_rules"):
+        if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saving alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
@@ -772,8 +790,7 @@ class LokiPushApiProvider(RelationManagerBase):
             Loki push API URL as json string
         """
         endpoint_url = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self._charm._port)
-        data = {"loki_push_api": {"url": endpoint_url}}
-        return json.dumps(data)
+        return json.dumps({"url": endpoint_url})
 
     @property
     def unit_ip(self) -> str:
@@ -966,12 +983,14 @@ class LokiPushApiConsumer(RelationManagerBase):
                 self._process_logging_relation_changed(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
-        if data := relation.data[relation.app].get("data"):
-            self._stored.loki_push_api[relation.id] = json.loads(data)["loki_push_api"]
+        if loki_push_api_data := relation.data[relation.app].get("loki_push_api"):
+            self._stored.loki_push_api[relation.id] = json.loads(loki_push_api_data)
 
         if self._charm.unit.is_leader():
             relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
             self._set_alert_rules(relation)
+            relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
+            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
 
         self.on.loki_push_api_endpoint_joined.emit()
 
@@ -982,7 +1001,7 @@ class LokiPushApiConsumer(RelationManagerBase):
         the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event.
         The consumer charm can then choose to update its configuration.
         """
-        self.self._stored.loki_push_api[event.relation.id] = None
+        self._stored.loki_push_api[event.relation.id] = None
         self.on.loki_push_api_endpoint_departed.emit()
 
     def _set_alert_rules(self, relation: Relation):
@@ -1018,7 +1037,10 @@ class LokiPushApiConsumer(RelationManagerBase):
             has limit 1; with any other relation limit, it returns a list of Loki Push API
             endpoints, which may be empty in case there are no relation instances.
         """
-        loki_endpoints = self._stored.loki_push_api.values()
+        loki_endpoints = [  # Convert from the StoredSet data structure to a plain list``
+            loki_endpoint for loki_endpoint in self._stored.loki_push_api.values()
+        ]
+
         if self._is_multi:
             return loki_endpoints
         else:
@@ -1026,38 +1048,3 @@ class LokiPushApiConsumer(RelationManagerBase):
                 return loki_endpoints[0]
             else:
                 return None
-
-    @property
-    def _labeled_alert_groups(self) -> list:
-        """Load alert rules from rule files.
-
-        All rules from files for a consumer charm are loaded into a single
-        group. The generated name of this group includes Juju topology
-        prefixes.
-
-        Returns:
-            a list of Loki alert rule groups.
-        """
-        alert_groups, invalid_files = load_alert_rules_from_dir(
-            self._alert_rules_path,
-            self.topology,
-            recursive=False,
-            allow_free_standing=self.allow_free_standing_rules,
-        )
-
-        if invalid_files:
-            must_contain = ["'alert'", "'expr'"]
-            if self.allow_free_standing_rules:
-                must_contain.append("'%%juju_topology%%'")
-            message = "Failed to read alert rules (must contain {}): ".format(
-                ", ".join(must_contain)
-            ) + ", ".join(map(str, invalid_files))
-            self._charm.model.unit.status = BlockedStatus(message)
-
-        elif not alert_groups:
-            """No invalid files, but also no alerts found (path might be invalid)"""
-            self._charm.model.unit.status = BlockedStatus(
-                "No alert rules found in " + self._alert_rules_path
-            )
-
-        return alert_groups
