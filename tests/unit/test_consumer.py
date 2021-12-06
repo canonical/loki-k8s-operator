@@ -82,7 +82,7 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.assertEqual(self.harness.update_relation_data(rel_id, "promtail/0", {}), None)
+        self.assertEqual(self.harness.update_relation_data(rel_id, "promtail", {}), None)
 
     def test__on_logging_relation_changed_no_unit(self):
         self.harness.set_leader(True)
@@ -109,10 +109,13 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "promtail/0")
         self.harness.update_relation_data(
             rel_id,
-            "promtail/0",
+            "promtail",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        self.assertEqual(self.harness.charm.loki_consumer._stored.loki_push_api, loki_push_api)
+
+        self.assertEqual(
+            self.harness.charm.loki_consumer._stored.loki_push_api.get(rel_id), loki_push_api
+        )
 
     def test__label_alert_topology(self):
         labeled_alert_topology = self.harness.charm.loki_consumer._label_alert_topology(

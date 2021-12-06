@@ -105,7 +105,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
     )
     def test_relation_data(self, mock_unit_ip, *unused):
         mock_unit_ip.return_value = "10.1.2.3"
-        expected_value = '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'
+        expected_value = '{"loki_push_api": {"url": "http://10.1.2.3:3100/loki/api/v1/push"}}'
         self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
 
     @patch("ops.testing._TestingPebbleClient.make_dir")
@@ -119,11 +119,6 @@ class TestLokiPushApiProvider(unittest.TestCase):
             mock_unit_ip.return_value = "10.1.2.3"
             rel_id = self.harness.add_relation("logging", "promtail")
             self.harness.add_relation_unit(rel_id, "promtail/0")
-            self.harness.update_relation_data(rel_id, "promtail/0", {})
-            self.assertEqual(
-                sorted(logger.output)[0],
-                'DEBUG:charms.loki_k8s.v0.loki_push_api:Saving Loki url in relation data {"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}',
-            )
 
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
             self.assertEqual(
