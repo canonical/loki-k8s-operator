@@ -117,6 +117,32 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             self.harness.charm.loki_consumer._stored.loki_push_api.get(rel_id), loki_push_api
         )
 
+    @patch("charms.loki_k8s.v0.loki_push_api.LoggingEvents.loki_push_api_endpoint_joined")
+    def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self, mock_events):
+        self.harness.set_leader(True)
+
+        rel_id = self.harness.add_relation("logging", "promtail")
+        self.harness.add_relation_unit(rel_id, "promtail/0")
+        self.harness.update_relation_data(
+            rel_id,
+            "promtail",
+            {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+        )
+        mock_events.emit.assert_called_once()
+
+    @patch("charms.loki_k8s.v0.loki_push_api.LoggingEvents.loki_push_api_endpoint_joined")
+    def test__on_upgrade_charm_endpoint_joined_event_fired_for_follower(self, mock_events):
+        self.harness.set_leader(False)
+
+        rel_id = self.harness.add_relation("logging", "promtail")
+        self.harness.add_relation_unit(rel_id, "promtail/0")
+        self.harness.update_relation_data(
+            rel_id,
+            "promtail",
+            {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+        )
+        mock_events.emit.assert_called_once()
+
     def test__label_alert_topology(self):
         labeled_alert_topology = self.harness.charm.loki_consumer._label_alert_topology(
             ONE_RULE.copy()
