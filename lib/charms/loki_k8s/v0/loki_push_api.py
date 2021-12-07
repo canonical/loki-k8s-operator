@@ -77,7 +77,7 @@ For example a Loki charm may instantiate the
                 self.unit.status = BlockedStatus(str(e))
 
 
-The `LokiPushApiProvider` object has several main responsibilities:
+The `LokiPushApiProvider` object has several responsibilities:
 
 1. Set the URL of the Loki Push API in the provider app data bag; the URL
    must be unique to all instances (e.g., using a load balancer).
@@ -786,7 +786,7 @@ class LokiPushApiProvider(RelationManagerBase):
         """
         if self._charm.unit.is_leader():
             relation.data[self._charm.app].update({"loki_push_api": self._loki_push_api})
-            logger.debug("Saving Loki url in relation data %s", self._loki_push_api)
+            logger.debug("Saved Loki url in relation data %s", self._loki_push_api)
 
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saving alerts rules to disk")
