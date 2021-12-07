@@ -123,7 +123,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
             self.assertEqual(
                 sorted(logger.output)[1],
-                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saving alerts rules to disk",
+                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
             )
 
     @patch("ops.testing._TestingPebbleClient.make_dir")
