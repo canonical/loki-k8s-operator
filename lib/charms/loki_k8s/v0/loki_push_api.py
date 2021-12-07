@@ -1034,6 +1034,8 @@ class LokiPushApiConsumer(RelationManagerBase):
         the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event.
         The consumer charm can then choose to update its configuration.
         """
+        # Provide default to avoid throwing, as in some complicated scenarios with
+        # upgrades and hook failures we might not have data in the storage
         self._stored.loki_push_api.pop(event.relation.id, None)
         self.on.loki_push_api_endpoint_departed.emit()
 
