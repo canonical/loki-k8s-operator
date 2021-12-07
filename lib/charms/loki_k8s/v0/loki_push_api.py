@@ -1006,7 +1006,7 @@ class LokiPushApiConsumer(RelationManagerBase):
                 self._process_logging_relation_changed(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
-        loki_push_api = relation.data[relation.app].get("loki_push_api")
+        loki_push_api_data = relation.data[relation.app].get("loki_push_api")
 
         if loki_push_api_data:
             self._stored.loki_push_api[relation.id] = json.loads(loki_push_api_data)
