@@ -1063,23 +1063,13 @@ class LokiPushApiConsumer(RelationManagerBase):
         return rule
 
     @property
-    def loki_push_api(self):
-        """Fetch Loki Push API endpoint sent from LokiPushApiProvider through relation data.
+    def loki_push_api(self) -> List[str]:
+        """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
 
         Returns:
-            The Loki Push API endpoint (or None) if the relation this `LokiPushApiConsumer` tracks
-            has limit 1; with any other relation limit, it returns a list of Loki Push API
-            endpoints, which may be empty in case there are no relation instances.
+            A list with Loki Push API endpoints.
         """
-        loki_endpoints = [  # Convert from the StoredSet data structure to a plain list``
+        return [
             _type_convert_stored(loki_endpoint)
             for loki_endpoint in self._stored.loki_push_api.values()
         ]
-
-        if self._is_multi:
-            return loki_endpoints
-        else:
-            if len(loki_endpoints) == 1:
-                return loki_endpoints[0]
-            else:
-                return None
