@@ -1012,8 +1012,17 @@ class LokiPushApiConsumer(RelationManagerBase):
             self._stored.loki_push_api[relation.id] = json.loads(loki_push_api_data)
 
         if self._charm.unit.is_leader():
-            relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-            self._set_alert_rules(relation)
+            alert_groups, invalid_files = load_alert_rules_from_dir(
+                self._alert_rules_path,
+                self.topology,
+                recursive=False,
+                allow_free_standing=self.allow_free_standing_rules,
+            )
+            alert_rules_error_message = self._check_alert_rules(alert_groups, invalid_files)
+
+            if alert_rules_error_message:
+                self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
+
             relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
             relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
 
