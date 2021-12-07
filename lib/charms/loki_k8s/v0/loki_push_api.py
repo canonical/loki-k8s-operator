@@ -266,11 +266,19 @@ import logging
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from ops.charm import CharmBase, RelationEvent, RelationRole
-from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
+from ops.framework import (
+    EventBase,
+    EventSource,
+    Object,
+    ObjectEvents,
+    StoredDict,
+    StoredList,
+    StoredState,
+)
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
@@ -411,6 +419,19 @@ def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
         return False
 
     return True
+
+
+def _type_convert_stored(obj):
+    """Convert Stored* to their appropriate types, recursively."""
+    if isinstance(obj, StoredList):
+        return list(map(_type_convert_stored, obj))
+    elif isinstance(obj, StoredDict):
+        rdict = {}  # type: Dict[Any, Any]
+        for k in obj.keys():
+            rdict[k] = _type_convert_stored(obj[k])
+        return rdict
+    else:
+        return obj
 
 
 class JujuTopology:
@@ -1041,7 +1062,7 @@ class LokiPushApiConsumer(RelationManagerBase):
             endpoints, which may be empty in case there are no relation instances.
         """
         loki_endpoints = [  # Convert from the StoredSet data structure to a plain list``
-            loki_endpoint for loki_endpoint in self._stored.loki_push_api.values()
+            _type_convert_stored(loki_endpoint) for loki_endpoint in self._stored.loki_push_api.values()
         ]
 
         if self._is_multi:
