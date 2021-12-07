@@ -228,8 +228,8 @@ class LogProxyConsumer(RelationManagerBase):
         charm,
         container_name: Optional[str],
         relation_name: str = DEFAULT_RELATION_NAME,
-        log_type: str = "files",
         log_files: list = None,
+        syslog: bool = False,
         syslog_port: int = 1514,
     ):
         super().__init__(charm, relation_name)
@@ -240,12 +240,7 @@ class LogProxyConsumer(RelationManagerBase):
         self._container = self._get_container(container_name)
         self._log_files = log_files or []
         self._syslog_port = syslog_port
-        if log_type == "syslog":
-            self._is_syslog = True
-        elif log_type == "files":
-            self._is_syslog = False
-        else:
-            raise Exception('log_type should be "syslog" or "files"')
+        self._is_syslog = syslog
         self.framework.observe(
             self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created
         )
@@ -375,8 +370,11 @@ class LogProxyConsumer(RelationManagerBase):
         """
         try:
             resource_path = self._charm.model.resources.fetch("promtail-bin")
-        except ModelError:
-            return False
+        except NameError as e:
+            if "invalid resource name" in str(e):
+                return False
+            else:
+                raise
 
         logger.info("Promtail binary file has been obtained from an attached resource.")
         self._push_binary_to_workload(resource_path)
@@ -595,35 +593,51 @@ class LogProxyConsumer(RelationManagerBase):
             A dict representing the `scrape_configs` section.
         """
         # TODO: use the JujuTopology object
-        labels = {
-            "job": "juju_{}_{}_{}".format(
-                self._charm.model.name,
-                self._charm.model.uuid,
-                self._charm.model.app.name,
-            ),
-            "__path__": "",
+        job_name = "juju_{}_{}_{}".format(self._charm.model.name, self._charm.model.uuid, self._charm.model.app.name)
+        common_labels = {
+            "application": self._charm.app.name,
+            "model": self._charm.model.name,
+            "model_uuid": self._charm.model.uuid,
+            "charm_name": self._charm.meta.name,
         }
 
+        scrape_configs = []
+
+        # Files config
+        labels = deepcopy(common_labels)
+        labels.update({
+            "job": job_name,
+            "__path__": "",
+        })
+        config = {
+            "targets": ["localhost"],
+            "labels": labels
+        }
+        scrape_config = {
+            "job_name": "system",
+            "static_configs": self._generate_static_configs(config),
+        }
+        scrape_configs.append(scrape_config)
+
+        # Syslog config
         if self._is_syslog:
-            scrape_config = {
+            syslog_labels = deepcopy(common_labels)
+            syslog_labels.update({"job": "syslog_{}".format(job_name)})
+            syslog_config = {
                 "job_name": "syslog",
                 "syslog": {
                     "listen_address": "127.0.0.1:{}".format(self._syslog_port),
                     "label_structured_data": True,
-                    "labels": labels,
+                    "labels": syslog_labels,
                 },
+                #"relabel_configs": [{
+                #    "source_labels": [],
+                #    "target_label": "filename"
+                #}],
             }
-        else:
-            config = {
-                "targets": ["localhost"],
-                "labels": labels
-            }
-            scrape_config = {
-                "job_name": "system",
-                "static_configs": self._generate_static_configs(config),
-            }
+            scrape_configs.append(syslog_config)
 
-        return {"scrape_configs": [scrape_config]}
+        return {"scrape_configs": scrape_configs}
 
     def _generate_static_configs(self, config: dict) -> list:
         """Generates static_configs section.
