@@ -789,7 +789,7 @@ class LokiPushApiProvider(RelationManagerBase):
             logger.debug("Saved Loki url in relation data %s", self._loki_push_api)
 
         if relation.data.get(relation.app).get("alert_rules"):
-            logger.debug("Saving alerts rules to disk")
+            logger.debug("Saved alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
 
