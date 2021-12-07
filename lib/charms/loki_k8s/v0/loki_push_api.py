@@ -1062,7 +1062,8 @@ class LokiPushApiConsumer(RelationManagerBase):
             endpoints, which may be empty in case there are no relation instances.
         """
         loki_endpoints = [  # Convert from the StoredSet data structure to a plain list``
-            _type_convert_stored(loki_endpoint) for loki_endpoint in self._stored.loki_push_api.values()
+            _type_convert_stored(loki_endpoint)
+            for loki_endpoint in self._stored.loki_push_api.values()
         ]
 
         if self._is_multi:
