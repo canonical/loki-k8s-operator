@@ -1037,14 +1037,31 @@ class LokiPushApiConsumer(RelationManagerBase):
         self._stored.loki_push_api.pop(event.relation.id)
         self.on.loki_push_api_endpoint_departed.emit()
 
-    def _set_alert_rules(self, relation: Relation):
-        """Set alert rules into relation data.
+    def _check_alert_rules(self, alert_groups, invalid_files) -> str:
+        """Check alert rules.
 
         Args:
-            relation: the `Relation` instance for which alert rules must be processed.
+            alert_groups: a list of prometheus alert rule groups.
+            invalid_files: a list of invalid rules files.
+
+        Returns:
+            A string with the validation message. The message is not empty whether there are
+            invalid alert rules files or there are no alert rules groups.
         """
-        if alert_groups := self._labeled_alert_groups:
-            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
+        message = ""
+
+        if invalid_files:
+            must_contain = ["'alert'", "'expr'"]
+            if self.allow_free_standing_rules:
+                must_contain.append("'%%juju_topology%%'")
+
+            message = "Failed to read alert rules (must contain {}): ".format(
+                ", ".join(must_contain)
+            ) + ", ".join(map(str, invalid_files))
+        elif not alert_groups:
+            message = "No alert rules found in {}".format(self._alert_rules_path)
+
+        return message
 
     def _label_alert_topology(self, rule) -> dict:
         """Insert juju topology labels into an alert rule.
