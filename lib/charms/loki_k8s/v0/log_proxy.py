@@ -270,7 +270,6 @@ class LogProxyConsumer(RelationManagerBase):
                 self._update_config(event)
                 self._update_agents_list(event)
                 self._add_pebble_layer()
-                self._container.restart(self._container_name)
                 self._container.restart(WORKLOAD_SERVICE_NAME)
             except HTTPError as e:
                 msg = "Promtail binary couldn't be download - {}".format(str(e))
