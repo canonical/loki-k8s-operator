@@ -1,34 +1,75 @@
-## Integrating Loki
+## Integrating Loki Charmed Operator
 
-Loki integrates with the following:
+### Overview
 
+This Loki Charmed Operator provides two libraries so you can use them to integrate it
+with other charms.
 
-1. Any charm that supports the `loki_push_api` interface.
-You can integrate it using the Loki Charm library. The documentation of
-the charm library, available through [Charmhub](https://charmhub.io/loki-k8s)
-provides further details. The information
-exchanged through the `loki_push` interface can be broken down
-into two parts
+- [`loki_push_api`](https://charmhub.io/loki-k8s/libraries/loki_push_api)
+- [`log_proxy`](https://charmhub.io/loki-k8s/libraries/log_proxy)
 
 
-- Loki charm provides an [endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push)
-to receive log from [Loki clients](https://grafana.com/docs/loki/latest/clients/) that
-relates with this charm.
+Using the library `loki_push_api` this Loki charmed operator provides
+[endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push)
+to receive log from [Loki clients](https://grafana.com/docs/loki/latest/clients/) that relates
+with this charm.
 
-- Loki may receive alert rules which tell when to raise alerts. These
-  rules are read from a directory named `loki_alert_rules`, if
-  present at the top level, within the client charm's source
-  (`src`) directory.
+Besides this Loki charmed operator may receive from other charms alert rules which tells when
+to raise alerts.
+These rules are read from a directory named `loki_alert_rules`, if present at the top level,
+within the client charm's source (`src`) directory.
 
 Any time new relations are made, or existing ones changed, between the
-Loki charm and any scrape target charm, a new Loki
-configuration is generated.
+Loki charm and any scrape target charm, a new Loki configuration is generated.
 
-2. Loki integrates with
+
+### Libraries
+
+#### `loki_push_api`
+
+This library provides two main objects:
+
+- `LokiPushApiProvider`: This object is meant to be used by any charmed operator that needs to
+implement the provider side of the `loki_push_api` relation interface.
+For instance a Loki charm.
+
+- `LokiPushApiConsumer`: This object is meant to be used by any charmed operator that needs to
+send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
+For instance a Promtail or Grafana agent charm that needs to send logs to Loki.
+
+Learn more about this library [in charmhub](https://charmhub.io/loki-k8s/libraries/loki_push_api).
+
+
+#### `log_proxy`
+
+This library provides two main objects:
+
+- `LogProxyProvider`: This object can be used by any charmed operator that needs to act
+as a Log Proxy to Loki by implementing the provider side of `loki_push_api` relation interface.
+For instance a Grafana agent or Promtail charmed operator that receives logs from a workload
+and forward them to Loki.
+
+- `LogProxyConsumer`: This object can be used by any K8s charmed operator that needs to
+send log to Loki through a Log Proxy by implementing the consumer side of the `loki_push_api`
+relation interface.
+Filtering logs in Loki is largely performed on the basis of labels.
+In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
+generates telemetry like logs.
+In order to be able to control the labels on the logs pushed this object injects a Pebble layer
+that runs Promtail in the workload container, injecting Juju topology labels into the
+logs on the fly.
+
+
+Learn more about this library [in charmhub](https://charmhub.io/loki-k8s/libraries/log_proxy).
+
+
+### Integrations
+
+1. Loki integrates with
 [Grafana](https://charmhub.io/grafana-k8s) which provides a dashboard
 for viewing logs aggregated by Loki. These dasboards may be
 customised by charms that relate to Grafana.
 
-3. Loki forwards alerts to one or more
+2. Loki forwards alerts to one or more
 [Alertmanagers](https://charmhub.io/alertmanager-k8s) that are related
 to it.

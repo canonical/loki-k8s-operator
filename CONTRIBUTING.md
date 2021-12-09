@@ -26,57 +26,49 @@ contributing enhancements to the Loki charm.
   history.
 
 
-### Setup
+## Setup
 
-A typical setup using [snaps](https://snapcraft.io/), for deployments to a [microk8s](https://microk8s.io/) cluster can be done using the following commands
+A typical development setup for charms created with the [Charmed Operator Framework](https://juju.is/docs/sdk) contains:
 
-```bash
-    sudo snap install microk8s --classic
-    microk8s.enable dns storage
-    sudo snap install juju --classic
-    juju bootstrap microk8s microk8s
-    juju create-storage-pool operator-storage kubernetes storage-class=microk8s-hostpath
-```
+
+- [Charmcraft](https://github.com/canonical/charmcraft) - Developer tooling for creating, building and publishing Charmed Operators
+- [Juju](https://juju.is/) - a Charmed Operator Lifecycle Manager (OLM), used for deploying and managing operators
+- [Multipass](https://multipass.run/) - a lightweight Ubuntu virtual machine manager (optional)
+- [MicroK8s](https://microk8s.io/) - a low-ops Kubernetes distribution we’ll use for testing our Charmed Operator (optional if developing a Charmed Operator for Kubernetes)
+
+Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk through the installation of these tools to get you started with charm development.
 
 
 ## Developing
 
-Create and activate a virtualenv with the development requirements:
-
-```bash
-   virtualenv -p python3 venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-```
-
-
-Later on, upgrade packages as needed
-
-```bash
-   pip install --upgrade -r requirements.txt
-```
-
+To handle our virtualenvs we use [`tox`](https://tox.wiki/en/latest/#), so there is no need to deal with them manually.
+Tox will create, update, activate and deactivate virtualenvs for us.
 
 ### Testing
+
 All tests can be executed by running `tox` without arguments.
 
-To run individual test environments:
+Besides you can run individual test environments or tasks:
 
-```shell
-tox -e prettify  # update your code according to linting rules
-tox -e lint  # check your code complies to linting rules
-tox -e static # run static analysis
-tox -e unit  # run unit tests
+```bash
+tox -e lint         # check your code complies to linting rules
+tox -e static       # run static analysis
+tox -e unit         # run unit tests
+tox -e integration  # run integration tests
+tox -e fmt          # update your code according to linting rules
 ```
 
 Unit tests are implemented using the Operator Framework test [harness](https://ops.readthedocs.io/en/latest/#module-ops.testing).
 
 ### Build
 
-Install the [charmcraft tool](https://juju.is/docs/sdk/setting-up-charmcraft) and build the charm in this git repository:
+In order to build the charm so it can be deployed in [MicroK8s](https://microk8s.io/) using [Juju](https://juju.is/), we use [charmcraft](https://juju.is/docs/sdk/setting-up-charmcraft). 
+So in the charm repository you have to run:
 
 ```bash
-    charmcraft pack
+$ charmcraft pack
+Packing charm 'loki-k8s_ubuntu-20.04-amd64.charm'...
+Created 'loki-k8s_ubuntu-20.04-amd64.charm'.
 ```
 
 ## Code Overview
@@ -84,10 +76,11 @@ Install the [charmcraft tool](https://juju.is/docs/sdk/setting-up-charmcraft) an
 The core implementation of this charm is represented by the [`LokiOperatorCharm`](src/charm.py) class.
 `LokiOperatorCharm` responds to the following events:
 
+- `install`: Here we patch k8s service.
+- `config_change`: Here we configure the charm.
 - `loki_pebble_ready`: Here we set up pebble layer and start the service
-- `relation_joined` In this event (Provided by the object `LokiPushApiProvider`) we set the `loki_push_api` (`http://{self.unit_ip}:{self.charm.port}/loki/api/v1/push`) so it can be used by a Consumer charm that uses the `LokiPushApiConsumer` object.
-
-Both clases `LokiPushApiProvider` and `LokiPushApiConsumer` are provided by the [`Loki library`](lib/charms/loki_k8s/v0/loki.py)
+- `upgrade_charm`: Here we patch k8s service and configure the charm.
+- `alertmanager_consumer.on.cluster_changed`: This event is provided by the AlertmanagerConsumer object. Here we configure the charm.
 
 
 ## Design Choices
