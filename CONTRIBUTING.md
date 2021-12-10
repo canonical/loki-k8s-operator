@@ -62,7 +62,7 @@ Unit tests are implemented using the Operator Framework test [harness](https://o
 
 ### Build
 
-In order to build the charm so it can be deployed in [MicroK8s](https://microk8s.io/) using [Juju](https://juju.is/), we use [charmcraft](https://juju.is/docs/sdk/setting-up-charmcraft). 
+In order to build the charm so it can be deployed in [MicroK8s](https://microk8s.io/) using [Juju](https://juju.is/), we use [charmcraft](https://juju.is/docs/sdk/setting-up-charmcraft).
 So in the charm repository you have to run:
 
 ```bash
@@ -73,8 +73,8 @@ Created 'loki-k8s_ubuntu-20.04-amd64.charm'.
 
 ## Code Overview
 
-The core implementation of this charm is represented by the [`LokiOperatorCharm`](src/charm.py) class.
-`LokiOperatorCharm` responds to the following events:
+The core implementation of this charm is represented by the [`LokiOperatorCharm`](src/charm.py) class, which
+responds to the following events:
 
 - `install`: Here we patch k8s service.
 - `config_change`: Here we configure the charm.

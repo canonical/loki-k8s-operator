@@ -9,7 +9,7 @@ with other charms.
 - [`log_proxy`](https://charmhub.io/loki-k8s/libraries/log_proxy)
 
 
-Using the library `loki_push_api` this Loki charmed operator provides
+The library `loki_push_api` provides
 [endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push)
 to receive log from [Loki clients](https://grafana.com/docs/loki/latest/clients/) that relates
 with this charm.
@@ -22,6 +22,7 @@ within the client charm's source (`src`) directory.
 Any time new relations are made, or existing ones changed, between the
 Loki charm and any scrape target charm, a new Loki configuration is generated.
 
+The library `log_proxy` provides a way to setup a charms as a Log Proxy (Provider or Consumer) to Loki.
 
 ### Libraries
 
@@ -52,6 +53,12 @@ and forward them to Loki.
 - `LogProxyConsumer`: This object can be used by any K8s charmed operator that needs to
 send log to Loki through a Log Proxy by implementing the consumer side of the `loki_push_api`
 relation interface.
+When a relation with a Charmed Operator that implements the `LogProxyProvider` is established,
+this object injects and configure into the workload container a [Promtail binary](https://grafana.com/docs/loki/latest/clients/promtail/)
+that will send logs to Loki through a Log Proxy charmed operator.
+
+
+
 Filtering logs in Loki is largely performed on the basis of labels.
 In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
 generates telemetry like logs.
@@ -63,7 +70,30 @@ logs on the fly.
 Learn more about this library [in charmhub](https://charmhub.io/loki-k8s/libraries/log_proxy).
 
 
-### Integrations
+#### Integration example.
+
+
+Whith both libraries `loki_push_api` and `log_proxy` the following integration can be done:
+
+
+
+                                                                 Forward
+ ┌────────────────────┐  Workload logs   ┌────────────────────┐  Workloads logs  ┌────────────────────┐
+ │                    │ ───────────────► │                    │ ───────────────► │                    │
+ │                    │                  │                    │                  │                    │
+ │  Custom Workload   │                  │  Grafana agent     │                  │  Loki              │
+ │                    ├──────────────────┤                    ├──────────────────┤                    │
+ │  Charmed Operator  │ `loki_push_api`  │  Charmed Operator  │ `loki_push_api`  │  Charmed Operator  │
+ │                    │                  │                    │                  │                    │
+ │                    │                  │                    │                  │                    │
+ └────────────────────┘                  └────────────────────┘                  └────────────────────┘
+                                          `LokiPushApiConsumer`                   `LokiPushApiProvider`
+ `LogProxyConsumer`                       `LogProxyProvider`
+
+
+
+
+### Loki charmed Operator Integrations
 
 1. Loki integrates with
 [Grafana](https://charmhub.io/grafana-k8s) which provides a dashboard
