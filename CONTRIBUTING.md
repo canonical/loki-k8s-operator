@@ -55,7 +55,7 @@ tox -e integration  # run integration tests
 tox -e fmt          # update your code according to linting rules
 ```
 
-Unit tests are implemented using the Operator Framework test [harness](https://ops.readthedocs.io/en/latest/#module-ops.testing).
+Unit tests are written with the Operator Framework [test harness](https://ops.readthedocs.io/en/latest/#module-ops.testing).
 
 ### Build
 
