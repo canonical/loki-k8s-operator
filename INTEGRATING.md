@@ -84,8 +84,9 @@ Whith both libraries `loki_push_api` and `log_proxy` the following integration c
 │ Charmed Operator │ loki_push_api   │  Charmed Operator  │  loki_push_api  │ Charmed Operator │
 │                  │                 │                    │                 │                  │
 └──────────────────┘                 └────────────────────┘                 └──────────────────┘
-                                      LokiPushApiConsumer                   LokiPushApiProvider
-LogProxyConsumer                      LogProxyProvider
+Uses:                                 Uses:                                  Uses:
+- LogProxyConsumer                    - LokiPushApiConsumer                 - LokiPushApiProvider
+                                      - LogProxyProvider
 ```
 
 
