@@ -67,7 +67,7 @@ logs on the fly.
 Learn more about this library [on charmhub](https://charmhub.io/loki-k8s/libraries/log_proxy).
 
 
-#### Integration example.
+#### Integration example
 
 
 With both libraries `loki_push_api` and `log_proxy` the following integration can be done:
