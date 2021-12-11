@@ -35,7 +35,7 @@ For instance a Loki charm.
 send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
 For instance a Promtail or Grafana agent charm that needs to send logs to Loki.
 
-Learn more about this library [in charmhub](https://charmhub.io/loki-k8s/libraries/loki_push_api).
+Learn more about this library [on charmhub](https://charmhub.io/loki-k8s/libraries/loki_push_api).
 
 
 #### `log_proxy`
