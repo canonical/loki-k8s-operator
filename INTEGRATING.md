@@ -77,7 +77,6 @@ Whith both libraries `loki_push_api` and `log_proxy` the following integration c
 
 
 
-                                                              Forward
 ┌───────────────────┐  Workload logs  ┌────────────────────┐  Workloads logs ┌────────────────────┐
 │                   │ ───────────────►│                    │ ───────────────►│                    │
 │                   │                 │                    │                 │                    │
