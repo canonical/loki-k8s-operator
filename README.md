@@ -4,7 +4,7 @@
 
 ## Description
 
-The [Loki](https://grafana.com/oss/loki/) charmed operator provides an open-source fully featured logging stack that may be deployed in Kubernetes using [Juju, the Charmed Operator Lifecycle Manager (OLM).](https://juju.is/)
+[Loki](https://grafana.com/oss/loki/) is an open-source fully-featured logging stack. The Loki charmed operator deploys Loki in Kubernetes using [Juju, the Charmed Operator Lifecycle Manager (OLM).](https://juju.is/)
 
 
 ## Quick start
