@@ -8,7 +8,7 @@ This Loki Charmed Operator provides two libraries for integrating with other cha
 - [`log_proxy`](https://charmhub.io/loki-k8s/libraries/log_proxy)
 
 
-The library `loki_push_api` provides
+The `loki_push_api` library provides
 [endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push)
 to receive log from [Loki clients](https://grafana.com/docs/loki/latest/clients/) that relates
 with this charm.
