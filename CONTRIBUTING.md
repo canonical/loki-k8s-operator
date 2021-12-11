@@ -39,8 +39,7 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
   this charm. To be able to merge you would have to rebase
   onto the `main` branch. We do this to avoid merge commits and to have a linear Git
   history.
-- To handle our virtualenvs we use [`tox`](https://tox.wiki/en/latest/#), so there is no need
-  to deal with them manually. Tox will create, update, activate and deactivate virtualenvs for us.
+- We use [`tox`](https://tox.wiki/en/latest/#) to manage all virtualenvs for the development lifecycle.
 
 ### Testing
 
