@@ -18,8 +18,7 @@ to raise alerts.
 These rules are read from a directory named `loki_alert_rules`, if present at the top level,
 within the client charm's source (`src`) directory.
 
-Any time new relations are made, or existing ones changed, between the
-Loki charm and any scrape target charm, a new Loki configuration is generated.
+A new Loki configuration is generated every time a new relation is created, or an existing one changes.
 
 The library `log_proxy` provides a way to setup a charms as a Log Proxy (Provider or Consumer) to Loki.
 
