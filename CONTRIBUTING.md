@@ -23,8 +23,7 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
 
 
 
-- Generally, before developing enhancements to this charm, you should consider
-  opening an issue explaining your use case.
+- In our development practice we first open an issue explaining the use case before submitting a pull request.
 - If you would like to chat with us about your use-cases or proposed
   implementation, you can reach us at
   [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
