@@ -32,9 +32,7 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
   `@jose-masson`.
 - It is strongly recommended that prior to engaging in any enhancements
   to this charm you familiarise your self with [Juju](https://juju.is).
-- Familiarising yourself with the
-  [Charmed Operator Framework](https://juju.is/docs/sdk).
-  library will help you a lot when working on PRs.
+- This charm is built using the Charmed Operator Framework (OF). Refer to the [docs](https://juju.is/docs/sdk) to learn how the OF helps writing operators.
 - All enhancements require review before being merged. Besides the
   code quality and test coverage, the review will also take into
   account the resulting user experience for Juju administrators using
