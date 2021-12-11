@@ -64,7 +64,7 @@ that runs Promtail in the workload container, injecting Juju topology labels int
 logs on the fly.
 
 
-Learn more about this library [in charmhub](https://charmhub.io/loki-k8s/libraries/log_proxy).
+Learn more about this library [on charmhub](https://charmhub.io/loki-k8s/libraries/log_proxy).
 
 
 #### Integration example.
