@@ -2,8 +2,7 @@
 
 ### Overview
 
-This Loki Charmed Operator provides two libraries so you can use them to integrate it
-with other charms.
+This Loki Charmed Operator provides two libraries for integrating with other charms:
 
 - [`loki_push_api`](https://charmhub.io/loki-k8s/libraries/loki_push_api)
 - [`log_proxy`](https://charmhub.io/loki-k8s/libraries/log_proxy)
