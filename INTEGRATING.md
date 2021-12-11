@@ -17,8 +17,7 @@ The Loki charm supports user-provided alert rules. A client charm (from the 'req
 that needs to forward alert rules to Loki should place them in a directory named `loki_alert_rules`
 within the client charm's source directory (`./src`).
 
-Any time new relations are made, or existing ones changed, between the
-Loki charm and any scrape target charm, a new Loki configuration is generated.
+A new Loki configuration is generated every time a new relation is created, or an existing one changes.
 
 The library `log_proxy` provides a way to setup a charms as a Log Proxy (Provider or Consumer) to Loki.
 
