@@ -59,8 +59,10 @@ Unit tests are written with the Operator Framework [test harness](https://ops.re
 
 ### Build
 
-In order to build the charm so it can be deployed in [MicroK8s](https://microk8s.io/) using [Juju](https://juju.is/), we use [charmcraft](https://juju.is/docs/sdk/setting-up-charmcraft).
-So in the charm repository you have to run:
+In order to pack the charm locally so it could be deployed from a local path we use 
+[charmcraft](https://juju.is/docs/sdk/setting-up-charmcraft).
+
+From the charm's root folder:
 
 ```bash
 $ charmcraft pack
