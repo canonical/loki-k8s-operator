@@ -77,17 +77,15 @@ Whith both libraries `loki_push_api` and `log_proxy` the following integration c
 
 
 
-┌───────────────────┐  Workload logs  ┌────────────────────┐  Workloads logs ┌────────────────────┐
-│                   │ ───────────────►│                    │ ───────────────►│                    │
-│                   │                 │                    │                 │                    │
-│  Custom Workload  │                 │  Grafana agent     │                 │  Loki              │
-│                   ├─────────────────┤                    ├─────────────────┤                    │
-│  Charmed Operator │ `loki_push_api` │  Charmed Operator  │ `loki_push_api` │  Charmed Operator  │
-│                   │                 │                    │                 │                    │
-│                   │                 │                    │                 │                    │
-└───────────────────┘                 └────────────────────┘                 └────────────────────┘
-                                       `LokiPushApiConsumer`                 `LokiPushApiProvider`
-`LogProxyConsumer`                     `LogProxyProvider`
+`┌──────────────────┐  Workload logs  ┌────────────────────┐  Workloads logs ┌──────────────────┐`
+`│                  │ ───────────────►│                    │ ───────────────►│                  │`
+`│ Custom Workload  │                 │  Grafana agent     │                 │ Loki             │`
+`│                  ├─────────────────┤                    ├─────────────────┤                  │`
+`│ Charmed Operator │ loki_push_api   │  Charmed Operator  │  loki_push_api  │ Charmed Operator │`
+`│                  │                 │                    │                 │                  │`
+`└──────────────────┘                 └────────────────────┘                 └──────────────────┘`
+`                                      LokiPushApiConsumer                   LokiPushApiProvider `
+`LogProxyConsumer                      LogProxyProvider                                          `
 
 
 
