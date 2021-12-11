@@ -70,7 +70,8 @@ Created 'loki-k8s_ubuntu-20.04-amd64.charm'.
 
 ## Code Overview
 
-The core implementation of this charm is represented by the [`LokiOperatorCharm`](src/charm.py) class, which
+### Charm code
+This charm is represented by the [`LokiOperatorCharm`](src/charm.py) class, which
 responds to the following events:
 
 - `install`: Here we patch k8s service.
