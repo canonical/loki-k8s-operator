@@ -12,7 +12,7 @@
 Create a Juju model for your operators, say "observability"
 
 ```bash
-juju add-model observabiliy
+juju add-model observability
 ```
 
 The Loki Operator may be deployed using the Juju command line
