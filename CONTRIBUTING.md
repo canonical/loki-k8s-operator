@@ -45,7 +45,7 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
 
 All default tests can be executed by running `tox` without arguments.
 
-Besides you can run individual test environments or tasks:
+You can also manually run specific test environment:
 
 ```bash
 tox -e lint         # check your code complies to linting rules
