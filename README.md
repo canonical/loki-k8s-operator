@@ -15,7 +15,7 @@ Create a Juju model for your operators, say "observability"
 juju add-model observability
 ```
 
-The Loki Operator may be deployed using the Juju command line
+Deploy the Loki Operator from charmhub using the Juju command line interface:
 
 ```bash
 juju deploy loki-k8s
