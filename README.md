@@ -24,6 +24,6 @@ juju deploy loki-k8s
 If required, you can remove the deployment completely:
 
 ```bash
-juju destroy-model -y observabiliy --no-wait --force --destroy-storage
+juju destroy-model -y observability --no-wait --force --destroy-storage
 ```
 Note the `--destroy-storage` will delete any data stored by Loki in its persistent store.
