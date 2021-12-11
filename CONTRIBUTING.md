@@ -43,7 +43,7 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
 
 ### Testing
 
-All tests can be executed by running `tox` without arguments.
+All default tests can be executed by running `tox` without arguments.
 
 Besides you can run individual test environments or tasks:
 
