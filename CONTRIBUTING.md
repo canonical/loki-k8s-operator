@@ -3,27 +3,7 @@
 ## Overview
 
 This documents explains the processes and practices recommended for
-contributing enhancements to the Loki charm.
-
-- Generally, before developing enhancements to this charm, you should consider
-  opening an issue explaining your use case.
-- If you would like to chat with us about your use-cases or proposed
-  implementation, you can reach us at
-  [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
-  or [Discourse](https://discourse.charmhub.io/).
-  The primary author of this charm is available on the Mattermost channel as
-  `@jose-masson`.
-- It is strongly recommended that prior to engaging in any enhancements
-  to this charm you familiarise your self with Juju.
-- Familiarising yourself with the
-  [Charmed Operator Framework](https://juju.is/docs/sdk).
-  library will help you a lot when working on PRs.
-- All enhancements require review before being merged. Besides the
-  code quality and test coverage, the review will also take into
-  account the resulting user experience for Juju administrators using
-  this charm. Please help us out in having easier reviews by rebasing
-  onto the `main` branch, avoid merge commits and enjoy a linear Git
-  history.
+contributing enhancements or bug fixing to the Loki Charmed Operator.
 
 
 ## Setup
@@ -41,8 +21,29 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
 
 ## Developing
 
-To handle our virtualenvs we use [`tox`](https://tox.wiki/en/latest/#), so there is no need to deal with them manually.
-Tox will create, update, activate and deactivate virtualenvs for us.
+
+
+- Generally, before developing enhancements to this charm, you should consider
+  opening an issue explaining your use case.
+- If you would like to chat with us about your use-cases or proposed
+  implementation, you can reach us at
+  [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
+  or [Discourse](https://discourse.charmhub.io/).
+  The primary author of this charm is available on the Mattermost channel as
+  `@jose-masson`.
+- It is strongly recommended that prior to engaging in any enhancements
+  to this charm you familiarise your self with [Juju](https://juju.is).
+- Familiarising yourself with the
+  [Charmed Operator Framework](https://juju.is/docs/sdk).
+  library will help you a lot when working on PRs.
+- All enhancements require review before being merged. Besides the
+  code quality and test coverage, the review will also take into
+  account the resulting user experience for Juju administrators using
+  this charm. Please help us out in having easier reviews by rebasing
+  onto the `main` branch, avoid merge commits and enjoy a linear Git
+  history.
+- To handle our virtualenvs we use [`tox`](https://tox.wiki/en/latest/#), so there is no need
+  to deal with them manually. Tox will create, update, activate and deactivate virtualenvs for us.
 
 ### Testing
 
