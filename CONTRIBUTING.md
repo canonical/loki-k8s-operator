@@ -36,8 +36,8 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
 - All enhancements require review before being merged. Besides the
   code quality and test coverage, the review will also take into
   account the resulting user experience for Juju administrators using
-  this charm. Please help us out in having easier reviews by rebasing
-  onto the `main` branch, avoid merge commits and enjoy a linear Git
+  this charm. To be able to merge you would have to rebase
+  onto the `main` branch. We do this to avoid merge commits and to have a linear Git
   history.
 - To handle our virtualenvs we use [`tox`](https://tox.wiki/en/latest/#), so there is no need
   to deal with them manually. Tox will create, update, activate and deactivate virtualenvs for us.
