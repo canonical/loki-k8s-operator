@@ -73,7 +73,7 @@ Learn more about this library [in charmhub](https://charmhub.io/loki-k8s/librari
 #### Integration example.
 
 
-Whith both libraries `loki_push_api` and `log_proxy` the following integration can be done:
+With both libraries `loki_push_api` and `log_proxy` the following integration can be done:
 
 
 ```
