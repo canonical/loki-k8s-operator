@@ -76,17 +76,17 @@ Learn more about this library [in charmhub](https://charmhub.io/loki-k8s/librari
 Whith both libraries `loki_push_api` and `log_proxy` the following integration can be done:
 
 
-
-`┌──────────────────┐  Workload logs  ┌────────────────────┐  Workloads logs ┌──────────────────┐`
-`│                  │ ───────────────►│                    │ ───────────────►│                  │`
-`│ Custom Workload  │                 │  Grafana agent     │                 │ Loki             │`
-`│                  ├─────────────────┤                    ├─────────────────┤                  │`
-`│ Charmed Operator │ loki_push_api   │  Charmed Operator  │  loki_push_api  │ Charmed Operator │`
-`│                  │                 │                    │                 │                  │`
-`└──────────────────┘                 └────────────────────┘                 └──────────────────┘`
-`                                      LokiPushApiConsumer                   LokiPushApiProvider `
-`LogProxyConsumer                      LogProxyProvider                                          `
-
+```
+┌──────────────────┐  Workload logs  ┌────────────────────┐  Workloads logs ┌──────────────────┐
+│                  │ ───────────────►│                    │ ───────────────►│                  │
+│ Custom Workload  │                 │  Grafana agent     │                 │ Loki             │
+│                  ├─────────────────┤                    ├─────────────────┤                  │
+│ Charmed Operator │ loki_push_api   │  Charmed Operator  │  loki_push_api  │ Charmed Operator │
+│                  │                 │                    │                 │                  │
+└──────────────────┘                 └────────────────────┘                 └──────────────────┘
+                                      LokiPushApiConsumer                   LokiPushApiProvider
+LogProxyConsumer                      LogProxyProvider
+```
 
 
 
