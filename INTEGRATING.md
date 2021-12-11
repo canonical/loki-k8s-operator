@@ -13,10 +13,9 @@ The `loki_push_api` library provides
 to receive log from [Loki clients](https://grafana.com/docs/loki/latest/clients/) that relates
 with this charm.
 
-Besides this Loki charmed operator may receive from other charms alert rules which tells when
-to raise alerts.
-These rules are read from a directory named `loki_alert_rules`, if present at the top level,
-within the client charm's source (`src`) directory.
+The Loki charm supports user-provided alert rules. A client charm (from the 'requires` side of the relation)
+that needs to forward alert rules to Loki should place them in a directory named `loki_alert_rules`
+within the client charm's source directory (`./src`).
 
 A new Loki configuration is generated every time a new relation is created, or an existing one changes.
 
