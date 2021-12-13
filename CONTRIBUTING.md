@@ -25,8 +25,7 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
 
 - Prior to getting started on a pull request, we first encourage you to open an issue explaining the use case or bug. This gives other contributors a chance to weigh in early in the process.
 - If you would like to chat with us about your use-cases or proposed
-  implementation, you can reach us at
-  [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
+  implementation, you can reach [the Observability Team at Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/observability)
   or [Discourse](https://discourse.charmhub.io/).
   The primary author of this charm is available on the Mattermost channel as
   `@jose-masson`.
