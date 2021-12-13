@@ -9,7 +9,7 @@
 
 ## Quick start
 
-Create a Juju model for your operators, say "observability"
+Create a Juju model named `observability`. This also sets the new model as the current one in the Juju command-line interface.
 
 ```bash
 juju add-model observability
