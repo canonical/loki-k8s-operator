@@ -76,7 +76,9 @@ Created 'loki-k8s_ubuntu-20.04-amd64.charm'.
 This charm is represented by the [`LokiOperatorCharm`](src/charm.py) class, which
 responds to the following events:
 
-- `install`: Here we patch k8s service.
+#### Juju Events
+
+- `install`: Makes sure the k8s service is using the correct ports.
 - `config_change`: Here we configure the charm.
 - `loki_pebble_ready`: Sets up the pebble layer and starts the service
 - `upgrade_charm`: Here we patch k8s service and configure the charm.
