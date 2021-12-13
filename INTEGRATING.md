@@ -46,12 +46,11 @@ as a log proxy to Loki by implementing the provider side of the `loki_push_api` 
 For instance, a Grafana agent or Promtail charmed operator receiving logs from a workload
 and forwarding them to Loki.
 
-- `LogProxyConsumer`: This object can be used by any K8s charmed operator that needs to
-send log to Loki through a Log Proxy by implementing the consumer side of the `loki_push_api`
+- `LogProxyConsumer`: This object may be used by any K8s charmed operator that wants to
+send logs to Loki through a log proxy by implementing the consumer side of the `loki_push_api`
 relation interface.
-When a relation with a Charmed Operator that implements the `LogProxyProvider` is established,
-this object injects and configure into the workload container a [Promtail binary](https://grafana.com/docs/loki/latest/clients/promtail/)
-that will send logs to Loki through a Log Proxy charmed operator.
+When a relation with a Charmed Operator implementing the `LogProxyProvider` is established,
+this object injects a [Promtail binary](https://grafana.com/docs/loki/latest/clients/promtail/) into the workload container. This binary will then send logs to Loki through the log proxy provider.
 
 
 
