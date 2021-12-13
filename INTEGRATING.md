@@ -89,9 +89,9 @@ Uses:                                 Uses:                                  Use
 ### Loki charmed Operator Integrations
 
 1. Loki integrates with
-[Grafana](https://charmhub.io/grafana-k8s) which provides a dashboard
-for viewing logs aggregated by Loki. These dasboards may be
-customised by charms that relate to Grafana.
+[Grafana](https://charmhub.io/grafana-k8s), providing a data source
+for viewing logs stored by Loki. This data source may then be
+consumed in dashboards provided by other charms relating to Grafana.
 
 2. Loki forwards alerts to one or more
 [Alertmanagers](https://charmhub.io/alertmanager-k8s) that are related
