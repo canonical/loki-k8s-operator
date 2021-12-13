@@ -55,11 +55,11 @@ this object injects a [Promtail binary](https://grafana.com/docs/loki/latest/cli
 
 
 Filtering logs in Loki is largely performed on the basis of labels.
-In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
-generates telemetry like logs.
-In order to be able to control the labels on the logs pushed this object injects a Pebble layer
-that runs Promtail in the workload container, injecting Juju topology labels into the
-logs on the fly.
+In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload generating the telemetry (like logs).
+
+In order to be able to control the labels of the logs pushed, this object injects a Pebble layer
+for running Promtail into the workload container. Promtail will then inject Juju topology labels into each
+log entry on the fly.
 
 
 Learn more about this library [on charmhub](https://charmhub.io/loki-k8s/libraries/log_proxy).
