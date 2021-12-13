@@ -81,7 +81,7 @@ responds to the following events:
 - `install`: Makes sure the k8s service is using the correct ports.
 - `config_change`: Here we configure the charm.
 - `loki_pebble_ready`: Sets up the pebble layer and starts the service
-- `upgrade_charm`: Here we patch k8s service and configure the charm.
+- `upgrade_charm`: Patches the ports of the k8s service (just as `install`) and configures the charm (just as `config_change`).
 - `alertmanager_consumer.on.cluster_changed`: This event is provided by the AlertmanagerConsumer object. Here we configure the charm.
 
 
