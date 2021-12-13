@@ -15,7 +15,7 @@ Create a Juju model named `observability`. This also sets the new model as the c
 juju add-model observability
 ```
 
-Deploy the Loki Operator from charmhub using the Juju command line interface:
+Deploy the Loki Operator from Charmhub to the current model using the Juju command-line interface:
 
 ```bash
 juju deploy loki-k8s
