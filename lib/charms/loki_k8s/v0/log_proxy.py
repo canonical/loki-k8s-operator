@@ -592,7 +592,9 @@ class LogProxyConsumer(RelationManagerBase):
             A dict representing the `scrape_configs` section.
         """
         # TODO: use the JujuTopology object
-        job_name = "juju_{}_{}_{}".format(self._charm.model.name, self._charm.model.uuid, self._charm.model.app.name)
+        job_name = "juju_{}_{}_{}".format(
+            self._charm.model.name, self._charm.model.uuid, self._charm.model.app.name
+        )
         common_labels = {
             "application": self._charm.app.name,
             "model": self._charm.model.name,
@@ -604,14 +606,13 @@ class LogProxyConsumer(RelationManagerBase):
 
         # Files config
         labels = deepcopy(common_labels)
-        labels.update({
-            "job": job_name,
-            "__path__": "",
-        })
-        config = {
-            "targets": ["localhost"],
-            "labels": labels
-        }
+        labels.update(
+            {
+                "job": job_name,
+                "__path__": "",
+            }
+        )
+        config = {"targets": ["localhost"], "labels": labels}
         scrape_config = {
             "job_name": "system",
             "static_configs": self._generate_static_configs(config),
@@ -630,7 +631,7 @@ class LogProxyConsumer(RelationManagerBase):
                     "labels": syslog_labels,
                 },
             }
-            scrape_configs.append(syslog_config)
+            scrape_configs.append(syslog_config)  # type: ignore
 
         return {"scrape_configs": scrape_configs}
 
@@ -651,11 +652,23 @@ class LogProxyConsumer(RelationManagerBase):
 
     @property
     def syslog_port(self):
+        """Gets the port on which promtail is listening for syslog.
+
+        Returns:
+            A string representing the port
+        """
         return self._syslog_port
 
     @property
     def rsyslog_config(self):
-        return 'action(type="omfwd" protocol="tcp" target="127.0.0.1" port="{}" Template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")'.format(self._syslog_port)
+        """Generates a config line for use with rsyslog.
+
+        Returns:
+            The rsyslog config line as a string
+        """
+        return 'action(type="omfwd" protocol="tcp" target="127.0.0.1" port="{}" Template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")'.format(
+            self._syslog_port
+        )
 
 
 class LogProxyProvider(RelationManagerBase):
