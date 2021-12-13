@@ -629,10 +629,6 @@ class LogProxyConsumer(RelationManagerBase):
                     "label_structured_data": True,
                     "labels": syslog_labels,
                 },
-                #"relabel_configs": [{
-                #    "source_labels": [],
-                #    "target_label": "filename"
-                #}],
             }
             scrape_configs.append(syslog_config)
 
