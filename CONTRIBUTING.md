@@ -77,7 +77,7 @@ responds to the following events:
 - `config_change`: Configures the charm.
 - `loki_pebble_ready`: Sets up the pebble layer and starts the service
 - `upgrade_charm`: Patches the ports of the k8s service (just as `install`) and configures the charm (just as `config_change`).
-- `alertmanager_consumer.on.cluster_changed`: Event provided by the `AlertmanagerConsumer`. Further configures the charm to integrate with Alertmanager.
+- `alertmanager_consumer.on.cluster_changed`: Event provided by `AlertmanagerConsumer`. Further configures the charm to integrate with Alertmanager.
 
 ## Design Choices
 
