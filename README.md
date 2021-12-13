@@ -23,6 +23,8 @@ juju deploy loki-k8s
 
 If required, you can remove the deployment completely:
 
+or the whole model:
+
 ```bash
 $ juju remove-application loki-k8s
 
