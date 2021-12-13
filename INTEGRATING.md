@@ -8,10 +8,8 @@ This Loki Charmed Operator provides two libraries for integrating with other cha
 - [`log_proxy`](https://charmhub.io/loki-k8s/libraries/log_proxy)
 
 
-The `loki_push_api` library provides
-[endpoint URL](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push)
-to receive log from [Loki clients](https://grafana.com/docs/loki/latest/clients/) that relates
-with this charm.
+The `loki_push_api` library provides an endpoint URL used to send log entries to Loki from [Loki clients](https://grafana.com/docs/loki/latest/clients/).
+You can read more about this in [Loki documentation page.](https://grafana.com/docs/loki/latest/api/#post-lokiapiv1push)
 
 The Loki charm supports user-provided alert rules. A client charm (from the 'requires` side of the relation)
 that needs to forward alert rules to Loki should place them in a directory named `loki_alert_rules`
