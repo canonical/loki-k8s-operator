@@ -40,7 +40,7 @@ This library provides two main objects:
 - `LogProxyConsumer`: This object may be used by any K8s charmed operator that wants to
 send logs to Loki through a log proxy by implementing the consumer side of the `loki_push_api`
 relation interface.
-When a relation with a Charmed Operator implementing the `LogProxyProvider` is established,
+When a relation with a Charmed Operator implementing `LogProxyProvider` is established,
 this object injects a [Promtail binary](https://grafana.com/docs/loki/latest/clients/promtail/) into the workload container. This binary will then send logs to Loki through the log proxy provider.
 
 - `LogProxyProvider`: This object may be used by any charmed operator that wants to act
