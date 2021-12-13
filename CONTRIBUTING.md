@@ -23,15 +23,11 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
 
 
 
-- Prior to getting started on a pull request, we first encourage you to open an issue explaining the use case or bug. This gives other contributors a chance to weigh in early in the process.
-- If you would like to chat with us about your use-cases or proposed
-  implementation, you can reach [the Observability Team at Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/observability)
-  or [Discourse](https://discourse.charmhub.io/).
-  The primary author of this charm is available on the Mattermost channel as
-  `@jose-masson`.
-- It is strongly recommended that prior to engaging in any enhancements
-  to this charm you familiarise your self with [Juju](https://juju.is).
-- This charm is built using the Charmed Operator Framework (OF). Refer to the [docs](https://juju.is/docs/sdk) to learn how the OF helps writing operators.
+- Prior to getting started on a pull request, we first encourage you to open an issue explaining the use case or bug.
+  This gives other contributors a chance to weigh in early in the process.
+- To author PRs you should know [what is jujuj](https://juju.is/#what-is-juju) and [how operators are written](https://juju.is/docs/sdk).
+- The best way to get a head start is to join the conversation on [our mattermost channel](https://chat.charmhub.io/charmhub/channels/observability)!
+  or [Discourse](https://discourse.charmhub.io/). The primary author of this charm is available on the Mattermost channel as `@jose-masson`.
 - All enhancements require review before being merged. Besides the
   code quality and test coverage, the review will also take into
   account the resulting user experience for Juju administrators using
