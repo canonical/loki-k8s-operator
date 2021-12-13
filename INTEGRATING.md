@@ -30,9 +30,9 @@ This library provides two main objects:
 - `LokiPushApiProvider`: This object may be used by any charmed operator that wants to
 provide a way to push loki logs **to it**. For instance a Loki charm.
 
-- `LokiPushApiConsumer`: This object is meant to be used by any charmed operator that needs to
-send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
-For instance a Promtail or Grafana agent charm that needs to send logs to Loki.
+- `LokiPushApiConsumer`: This object may be used by any charmed operator that wants to
+send logs to Loki by implementing the consumer side of the `loki_push_api` relation interface.
+For instance a Promtail, Grafana agent charm, or any other application charm that wants to be able to send logs to Loki.
 
 Learn more about this library [on charmhub](https://charmhub.io/loki-k8s/libraries/loki_push_api).
 
