@@ -10,7 +10,7 @@ from charms.loki_k8s.v0.log_proxy import LogProxyConsumer, PromtailDigestError
 from deepdiff import DeepDiff  # type: ignore
 from ops.charm import CharmBase
 from ops.framework import StoredState
-from ops.model import Container, ModelError
+from ops.model import Container
 from ops.testing import Harness
 
 LOG_FILES = [
@@ -190,9 +190,9 @@ class TestLogProxyConsumer(unittest.TestCase):
         mock_is_file.return_value = True
         self.assertTrue(self.harness.charm._log_proxy._is_promtail_binary_in_charm())
 
-    def test__is_promtail_attached_model_error(self):
+    def test__is_promtail_attached_name_error(self):
         self.harness.charm._log_proxy._charm.model.resources.fetch = MagicMock(
-            side_effect=ModelError
+            side_effect=NameError("invalid resource name")
         )
         self.assertFalse(self.harness.charm._log_proxy._is_promtail_attached())
 
