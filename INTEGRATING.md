@@ -27,9 +27,8 @@ The library `log_proxy` provides a way to setup a charms as a Log Proxy (Provide
 
 This library provides two main objects:
 
-- `LokiPushApiProvider`: This object is meant to be used by any charmed operator that needs to
-implement the provider side of the `loki_push_api` relation interface.
-For instance a Loki charm.
+- `LokiPushApiProvider`: This object may be used by any charmed operator that wants to
+provide a way to push loki logs **to it**. For instance a Loki charm.
 
 - `LokiPushApiConsumer`: This object is meant to be used by any charmed operator that needs to
 send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
