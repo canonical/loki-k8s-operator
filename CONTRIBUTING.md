@@ -23,7 +23,7 @@ Please [follow this guide](https://juju.is/docs/sdk/dev-setup) which will walk t
 
 
 
-- In our development practice we first open an issue explaining the use case before submitting a pull request.
+- Prior to getting started on a pull request, we first encourage you to open an issue explaining the use case or bug. This gives other contributors a chance to weigh in early in the process.
 - If you would like to chat with us about your use-cases or proposed
   implementation, you can reach us at
   [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
