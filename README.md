@@ -21,11 +21,13 @@ Deploy the Loki Operator from Charmhub to the current model using the Juju comma
 juju deploy loki-k8s
 ```
 
-If required, you can remove the deployment completely or the whole model:
+If required, you can remove the deployment completely:
 
 ```bash
 $ juju remove-application loki-k8s
 ```
+
+or the whole model:
 
 ```bash
 $ juju destroy-model -y observability --no-wait --force --destroy-storage
