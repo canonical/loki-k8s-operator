@@ -596,10 +596,10 @@ class LogProxyConsumer(RelationManagerBase):
             self._charm.model.name, self._charm.model.uuid, self._charm.model.app.name
         )
         common_labels = {
-            "application": self._charm.app.name,
-            "model": self._charm.model.name,
-            "model_uuid": self._charm.model.uuid,
-            "charm_name": self._charm.meta.name,
+            "juju_application": self._charm.app.name,
+            "juju_model": self._charm.model.name,
+            "juju_model_uuid": self._charm.model.uuid,
+            "juju_charm": self._charm.meta.name,
         }
 
         scrape_configs = []
