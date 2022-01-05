@@ -1,54 +1,31 @@
 #!/usr/bin/env python3
-# Copyright 2021 Canonical Ltd.
+# Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 
-import json
 import logging
-import urllib.request
 from pathlib import Path
 
 import pytest
 import yaml
-from helpers import get_unit_address  # type: ignore[import]
+from helpers import IPAddressWorkaround, is_loki_up  # type: ignore[import]
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-app_name = "loki"
-
-pytestmark = pytest.mark.skip(
-    "upgrade charm does not work yet: add_local_charm keeps erroring out with 'ConnectionResetError: [Errno 104] Connection reset by peer'"
-)
+app_name = METADATA["name"]
+resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test):
-    """Build the charm-under-test and deploy it together with related charms.
+async def test_deploy_from_edge_and_upgrade_from_local_path(ops_test, loki_charm):
+    """Deploy from charmhub and then upgrade with the charm-under-test."""
+    async with IPAddressWorkaround(ops_test):
+        logger.debug("deploy charm from charmhub")
+        await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
+        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
-    Assert on the unit status before any relations/configurations take place.
-    """
-    log.info("build charm from local source folder")
-    local_charm = await ops_test.build_charm(".")
-    resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
-
-    log.info("deploy stable charm from charmhub")
-    await ops_test.model.deploy("ch:loki-k8s", application_name=app_name)
-    await ops_test.model.wait_for_idle(apps=[app_name], timeout=1000)
-
-    log.info("upgrade deployed charm with local charm %s", local_charm)
-    await ops_test.model.applications[app_name].refresh(path=local_charm, resources=resources)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active")
-
-
-@pytest.mark.abort_on_fail
-async def test_alertmanager_is_up(ops_test):
-    address = await get_unit_address(ops_test, app_name, 0)
-    url = f"http://{address}:3100"
-    log.info("am public address: %s", url)
-
-    response = urllib.request.urlopen(
-        f"{url}/loki/api/v1/status/buildinfo", data=None, timeout=2.0
-    )
-    assert response.code == 200
-    assert "versionInfo" in json.loads(response.read())
+        logger.debug("upgrade deployed charm with local charm %s", loki_charm)
+        await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
+        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+        assert await is_loki_up(ops_test, app_name)
