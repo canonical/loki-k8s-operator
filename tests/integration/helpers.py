@@ -5,10 +5,9 @@ import json
 import logging
 import urllib.request
 
-import pytest
 from pytest_operator.plugin import OpsTest
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
@@ -16,11 +15,10 @@ async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
     return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
 
 
-@pytest.mark.abort_on_fail
 async def is_loki_up(ops_test, app_name) -> bool:
     address = await get_unit_address(ops_test, app_name, 0)
     url = f"http://{address}:3100"
-    log.info("Loki public address: %s", url)
+    logger.info("Loki public address: %s", url)
 
     response = urllib.request.urlopen(
         f"{url}/loki/api/v1/status/buildinfo", data=None, timeout=2.0
