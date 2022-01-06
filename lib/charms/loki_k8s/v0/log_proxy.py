@@ -629,7 +629,7 @@ class LogProxyConsumer(RelationManagerBase):
         # Syslog config
         if self._is_syslog:
             syslog_labels = common_labels.copy()
-            syslog_labels.update({"job": "syslog_{}".format(job_name)})
+            syslog_labels.update({"job": "{}_syslog".format(job_name)})
             syslog_config = {
                 "job_name": "syslog",
                 "syslog": {
