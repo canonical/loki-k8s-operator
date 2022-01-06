@@ -153,7 +153,6 @@ Adopting this object in a charmed operator consist of two steps:
 
 import json
 import logging
-from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -612,7 +611,7 @@ class LogProxyConsumer(RelationManagerBase):
         scrape_configs = []
 
         # Files config
-        labels = deepcopy(common_labels)
+        labels = common_labels.copy()
         labels.update(
             {
                 "job": job_name,
@@ -628,7 +627,7 @@ class LogProxyConsumer(RelationManagerBase):
 
         # Syslog config
         if self._is_syslog:
-            syslog_labels = deepcopy(common_labels)
+            syslog_labels = common_labels.copy()
             syslog_labels.update({"job": "syslog_{}".format(job_name)})
             syslog_config = {
                 "job_name": "syslog",
@@ -651,7 +650,7 @@ class LogProxyConsumer(RelationManagerBase):
         static_configs = []
 
         for _file in self._log_files:
-            conf = deepcopy(config)
+            conf = config.copy()
             conf["labels"]["__path__"] = _file
             static_configs.append(conf)
 
