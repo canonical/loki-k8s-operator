@@ -102,12 +102,7 @@ class TestLogProxyConsumer(unittest.TestCase):
     def test__initial_config_jobs(self):
         expected_jobs = {"system", "syslog"}
         self.assertEqual(
-            set(
-                map(
-                    lambda x: x["job_name"],
-                    self.harness.charm._log_proxy._initial_config["scrape_configs"],
-                )
-            ),
+            {x["job_name"] for x in self.harness.charm._log_proxy._initial_config["scrape_configs"]},
             expected_jobs,
         )
 
