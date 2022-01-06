@@ -71,7 +71,7 @@ Adopting this object in a charmed operator consist of two steps:
       If in the Pod there is only one container, this argument can be avoided.
 
    - You can configure your syslog software using `localhost` as the address and the method
-     `LogProxyConsumer.syslog_port()` to get the port, or, alternatively, if you are using rsyslog
+     `LogProxyConsumer.syslog_port` to get the port, or, alternatively, if you are using rsyslog
      you may use the method `LogProxyConsumer.rsyslog_config()`.
 
 2. Modify the `metadata.yaml` file to add:
