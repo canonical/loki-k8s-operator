@@ -32,8 +32,10 @@ workload implementing the `loki_push_api` interface, such as `Loki` or `Grafana 
 Adopting this object in a charmed operator consist of two steps:
 
 
-1. Use the `LogProxyConsumer` class by instanting it in the `__init__` method of the
-   charmed operator. There are two ways to get logs in to promtail. You can give it a list of files to read or you can write to it using the syslog protocol.
+1. Use the `LogProxyConsumer` class by instanting it in the `__init__` method of the charmed
+   operator. There are two ways to get logs in to promtail. You can give it a list of files to read
+   or you can write to it using the syslog protocol.
+
    For example:
 
    ```python
@@ -68,7 +70,9 @@ Adopting this object in a charmed operator consist of two steps:
    - `container_name` is the name of the container in which the application is running.
       If in the Pod there is only one container, this argument can be avoided.
 
-   - You can configure your syslog software using `localhost` as the address and the method `LogProxyConsumer.syslog_port()` to get the port, or, alternatively, if you are using rsyslog you may use the method `LogProxyConsumer.rsyslog_config()`.
+   - You can configure your syslog software using `localhost` as the address and the method
+     `LogProxyConsumer.syslog_port()` to get the port, or, alternatively, if you are using rsyslog
+     you may use the method `LogProxyConsumer.rsyslog_config()`.
 
 2. Modify the `metadata.yaml` file to add:
 
