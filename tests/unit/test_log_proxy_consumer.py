@@ -13,11 +13,7 @@ from ops.framework import StoredState
 from ops.model import Container
 from ops.testing import Harness
 
-LOG_FILES = [
-    "/var/log/apache2/access.log",
-    "/var/log/alternatives.log",
-    "/var/log/test.log",
-]
+LOG_FILES = ["/var/log/apache2/access.log", "/var/log/alternatives.log", "/var/log/test.log"]
 
 HTTP_LISTEN_PORT = 9080
 GRPC_LISTEN_PORT = 9095
@@ -81,7 +77,7 @@ class ConsumerCharm(CharmBase):
         super().__init__(*args)
         self._port = 3100
         self._log_proxy = LogProxyConsumer(
-            charm=self, log_files=LOG_FILES, container_name="consumercharm"
+            charm=self, log_files=LOG_FILES, container_name="consumercharm", syslog=True
         )
 
 
@@ -102,6 +98,41 @@ class TestLogProxyConsumer(unittest.TestCase):
     def test__initial_config_sections(self):
         expected_sections = {"positions", "scrape_configs", "server"}
         self.assertEqual(set(self.harness.charm._log_proxy._initial_config), expected_sections)
+
+    def test__initial_config_jobs(self):
+        expected_jobs = {"system", "syslog"}
+        self.assertEqual(
+            set(
+                map(
+                    lambda x: x["job_name"],
+                    self.harness.charm._log_proxy._initial_config["scrape_configs"],
+                )
+            ),
+            expected_jobs,
+        )
+
+    def test__initial_config_labels(self):
+        for job in self.harness.charm._log_proxy._initial_config["scrape_configs"]:
+            if job["job_name"] == "system":
+                expected = {
+                    "__path__",
+                    "job",
+                    "juju_application",
+                    "juju_charm",
+                    "juju_model",
+                    "juju_model_uuid",
+                }
+                for static_config in job["static_configs"]:
+                    self.assertEqual(set(static_config["labels"]), expected)
+            if job["job_name"] == "syslog":
+                expected = {
+                    "job",
+                    "juju_application",
+                    "juju_charm",
+                    "juju_model",
+                    "juju_model_uuid",
+                }
+                self.assertEqual(set(job["syslog"]["labels"]), expected)
 
     def test__add_client_with_client_section(self):
         agent_url1 = "http://10.20.30.1:3500/loki/api/v1/push"
