@@ -297,6 +297,9 @@ RELATION_INTERFACE_NAME = "loki_push_api"
 DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
 
+PROMTAIL_BINARY_ZIP_URL = (
+    "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
+)
 
 class RelationNotFoundError(ValueError):
     """Raised if there is no relation with the given name."""
@@ -786,6 +789,7 @@ class LokiPushApiProvider(RelationManagerBase):
         """
         if self._charm.unit.is_leader():
             relation.data[self._charm.app].update({"loki_push_api": self._loki_push_api})
+            relation.data[self._charm.app].update({"data": self._promtail_binary_url})
             logger.debug("Saved Loki url in relation data %s", self._loki_push_api)
 
         if relation.data.get(relation.app).get("alert_rules"):
@@ -802,6 +806,11 @@ class LokiPushApiProvider(RelationManagerBase):
         """
         if event.relation.data.get(event.relation.app):
             self._remove_alert_rules_files(self.container)
+
+    @property
+    def _promtail_binary_url(self) -> str:
+        """URL from which Promtail binary can be downloaded."""
+        return json.dumps({"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL})
 
     @property
     def _loki_push_api(self) -> str:
