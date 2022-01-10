@@ -1074,21 +1074,6 @@ class LokiPushApiConsumer(RelationManagerBase):
 
         return message
 
-    def _label_alert_topology(self, rule) -> dict:
-        """Insert juju topology labels into an alert rule.
-
-        Args:
-            rule: a dictionary representing a Loki alert rule.
-
-        Returns:
-            a dictionary representing Loki alert rule with Juju
-            topology labels.
-        """
-        labels = rule.get("labels", {})
-        labels.update(self.topology.as_dict_with_logql_labels())
-        rule["labels"] = labels
-        return rule
-
     @property
     def loki_push_api(self) -> List[str]:
         """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
