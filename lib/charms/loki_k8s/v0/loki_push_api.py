@@ -1073,15 +1073,3 @@ class LokiPushApiConsumer(RelationManagerBase):
             message = "No alert rules found in {}".format(self._alert_rules_path)
 
         return message
-
-    @property
-    def loki_push_api(self) -> List[str]:
-        """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
-
-        Returns:
-            A list with Loki Push API endpoints.
-        """
-        return [
-            _type_convert_stored(loki_endpoint)
-            for loki_endpoint in self._stored.loki_push_api.values()
-        ]
