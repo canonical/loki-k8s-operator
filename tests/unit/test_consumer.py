@@ -117,7 +117,6 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             self.harness.charm.loki_consumer._stored.loki_push_api.get(rel_id)["url"],
             loki_push_api,
         )
-        self.assertEqual(self.harness.charm.loki_consumer.loki_push_api, [{"url": loki_push_api}])
 
     @patch("charms.loki_k8s.v0.loki_push_api.LoggingEvents.loki_push_api_endpoint_joined")
     def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self, mock_events):
@@ -144,14 +143,6 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
         mock_events.emit.assert_called_once()
-
-    def test__label_alert_topology(self):
-        labeled_alert_topology = self.harness.charm.loki_consumer._label_alert_topology(
-            ONE_RULE.copy()
-        )
-        self.assertTrue("juju_model" in labeled_alert_topology["labels"])
-        self.assertTrue("juju_model_uuid" in labeled_alert_topology["labels"])
-        self.assertTrue("juju_application" in labeled_alert_topology["labels"])
 
     def test__is_valid_rule(self):
         self.assertTrue(_is_valid_rule(ONE_RULE.copy(), allow_free_standing=False))
