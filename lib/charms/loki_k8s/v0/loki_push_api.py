@@ -301,6 +301,7 @@ PROMTAIL_BINARY_ZIP_URL = (
     "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
 )
 
+
 class RelationNotFoundError(ValueError):
     """Raised if there is no relation with the given name."""
 
@@ -916,7 +917,67 @@ class LokiPushApiProvider(RelationManagerBase):
         return alerts
 
 
-class LokiPushApiConsumer(RelationManagerBase):
+class ConsumerBase(RelationManagerBase):
+    """Consumer's base class."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        allow_free_standing_rules: bool = False,
+    ):
+        super().__init__(charm, relation_name)
+        self._charm = charm
+        self._relation_name = relation_name
+        self.allow_free_standing_rules = allow_free_standing_rules
+        self._alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
+        self.topology = JujuTopology.from_charm(charm)
+
+    def _handle_alert_rules(self, relation):
+        if self._charm.unit.is_leader():
+            alert_groups, invalid_files = load_alert_rules_from_dir(
+                self._alert_rules_path,
+                self.topology,
+                recursive=False,
+                allow_free_standing=self.allow_free_standing_rules,
+            )
+            alert_rules_error_message = self._check_alert_rules(alert_groups, invalid_files)
+
+            if alert_rules_error_message:
+                self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
+
+            relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
+            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
+
+    def _check_alert_rules(self, alert_groups, invalid_files) -> str:
+        """Check alert rules.
+
+        Args:
+            alert_groups: a list of prometheus alert rule groups.
+            invalid_files: a list of invalid rules files.
+
+        Returns:
+            A string with the validation message. The message is not empty whether there are
+            invalid alert rules files or there are no alert rules groups.
+        """
+        message = ""
+
+        if invalid_files:
+            must_contain = ["'alert'", "'expr'"]
+            if self.allow_free_standing_rules:
+                must_contain.append("'%%juju_topology%%'")
+
+            message = "Failed to read alert rules (must contain {}): ".format(
+                ", ".join(must_contain)
+            ) + ", ".join(map(str, invalid_files))
+        elif not alert_groups:
+            message = "No alert rules found in {}".format(self._alert_rules_path)
+
+        return message
+
+
+class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
 
     on = LoggingEvents()
@@ -975,17 +1036,8 @@ class LokiPushApiConsumer(RelationManagerBase):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
-        alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
-        self.allow_free_standing_rules = allow_free_standing_rules
-
-        super().__init__(charm, relation_name)
-        self.topology = JujuTopology.from_charm(charm)
-
+        super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
         self._stored.set_default(loki_push_api={})
-        self._charm = charm
-        self._relation_name = relation_name
-        self._alert_rules_path = alert_rules_path
-
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
@@ -1019,21 +1071,7 @@ class LokiPushApiConsumer(RelationManagerBase):
         if loki_push_api_data:
             self._stored.loki_push_api[relation.id] = json.loads(loki_push_api_data)
 
-        if self._charm.unit.is_leader():
-            alert_groups, invalid_files = load_alert_rules_from_dir(
-                self._alert_rules_path,
-                self.topology,
-                recursive=False,
-                allow_free_standing=self.allow_free_standing_rules,
-            )
-            alert_rules_error_message = self._check_alert_rules(alert_groups, invalid_files)
-
-            if alert_rules_error_message:
-                self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
-
-            relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
-
+        self._handle_alert_rules(relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, event):
@@ -1047,29 +1085,3 @@ class LokiPushApiConsumer(RelationManagerBase):
         # upgrades and hook failures we might not have data in the storage
         self._stored.loki_push_api.pop(event.relation.id, None)
         self.on.loki_push_api_endpoint_departed.emit()
-
-    def _check_alert_rules(self, alert_groups, invalid_files) -> str:
-        """Check alert rules.
-
-        Args:
-            alert_groups: a list of prometheus alert rule groups.
-            invalid_files: a list of invalid rules files.
-
-        Returns:
-            A string with the validation message. The message is not empty whether there are
-            invalid alert rules files or there are no alert rules groups.
-        """
-        message = ""
-
-        if invalid_files:
-            must_contain = ["'alert'", "'expr'"]
-            if self.allow_free_standing_rules:
-                must_contain.append("'%%juju_topology%%'")
-
-            message = "Failed to read alert rules (must contain {}): ".format(
-                ", ".join(must_contain)
-            ) + ", ".join(map(str, invalid_files))
-        elif not alert_groups:
-            message = "No alert rules found in {}".format(self._alert_rules_path)
-
-        return message
