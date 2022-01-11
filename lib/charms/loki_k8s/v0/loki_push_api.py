@@ -747,7 +747,12 @@ class LokiPushApiProvider(RelationManagerBase):
     """A LokiPushApiProvider class."""
 
     def __init__(
-        self, charm, relation_name: str = DEFAULT_RELATION_NAME, *, rules_dir="/loki/rules"
+        self,
+        charm,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        port: int = 3100,
+        *,
+        rules_dir="/loki/rules",
     ):
         """A Loki service provider.
 
@@ -778,6 +783,7 @@ class LokiPushApiProvider(RelationManagerBase):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
+        self.port = port
         self.container = self._charm._container
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
@@ -855,7 +861,7 @@ class LokiPushApiProvider(RelationManagerBase):
         Returns:
             Loki push API URL as json string
         """
-        endpoint_url = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self._charm._port)
+        endpoint_url = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self.port)
         return json.dumps({"url": endpoint_url})
 
     @property
