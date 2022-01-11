@@ -81,6 +81,15 @@ class ConsumerCharm(CharmBase):
         )
 
 
+class ConsumerCharmSyslogDisabled(ConsumerCharm):
+    def __init__(self, *args, **kwargs):
+        super(ConsumerCharm, self).__init__(*args)
+        self._port = 3100
+        self._log_proxy = LogProxyConsumer(
+            charm=self, log_files=LOG_FILES, container_name="consumercharm", enable_syslog=False
+        )
+
+
 class TestLogProxyConsumer(unittest.TestCase):
     @patch("charms.loki_k8s.v0.log_proxy.LogProxyConsumer._get_container")
     def setUp(self, mock_container):
@@ -270,3 +279,24 @@ class TestLogProxyConsumer(unittest.TestCase):
                     "DEBUG:charms.loki_k8s.v0.log_proxy:Promtail binary file is already in the the charm container."
                 ],
             )
+
+
+class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
+    @patch("charms.loki_k8s.v0.log_proxy.LogProxyConsumer._get_container")
+    def setUp(self, mock_container):
+        mock_container.return_value = True
+
+        self.harness = Harness(ConsumerCharmSyslogDisabled, meta=ConsumerCharm.metadata_yaml)
+        self.harness.set_model_info(name="MODEL", uuid="123456")
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+        self.harness.begin()
+
+    def test__syslog_not_enabled(self):
+        self.assertTrue(
+            "syslog"
+            not in {
+                x["job_name"]
+                for x in self.harness.charm._log_proxy._initial_config["scrape_configs"]
+            }
+        )
