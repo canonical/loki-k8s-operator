@@ -18,7 +18,7 @@ resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_from_edge_and_upgrade_from_local_path(ops_test, loki_charm):
+async def test_config_values_are_retained_after_pod_upgraded(ops_test, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     async with IPAddressWorkaround(ops_test):
         logger.debug("deploy charm from charmhub")

@@ -29,7 +29,7 @@ async def test_deploy_from_local_path(ops_test, loki_charm):
 
 
 @pytest.mark.abort_on_fail
-async def test_kubectl_delete_pod(ops_test):
+async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_test):
     pod_name = f"{app_name}-0"
 
     cmd = [
