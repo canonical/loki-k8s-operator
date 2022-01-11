@@ -77,7 +77,7 @@ class ConsumerCharm(CharmBase):
         super().__init__(*args)
         self._port = 3100
         self._log_proxy = LogProxyConsumer(
-            charm=self, log_files=LOG_FILES, container_name="consumercharm", syslog=True
+            charm=self, log_files=LOG_FILES, container_name="consumercharm", enable_syslog=True
         )
 
 
