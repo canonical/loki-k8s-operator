@@ -1186,7 +1186,7 @@ class LogProxyConsumer(RelationManagerBase):
         Args:
             event: The event object `RelationChangedEvent`.
         """
-        if event.relation.data[event.unit].get("data", None):
+        if event.relation.data[event.app].get("data", None):
             try:
                 self._obtain_promtail(event)
                 self._update_config(event)
@@ -1352,7 +1352,7 @@ class LogProxyConsumer(RelationManagerBase):
 
     def _download_and_push_promtail_to_workload(self, event) -> None:
         """Downloads a Promtail zip file and pushes the binary to the workload."""
-        url = json.loads(event.relation.data[event.unit].get("data"))["promtail_binary_zip_url"]
+        url = json.loads(event.relation.data[event.app].get("data"))["promtail_binary_zip_url"]
 
         with urlopen(url) as r:
             file_bytes = r.read()
@@ -1377,11 +1377,11 @@ class LogProxyConsumer(RelationManagerBase):
         grafana_agents = json.loads(self._stored.grafana_agents)
 
         if isinstance(event, RelationChangedEvent):
-            agent_url = json.loads(event.relation.data[event.unit].get("data"))["loki_push_api"]
-            grafana_agents[str(event.unit)] = agent_url
+            agent_url = json.loads(event.relation.data[event.app].get("loki_push_api"))["url"]
+            grafana_agents[str(event.app)] = agent_url
             self._stored.grafana_agents = json.dumps(grafana_agents)
         elif isinstance(event, RelationDepartedEvent):
-            agent_url = grafana_agents.pop(str(event.unit))
+            agent_url = grafana_agents.pop(str(event.app))
             self._stored.grafana_agents = json.dumps(grafana_agents)
 
     def _update_config(self, event):
@@ -1426,10 +1426,10 @@ class LogProxyConsumer(RelationManagerBase):
         current_config = self._current_config.copy()
 
         if isinstance(event, RelationChangedEvent):
-            agent_url = json.loads(event.relation.data[event.unit].get("data"))["loki_push_api"]
+            agent_url = json.loads(event.relation.data[event.app].get("loki_push_api"))["url"]
             config = self._add_client(current_config, agent_url)
         elif isinstance(event, RelationDepartedEvent):
-            agent_url = json.loads(self._stored.grafana_agents)[str(event.unit)]
+            agent_url = json.loads(self._stored.grafana_agents)[str(event.app)]
             config = self._remove_client(current_config, agent_url)
 
         return yaml.safe_dump(config)
