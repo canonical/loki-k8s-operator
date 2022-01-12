@@ -1155,6 +1155,8 @@ class LogProxyConsumer(RelationManagerBase):
         log_files: list,
         container_name: Optional[str],
         relation_name: str = "log_proxy",
+        enable_syslog: bool = False,
+        syslog_port: int = 1514,
     ):
         super().__init__(charm, relation_name)
         self._stored.set_default(grafana_agents="{}")
@@ -1162,7 +1164,8 @@ class LogProxyConsumer(RelationManagerBase):
         self._relation_name = relation_name
         self._container_name = container_name
         self._container = self._get_container(container_name)
-        self._log_files = log_files
+        self._log_files = log_files or []
+        self._is_syslog = enable_syslog
         self.framework.observe(
             self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created
         )
@@ -1511,26 +1514,48 @@ class LogProxyConsumer(RelationManagerBase):
             A dict representing the `scrape_configs` section.
         """
         # TODO: use the JujuTopology object
-        config = {
-            "targets": ["localhost"],
-            "labels": {
-                "job": "juju_{}_{}_{}".format(
-                    self._charm.model.name,
-                    self._charm.model.uuid,
-                    self._charm.model.app.name,
-                ),
-                "__path__": "",
-            },
+        job_name = "juju_{}_{}_{}".format(
+            self._charm.model.name, self._charm.model.uuid, self._charm.model.app.name
+        )
+        common_labels = {
+            "juju_application": self._charm.app.name,
+            "juju_model": self._charm.model.name,
+            "juju_model_uuid": self._charm.model.uuid,
+            "juju_charm": self._charm.meta.name,
         }
 
-        return {
-            "scrape_configs": [
-                {
-                    "job_name": "system",
-                    "static_configs": self._generate_static_configs(config),
-                }
-            ]
+        scrape_configs = []
+
+        # Files config
+        labels = common_labels.copy()
+        labels.update(
+            {
+                "job": job_name,
+                "__path__": "",
+            }
+        )
+        config = {"targets": ["localhost"], "labels": labels}
+        scrape_config = {
+            "job_name": "system",
+            "static_configs": self._generate_static_configs(config),
         }
+        scrape_configs.append(scrape_config)
+
+        # Syslog config
+        if self._is_syslog:
+            syslog_labels = common_labels.copy()
+            syslog_labels.update({"job": "{}_syslog".format(job_name)})
+            syslog_config = {
+                "job_name": "syslog",
+                "syslog": {
+                    "listen_address": "127.0.0.1:{}".format(self._syslog_port),
+                    "label_structured_data": True,
+                    "labels": syslog_labels,
+                },
+            }
+            scrape_configs.append(syslog_config)  # type: ignore
+
+        return {"scrape_configs": scrape_configs}
 
     def _generate_static_configs(self, config: dict) -> list:
         """Generates static_configs section.
@@ -1546,3 +1571,23 @@ class LogProxyConsumer(RelationManagerBase):
             static_configs.append(conf)
 
         return static_configs
+
+    @property
+    def syslog_port(self):
+        """Gets the port on which promtail is listening for syslog.
+
+        Returns:
+            A string representing the port
+        """
+        return self._syslog_port
+
+    @property
+    def rsyslog_config(self):
+        """Generates a config line for use with rsyslog.
+
+        Returns:
+            The rsyslog config line as a string
+        """
+        return 'action(type="omfwd" protocol="tcp" target="127.0.0.1" port="{}" Template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")'.format(
+            self._syslog_port
+        )
