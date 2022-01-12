@@ -1,0 +1,276 @@
+package iter
+
+import (
+	"context"
+	"io"
+	"testing"
+	"time"
+
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
+
+	"github.com/grafana/loki/pkg/logproto"
+	"github.com/grafana/loki/pkg/util"
+)
+
+func TestNewPeekingSampleIterator(t *testing.T) {
+	iter := NewPeekingSampleIterator(NewSeriesIterator(logproto.Series{
+		Samples: []logproto.Sample{
+			{
+				Timestamp: time.Unix(0, 1).UnixNano(),
+			},
+			{
+				Timestamp: time.Unix(0, 2).UnixNano(),
+			},
+			{
+				Timestamp: time.Unix(0, 3).UnixNano(),
+			},
+		},
+	}))
+	_, peek, ok := iter.Peek()
+	if peek.Timestamp != 1 {
+		t.Fatal("wrong peeked time.")
+	}
+	if !ok {
+		t.Fatal("should be ok.")
+	}
+	hasNext := iter.Next()
+	if !hasNext {
+		t.Fatal("should have next.")
+	}
+	if iter.Sample().Timestamp != 1 {
+		t.Fatal("wrong peeked time.")
+	}
+
+	_, peek, ok = iter.Peek()
+	if peek.Timestamp != 2 {
+		t.Fatal("wrong peeked time.")
+	}
+	if !ok {
+		t.Fatal("should be ok.")
+	}
+	hasNext = iter.Next()
+	if !hasNext {
+		t.Fatal("should have next.")
+	}
+	if iter.Sample().Timestamp != 2 {
+		t.Fatal("wrong peeked time.")
+	}
+	_, peek, ok = iter.Peek()
+	if peek.Timestamp != 3 {
+		t.Fatal("wrong peeked time.")
+	}
+	if !ok {
+		t.Fatal("should be ok.")
+	}
+	hasNext = iter.Next()
+	if !hasNext {
+		t.Fatal("should have next.")
+	}
+	if iter.Sample().Timestamp != 3 {
+		t.Fatal("wrong peeked time.")
+	}
+	_, _, ok = iter.Peek()
+	if ok {
+		t.Fatal("should not be ok.")
+	}
+	require.NoError(t, iter.Close())
+	require.NoError(t, iter.Error())
+}
+
+func sample(i int) logproto.Sample {
+	return logproto.Sample{
+		Timestamp: int64(i),
+		Hash:      uint64(i),
+		Value:     float64(1),
+	}
+}
+
+var varSeries = logproto.Series{
+	Labels: `{foo="var"}`,
+	Samples: []logproto.Sample{
+		sample(1), sample(2), sample(3),
+	},
+}
+var carSeries = logproto.Series{
+	Labels: `{foo="car"}`,
+	Samples: []logproto.Sample{
+		sample(1), sample(2), sample(3),
+	},
+}
+
+func TestNewHeapSampleIterator(t *testing.T) {
+	it := NewHeapSampleIterator(context.Background(),
+		[]SampleIterator{
+			NewSeriesIterator(varSeries),
+			NewSeriesIterator(carSeries),
+			NewSeriesIterator(carSeries),
+			NewSeriesIterator(varSeries),
+			NewSeriesIterator(carSeries),
+			NewSeriesIterator(varSeries),
+			NewSeriesIterator(carSeries),
+		})
+
+	for i := 1; i < 4; i++ {
+		require.True(t, it.Next(), i)
+		require.Equal(t, `{foo="car"}`, it.Labels(), i)
+		require.Equal(t, sample(i), it.Sample(), i)
+		require.True(t, it.Next(), i)
+		require.Equal(t, `{foo="var"}`, it.Labels(), i)
+		require.Equal(t, sample(i), it.Sample(), i)
+	}
+	require.False(t, it.Next())
+	require.NoError(t, it.Error())
+	require.NoError(t, it.Close())
+}
+
+type fakeSampleClient struct {
+	series [][]logproto.Series
+	curr   int
+}
+
+func (f *fakeSampleClient) Recv() (*logproto.SampleQueryResponse, error) {
+	if f.curr >= len(f.series) {
+		return nil, io.EOF
+	}
+	res := &logproto.SampleQueryResponse{
+		Series: f.series[f.curr],
+	}
+	f.curr++
+	return res, nil
+}
+
+func (fakeSampleClient) Context() context.Context { return context.Background() }
+func (fakeSampleClient) CloseSend() error         { return nil }
+func TestNewSampleQueryClientIterator(t *testing.T) {
+
+	it := NewSampleQueryClientIterator(&fakeSampleClient{
+		series: [][]logproto.Series{
+			{varSeries},
+			{carSeries},
+		},
+	})
+	for i := 1; i < 4; i++ {
+		require.True(t, it.Next(), i)
+		require.Equal(t, `{foo="var"}`, it.Labels(), i)
+		require.Equal(t, sample(i), it.Sample(), i)
+	}
+	for i := 1; i < 4; i++ {
+		require.True(t, it.Next(), i)
+		require.Equal(t, `{foo="car"}`, it.Labels(), i)
+		require.Equal(t, sample(i), it.Sample(), i)
+	}
+	require.False(t, it.Next())
+	require.NoError(t, it.Error())
+	require.NoError(t, it.Close())
+}
+
+func TestNewNonOverlappingSampleIterator(t *testing.T) {
+	it := NewNonOverlappingSampleIterator([]SampleIterator{
+		NewSeriesIterator(varSeries),
+		NewSeriesIterator(logproto.Series{
+			Labels:  varSeries.Labels,
+			Samples: []logproto.Sample{sample(4), sample(5)},
+		}),
+	}, varSeries.Labels)
+
+	for i := 1; i < 6; i++ {
+		require.True(t, it.Next(), i)
+		require.Equal(t, `{foo="var"}`, it.Labels(), i)
+		require.Equal(t, sample(i), it.Sample(), i)
+	}
+	require.False(t, it.Next())
+	require.NoError(t, it.Error())
+	require.NoError(t, it.Close())
+}
+
+func TestReadSampleBatch(t *testing.T) {
+	res, size, err := ReadSampleBatch(NewSeriesIterator(carSeries), 1)
+	require.Equal(t, &logproto.SampleQueryResponse{Series: []logproto.Series{{Labels: carSeries.Labels, Samples: []logproto.Sample{sample(1)}}}}, res)
+	require.Equal(t, uint32(1), size)
+	require.NoError(t, err)
+
+	res, size, err = ReadSampleBatch(NewMultiSeriesIterator(context.Background(), []logproto.Series{carSeries, varSeries}), 100)
+	require.ElementsMatch(t, []logproto.Series{carSeries, varSeries}, res.Series)
+	require.Equal(t, uint32(6), size)
+	require.NoError(t, err)
+}
+
+type CloseTestingSmplIterator struct {
+	closed atomic.Bool
+	s      logproto.Sample
+}
+
+func (i *CloseTestingSmplIterator) Next() bool              { return true }
+func (i *CloseTestingSmplIterator) Sample() logproto.Sample { return i.s }
+func (i *CloseTestingSmplIterator) Labels() string          { return "" }
+func (i *CloseTestingSmplIterator) Error() error            { return nil }
+func (i *CloseTestingSmplIterator) Close() error {
+	i.closed.Store(true)
+	return nil
+}
+
+func TestNonOverlappingSampleClose(t *testing.T) {
+	a, b := &CloseTestingSmplIterator{}, &CloseTestingSmplIterator{}
+	itr := NewNonOverlappingSampleIterator([]SampleIterator{a, b}, "")
+
+	// Ensure both itr.cur and itr.iterators are non nil
+	itr.Next()
+
+	require.NotNil(t, itr.(*nonOverlappingSampleIterator).curr)
+
+	itr.Close()
+
+	require.Equal(t, true, a.closed.Load())
+	require.Equal(t, true, b.closed.Load())
+}
+
+func TestSampleIteratorWithClose_CloseIdempotent(t *testing.T) {
+	c := 0
+	closeFn := func() error {
+		c++
+		return nil
+	}
+	ni := noOpIterator{}
+	it := SampleIteratorWithClose(ni, closeFn)
+	// Multiple calls to close should result in c only ever having been incremented one time from 0 to 1
+	err := it.Close()
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, c)
+	err = it.Close()
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, c)
+	err = it.Close()
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, c)
+}
+
+type alwaysErrorIterator struct {
+	noOpIterator
+}
+
+func (alwaysErrorIterator) Close() error {
+	return errors.New("i always error")
+}
+
+func TestSampleIteratorWithClose_ReturnsError(t *testing.T) {
+	closeFn := func() error {
+		return errors.New("i broke")
+	}
+	ei := alwaysErrorIterator{}
+	it := SampleIteratorWithClose(ei, closeFn)
+	err := it.Close()
+	// Verify that a proper multi error is returned when both the iterator and the close function return errors
+	if me, ok := err.(util.MultiError); ok {
+		assert.True(t, len(me) == 2, "Expected 2 errors, one from the iterator and one from the close function")
+		assert.EqualError(t, me[0], "i always error")
+		assert.EqualError(t, me[1], "i broke")
+	} else {
+		t.Error("Expected returned error to be of type util.MultiError")
+	}
+	// A second call to Close should return the same error
+	err2 := it.Close()
+	assert.Equal(t, err, err2)
+}
