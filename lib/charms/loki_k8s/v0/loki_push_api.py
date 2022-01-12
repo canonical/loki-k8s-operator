@@ -1269,6 +1269,7 @@ class LogProxyConsumer(RelationManagerBase):
         self._container_name = container_name
         self._container = self._get_container(container_name)
         self._log_files = log_files or []
+        self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.framework.observe(
             self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created
@@ -1400,6 +1401,11 @@ class LogProxyConsumer(RelationManagerBase):
             resource_path = self._charm.model.resources.fetch("promtail-bin")
         except ModelError:
             return False
+        except NameError as e:
+            if "invalid resource name" in str(e):
+                return False
+            else:
+                raise
 
         logger.info("Promtail binary file has been obtained from an attached resource.")
         self._push_binary_to_workload(resource_path)

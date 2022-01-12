@@ -6,7 +6,7 @@ import unittest
 from hashlib import sha256
 from unittest.mock import MagicMock, mock_open, patch
 
-from charms.loki_k8s.v0.log_proxy import LogProxyConsumer, PromtailDigestError
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, PromtailDigestError
 from deepdiff import DeepDiff  # type: ignore
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -91,7 +91,7 @@ class ConsumerCharmSyslogDisabled(ConsumerCharm):
 
 
 class TestLogProxyConsumer(unittest.TestCase):
-    @patch("charms.loki_k8s.v0.log_proxy.LogProxyConsumer._get_container")
+    @patch("charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._get_container")
     def setUp(self, mock_container):
         mock_container.return_value = True
 
@@ -249,7 +249,7 @@ class TestLogProxyConsumer(unittest.TestCase):
                 self.assertEqual(
                     sorted(logger.output),
                     [
-                        "INFO:charms.loki_k8s.v0.log_proxy:Promtail binary file has been obtained from an attached resource."
+                        "INFO:charms.loki_k8s.v0.loki_push_api:Promtail binary file has been obtained from an attached resource."
                     ],
                 )
 
@@ -276,13 +276,13 @@ class TestLogProxyConsumer(unittest.TestCase):
             self.assertEqual(
                 sorted(logger.output),
                 [
-                    "DEBUG:charms.loki_k8s.v0.log_proxy:Promtail binary file is already in the the charm container."
+                    "DEBUG:charms.loki_k8s.v0.loki_push_api:Promtail binary file is already in the the charm container."
                 ],
             )
 
 
 class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
-    @patch("charms.loki_k8s.v0.log_proxy.LogProxyConsumer._get_container")
+    @patch("charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._get_container")
     def setUp(self, mock_container):
         mock_container.return_value = True
 
