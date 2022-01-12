@@ -17,64 +17,70 @@ For instance a Loki charm.
 send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
 For instance a Promtail or Grafana agent charm that needs to send logs to Loki.
 
+- `LogProxyConsumer`: This object can be used by any K8s charmed operator that needs to
+send logs to Loki through a Log Proxy by implementing the consumer side of the `loki_push_api`
+relation interface.
+Filtering logs in Loki is largely performed on the basis of labels.
+In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
+generates telemetry like logs.
+In order to be able to control the labels on the logs pushed this object injects a Pebble layer
+that runs Promtail in the workload container, injecting Juju topology labels into the
+logs on the fly.
 
 
 ## LokiPushApiProvider Library Usage
 
-This object may be used by Loki charms to manage relations
-with their clients.
-For this purposes a Loki charm needs to instantiate the
-`LokiPushApiProvider` object providing it with two pieces
-of information:
+This object may be used by any Charmed Operator that implements the `loki_push_api` interface,
+for instance Loki or Grafana Agent.
+For this purposes a charm needs to instantiate the `LokiPushApiProvider` object with one mandatory
+and three optional arguments.
 
-- A reference to the parent (Loki) charm.
+- `charm`: A reference to the parent (Loki) charm.
 
-- Optionally, the name of the relation that the Loki charm uses to interact
-  with its clients. If provided, this relation name must match a provided
+- `relation_name`: The name of the relation that the charm uses to interact
+  with its clients which implements `LokiPushApiConsumer` or `LogProxyConsumer`.
+  If provided, this relation name must match a provided
   relation in metadata.yaml with the `loki_push_api` interface.
-  This argument is not required if your metadata.yaml has precisely one
-  provided relation in metadata.yaml with the `loki_push_api` interface, as the
-  lib will automatically resolve the relation name inspecting the using the
-  meta information of the charm.
+  Typically `LokiPushApiConsumer` use "logging" as a relation_name and `LogProxyConsumer` use
+  "log_proxy".
+  The default value of this arguments is "logging".
 
-An example of this in `metadata.yaml` file should have the following section:
+  An example of this in `metadata.yaml` file should have the following section:
 
-    provides:
-      logging:
-        interface: loki_push_api
+  ```yaml
+  provides:
+    logging:
+      interface: loki_push_api
+  ```
 
-If you would like to use relation name other than `logging`,
-you will need to specify the relation name via the `relation_name`
-argument when instantiating the :class:`LokiPushApiProvider` object.
-However, it is strongly advised to keep the the default relation name,
-so that people deploying your charm will have a consistent experience
-with all other charms that provide Loki Push API.
+  For example a Loki charm may instantiate the
+  `LokiPushApiProvider` in its constructor as follows
 
-For example a Loki charm may instantiate the
-`LokiPushApiProvider` in its constructor as follows
+      from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
+      from loki_server import LokiServer
+      ...
 
-    from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
-    from loki_server import LokiServer
-    ...
+      class LokiOperatorCharm(CharmBase):
+          ...
 
-    class LokiOperatorCharm(CharmBase):
-        ...
+          def __init__(self, *args):
+              super().__init__(*args)
+              ...
+              self._provide_loki()
+              ...
 
-        def __init__(self, *args):
-            super().__init__(*args)
-            ...
-            self._provide_loki()
-            ...
+          def _provide_loki(self):
+              try:
+                  version = self._loki_server.version
+                  self.loki_provider = LokiPushApiProvider(self)
+                  logger.debug("Loki Provider is available. Loki version: %s", version)
+              except LokiServerNotReadyError as e:
+                  self.unit.status = MaintenanceStatus(str(e))
+              except LokiServerError as e:
+                  self.unit.status = BlockedStatus(str(e))
 
-        def _provide_loki(self):
-            try:
-                version = self._loki_server.version
-                self.loki_provider = LokiPushApiProvider(self)
-                logger.debug("Loki Provider is available. Loki version: %s", version)
-            except LokiServerNotReadyError as e:
-                self.unit.status = MaintenanceStatus(str(e))
-            except LokiServerError as e:
-                self.unit.status = BlockedStatus(str(e))
+  - `port`: Loki Push Api endpoint port. Default value: 3100.
+  - `rules_dir`: Directory to store alert rules. Default value: "/loki/rules".
 
 
 The `LokiPushApiProvider` object has several responsibilities:
@@ -82,7 +88,10 @@ The `LokiPushApiProvider` object has several responsibilities:
 1. Set the URL of the Loki Push API in the provider app data bag; the URL
    must be unique to all instances (e.g., using a load balancer).
 
-2. Process the metadata of the consumer application, provided via the
+2. Set the Promtail binary URL (`promtail_binary_zip_url`) so clients that uses
+   `LogProxyConsumer` object can downloaded and configure it.
+
+3. Process the metadata of the consumer application, provided via the
    "metadata" field of the consumer data bag, which are used to annotate the
    alert rules (see next point). An example for "metadata" is the following:
 
@@ -91,7 +100,7 @@ The `LokiPushApiProvider` object has several responsibilities:
      'application': 'promtail-k8s'
     }
 
-3. Process alert rules set into the relation by the `LokiPushApiConsumer`
+4. Process alert rules set into the relation by the `LokiPushApiConsumer`
    objects, e.g.:
 
     '{
@@ -175,6 +184,101 @@ self.framework.observe(
 ```
 
 The consumer charm can then choose to update its configuration in both situations.
+
+
+## LogProxyConsumer Library Usage
+
+Let's say that we have a workload charm that produces logs and we need to send those logs to a
+workload implementing the `loki_push_api` interface, such as `Loki` or `Grafana Agent`.
+
+Adopting this object in a charmed operator consist of two steps:
+
+
+1. Use the `LogProxyConsumer` class by instanting it in the `__init__` method of the charmed
+   operator. There are two ways to get logs in to promtail. You can give it a list of files to read
+   or you can write to it using the syslog protocol.
+
+   For example:
+
+   ```python
+   from charms.loki_k8s.v0.log_proxy import LogProxyConsumer, PromtailDigestError
+
+   ...
+
+       def __init__(self, *args):
+           ...
+           try:
+               self._log_proxy = LogProxyConsumer(
+                   charm=self, log_files=LOG_FILES, container_name=PEER, syslog=True
+               )
+           except PromtailDigestError as e:
+               msg = str(e)
+               logger.error(msg)
+               self.unit.status = BlockedStatus(msg)
+   ```
+
+   Note that:
+
+   - `LOG_FILES` is a `list` containing the log files we want to send to `Loki` or
+   `Grafana Agent`, for instance:
+
+   ```python
+   LOG_FILES = [
+       "/var/log/apache2/access.log",
+       "/var/log/alternatives.log",
+   ]
+   ```
+
+   - `container_name` is the name of the container in which the application is running.
+      If in the Pod there is only one container, this argument can be avoided.
+
+   - You can configure your syslog software using `localhost` as the address and the method
+     `LogProxyConsumer.syslog_port` to get the port, or, alternatively, if you are using rsyslog
+     you may use the method `LogProxyConsumer.rsyslog_config()`.
+
+2. Modify the `metadata.yaml` file to add:
+
+   - The `log_proxy` relation in the `requires` section:
+     ```yaml
+     requires:
+       log_proxy:
+         interface: loki_push_api
+         optional: true
+     ```
+
+Once the library is implemented in a charmed operator and a relation is established with
+the charm that implements the `loki_push_api` interface, the library will inject a
+Pebble layer that runs Promtail in the workload container to send logs.
+
+By default, the promtail binary injected into the container will be downloaded from the internet.
+If for any reason, the container has limited network access, you may allow charm
+administrators to provide their own promtail binary at runtime by adding the following snippet to
+your charm metadata:
+
+```yaml
+resources:
+  promtail-bin:
+      type: file
+      description: Promtail binary for logging
+      filename: promtail-linux-amd64
+```
+
+Which would then allow operators to deploy the charm this way:
+
+```
+juju deploy \
+    ./your_charm.charm \
+    --resource promtail-bin=/tmp/promtail-linux-amd64
+```
+
+The object can raise a `PromtailDigestError` when:
+
+- Promtail binary cannot be downloaded.
+- No `container_name` parameter has been specified and the Pod has more than 1 container.
+- The sha256 sum mismatch for promtail binary.
+
+that's why in the above example, the instantiation is made in a `try/except` block
+to handle these situations conveniently.
 
 
 ## Alerting Rules
