@@ -209,7 +209,7 @@ Adopting this object in a charmed operator consist of two steps:
            ...
            try:
                self._log_proxy = LogProxyConsumer(
-                   charm=self, log_files=LOG_FILES, container_name=PEER, syslog=True
+                   charm=self, log_files=LOG_FILES, container_name=PEER, enable_syslog=True
                )
            except PromtailDigestError as e:
                msg = str(e)
