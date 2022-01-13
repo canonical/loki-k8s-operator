@@ -1297,14 +1297,15 @@ class LogProxyConsumer(RelationManagerBase):
         if event.relation.data[event.app].get("data", None):
             try:
                 self._obtain_promtail(event)
-                self._update_config(event)
-                self._update_agents_list(event)
-                self._add_pebble_layer()
-                self._container.restart(WORKLOAD_SERVICE_NAME)
             except HTTPError as e:
                 msg = "Promtail binary couldn't be download - {}".format(str(e))
                 logger.warning(msg)
                 raise PromtailDigestError(msg)
+            else:
+                self._update_config(event)
+                self._update_agents_list(event)
+                self._add_pebble_layer()
+                self._container.restart(WORKLOAD_SERVICE_NAME)
 
     def _on_log_proxy_relation_departed(self, event):
         """Event handler for the `log_proxy_relation_departed`.
