@@ -1271,6 +1271,8 @@ class LogProxyConsumer(RelationManagerBase):
         self._log_files = log_files or []
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
+        self.topology = JujuTopology.from_charm(charm)
+
         self.framework.observe(
             self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created
         )
@@ -1628,13 +1630,7 @@ class LogProxyConsumer(RelationManagerBase):
         job_name = "juju_{}_{}_{}".format(
             self._charm.model.name, self._charm.model.uuid, self._charm.model.app.name
         )
-        common_labels = {
-            "juju_application": self._charm.app.name,
-            "juju_model": self._charm.model.name,
-            "juju_model_uuid": self._charm.model.uuid,
-            "juju_charm": self._charm.meta.name,
-        }
-
+        common_labels = self.topology.as_dict_with_logql_labels()
         scrape_configs = []
 
         # Files config
