@@ -230,7 +230,7 @@ Adopting this object in a charmed operator consist of two steps:
    ```
 
    - `container_name` is the name of the container in which the application is running.
-      If in the Pod there is only one container, this argument can be avoided.
+      If in the Pod there is only one container, this argument can be omitted.
 
    - You can configure your syslog software using `localhost` as the address and the method
      `LogProxyConsumer.syslog_port` to get the port, or, alternatively, if you are using rsyslog
