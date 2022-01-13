@@ -1110,7 +1110,7 @@ class ConsumerBase(RelationManagerBase):
 
         if invalid_files:
             must_contain = ["'alert'", "'expr'"]
-            if self.allow_free_standing_rules:
+            if not self.allow_free_standing_rules:
                 must_contain.append("'%%juju_topology%%'")
 
             message = "Failed to read alert rules (must contain {}): ".format(
