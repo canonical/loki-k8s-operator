@@ -10,6 +10,7 @@ This document explains how to use the two principal objects this library provide
 
 - `LokiPushApiProvider`: This object is meant to be used by any Charmed Operator that needs to
 implement the provider side of the `loki_push_api` relation interface. For instance, a Loki charm.
+The provider side of the relation represents the server side, to which logs are being pushed.
 
 - `LokiPushApiConsumer`: This object is meant to be used by any Charmed Operator that needs to
 send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
