@@ -854,8 +854,8 @@ class LokiPushApiProvider(RelationManagerBase):
         self,
         charm,
         relation_name: str = DEFAULT_RELATION_NAME,
-        port: int = 3100,
         *,
+        port: int = 3100,
         rules_dir="/loki/rules",
     ):
         """A Loki service provider.
