@@ -1256,8 +1256,8 @@ class LogProxyConsumer(RelationManagerBase):
     def __init__(
         self,
         charm,
-        log_files: list,
-        container_name: Optional[str],
+        log_files: list = [],
+        container_name: Optional[str] = None,
         relation_name: str = "log_proxy",
         enable_syslog: bool = False,
         syslog_port: int = 1514,
@@ -1266,9 +1266,9 @@ class LogProxyConsumer(RelationManagerBase):
         self._stored.set_default(grafana_agents="{}")
         self._charm = charm
         self._relation_name = relation_name
-        self._container_name = container_name
         self._container = self._get_container(container_name)
-        self._log_files = log_files or []
+        self._container_name = self._get_container_name(container_name)
+        self._log_files = log_files
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = JujuTopology.from_charm(charm)
@@ -1357,6 +1357,35 @@ class LogProxyConsumer(RelationManagerBase):
                 " to get logs from."
             )
             raise PromtailDigestError(msg)
+
+    def _get_container_name(self, container_name):
+        """Gets a container_name.
+
+        If there is more than one container in the Pod a `PromtailDigestError` is raised.
+
+        Args:
+            container_name: The container name.
+
+        Returns:
+            container_name: a string representing the container_name.
+
+        Raises:
+            PromtailDigestError if no `container_name` is passed and there is more than one
+                container in the Pod.
+        """
+        if container_name is not None:
+            return container_name
+
+        containers = dict(self._charm.model.unit.containers)
+        if len(containers) == 1:
+            return "".join(list(containers.keys()))
+
+        msg = (
+            "No 'container_name' parameter has been specified; since this charmed operator"
+            " is not running exactly one container, it must be specified which container"
+            " to get logs from."
+        )
+        raise PromtailDigestError(msg)
 
     def _add_pebble_layer(self):
         """Adds Pebble layer that manages Promtail service in Workload container."""
