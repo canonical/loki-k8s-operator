@@ -18,7 +18,7 @@ import textwrap
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
-from charms.grafana_k8s.v0.grafana_source import GrafanaSourceConsumer
+from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -49,9 +49,8 @@ class LokiOperatorCharm(CharmBase):
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
-        self.grafana_source_consumer = GrafanaSourceConsumer(
+        self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
-            name="grafana-source",
             refresh_event=self.on.loki_pebble_ready,
             source_type="loki",
             source_port=str(self._port),
