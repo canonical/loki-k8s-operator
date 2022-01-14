@@ -8,44 +8,46 @@ r"""## Overview.
 
 This document explains how to use the two principal objects this library provides:
 
+- `LokiPushApiProvider`: This object is meant to be used by any Charmed Operator that needs to
+implement the provider side of the `loki_push_api` relation interface. For instance, a Loki charm.
 
-- `LokiPushApiProvider`: This object is meant to be used by any charmed operator that needs to
-implement the provider side of the `loki_push_api` relation interface.
-For instance a Loki charm.
-
-- `LokiPushApiConsumer`: This object is meant to be used by any charmed operator that needs to
+- `LokiPushApiConsumer`: This object is meant to be used by any Charmed Operator that needs to
 send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
-For instance a Promtail or Grafana agent charm that needs to send logs to Loki.
+For instance, a Promtail or Grafana agent charm which needs to send logs to Loki.
 
-- `LogProxyConsumer`: This object can be used by any Charmed Operator that needs to
-send telemetry, such as logs to Loki through a Log Proxy by implementing the consumer side of the
+- `LogProxyConsumer`: This object can be used by any Charmed Operator which needs to
+send telemetry, such as logs, to Loki through a Log Proxy by implementing the consumer side of the
 `loki_push_api` relation interface.
-Filtering logs in Loki is largely performed on the basis of labels.
-In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
-generates telemetry like logs.
-In order to be able to control the labels on the logs pushed this object injects a Pebble layer
+
+Filtering logs in Loki is largely performed on the basis of labels. In the Juju ecosystem, Juju
+topology labels are used to uniquely identify the workload which generates telemetry like logs.
+
+In order to be able to control the labels on the logs pushed this object adds a Pebble layer
 that runs Promtail in the workload container, injecting Juju topology labels into the
 logs on the fly.
 
-
 ## LokiPushApiProvider Library Usage
 
-This object may be used by any Charmed Operator that implements the `loki_push_api` interface,
-for instance Loki or Grafana Agent.
+This object may be used by any Charmed Operator which implements the `loki_push_api` interface.
+For instance, Loki or Grafana Agent.
+
 For this purposes a charm needs to instantiate the `LokiPushApiProvider` object with one mandatory
 and three optional arguments.
 
 - `charm`: A reference to the parent (Loki) charm.
 
 - `relation_name`: The name of the relation that the charm uses to interact
-  with its clients which implements `LokiPushApiConsumer` or `LogProxyConsumer`.
-  If provided, this relation name must match a provided
-  relation in metadata.yaml with the `loki_push_api` interface.
+  with its clients, which implement `LokiPushApiConsumer` or `LogProxyConsumer`.
+
+  If provided, this relation name must match a provided relation in metadata.yaml with the
+  `loki_push_api` interface.
+
   Typically `LokiPushApiConsumer` use "logging" as a relation_name and `LogProxyConsumer` use
   "log_proxy".
+
   The default value of this arguments is "logging".
 
-  An example of this in `metadata.yaml` file should have the following section:
+  An example of this in a `metadata.yaml` file should have the following section:
 
   ```yaml
   provides:
@@ -53,8 +55,8 @@ and three optional arguments.
       interface: loki_push_api
   ```
 
-  For example a Loki charm may instantiate the
-  `LokiPushApiProvider` in its constructor as follows
+  For example, a Loki charm may instantiate the `LokiPushApiProvider` in its constructor as
+  follows:
 
       from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
       from loki_server import LokiServer
@@ -85,10 +87,10 @@ and three optional arguments.
 
 The `LokiPushApiProvider` object has several responsibilities:
 
-1. Set the URL of the Loki Push API in the provider app data bag; the URL
-   must be unique to all instances (e.g., using a load balancer).
+1. Set the URL of the Loki Push API in the relation application data bag; the URL
+   must be unique to all instances (e.g. using a load balancer).
 
-2. Set the Promtail binary URL (`promtail_binary_zip_url`) so clients that uses
+2. Set the Promtail binary URL (`promtail_binary_zip_url`) so clients that use
    `LogProxyConsumer` object can downloaded and configure it.
 
 3. Process the metadata of the consumer application, provided via the
@@ -131,9 +133,10 @@ stores these files in the directory `/loki/rules` inside the Loki charm containe
 
 ## LokiPushApiConsumer Library Usage
 
-This Loki charm interacts with its clients using the Loki
-charm library. Charms seeking to send log to Loki,
-must do so using the `LokiPushApiConsumer` object from this charm library.
+This Loki charm interacts with its clients using the Loki charm library. Charms
+seeking to send log to Loki, must do so using the `LokiPushApiConsumer` object from
+this charm library.
+
 For the simplest use cases, using the `LokiPushApiConsumer` object only requires
 instantiating it, typically in the constructor of your charm (the one which
 sends logs).
@@ -156,13 +159,14 @@ The `LokiPushApiConsumer` constructor requires two things:
 - Optionally, the name of the relation that the Loki charm uses to interact
   with its clients. If provided, this relation name must match a required
   relation in metadata.yaml with the `loki_push_api` interface.
+
   This argument is not required if your metadata.yaml has precisely one
   required relation in metadata.yaml with the `loki_push_api` interface, as the
   lib will automatically resolve the relation name inspecting the using the
   meta information of the charm
 
-Anytime the relation between a Loki provider charm and a Loki consumer charm is
-established a `LokiPushApiEndpointJoined` event is fired. In the consumer side
+Any time the relation between a Loki provider charm and a Loki consumer charm is
+established, a `LokiPushApiEndpointJoined` event is fired. In the consumer side
 is it possible to observe this event with:
 
 ```python
@@ -173,7 +177,7 @@ self.framework.observe(
 )
 ```
 
-Anytime there are departures in relations between the consumer charm and Loki
+Any time there are departures in relations between the consumer charm and Loki
 the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event, for instance:
 
 ```python
@@ -185,14 +189,12 @@ self.framework.observe(
 
 The consumer charm can then choose to update its configuration in both situations.
 
-
 ## LogProxyConsumer Library Usage
 
 Let's say that we have a workload charm that produces logs and we need to send those logs to a
 workload implementing the `loki_push_api` interface, such as `Loki` or `Grafana Agent`.
 
-Adopting this object in a charmed operator consist of two steps:
-
+Adopting this object in a Charmed Operator consist of two steps:
 
 1. Use the `LogProxyConsumer` class by instanting it in the `__init__` method of the charmed
    operator. There are two ways to get logs in to promtail. You can give it a list of files to read
@@ -246,14 +248,14 @@ Adopting this object in a charmed operator consist of two steps:
          optional: true
      ```
 
-Once the library is implemented in a charmed operator and a relation is established with
+Once the library is implemented in a Charmed Operator and a relation is established with
 the charm that implements the `loki_push_api` interface, the library will inject a
 Pebble layer that runs Promtail in the workload container to send logs.
 
 By default, the promtail binary injected into the container will be downloaded from the internet.
-If, for any reason, the container has limited network access, you may allow charm
-administrators to provide their own promtail binary at runtime by adding the following snippet to
-your charm metadata:
+If, for any reason, the container has limited network access, you may allow charm administrators
+to provide their own promtail binary at runtime by adding the following snippet to your charm
+metadata:
 
 ```yaml
 resources:
@@ -280,18 +282,19 @@ The object can raise a `PromtailDigestError` when:
 that's why in the above example, the instantiation is made in a `try/except` block
 to handle these situations conveniently.
 
-
 ## Alerting Rules
 
-This charm library also supports gathering alerting rules from all
-related Loki clients charms and enabling corresponding alerts within the
-Loki charm. Alert rules are automatically gathered by `LokiPushApiConsumer` object
-from a directory conventionally named `loki_alert_rules`.
+This charm library also supports gathering alerting rules from all related Loki client
+charms and enabling corresponding alerts within the Loki charm. Alert rules are
+automatically gathered by `LokiPushApiConsumer` object from a directory conventionally
+named `loki_alert_rules`.
+
 This directory must reside at the top level in the `src` folder of the
 consumer charm. Each file in this directory is assumed to be a single alert rule
 in YAML format. The file name must have the `.rule` extension.
 The format of this alert rule conforms to the
 [Loki docs](https://grafana.com/docs/loki/latest/rules/#alerting-rules).
+
 An example of the contents of one such file is shown below.
 
 ```yaml
@@ -309,34 +312,31 @@ annotations:
 
 ```
 
-It is **critical** to use the `%%juju_topology%%` filter in the
-expression for the alert rule shown above. This filter is a stub that
-is automatically replaced by the `LokiPushApiConsumer` following Loki Client's Juju
-topology (application, model and its UUID). Such a topology filter is
-essential to ensure that alert rules submitted by one provider charm
-generates alerts only for that same charm.  The Loki charm may
-be related to multiple Loki client charms. Without this, filter
-rules submitted by one provider charm will also result in
-corresponding alerts for other provider charms. Hence every alert rule
-expression must include such a topology filter stub.
+It is **critical** to use the `%%juju_topology%%` filter in the expression for the alert
+rule shown above. This filter is a stub that is automatically replaced by the
+`LokiPushApiConsumer` following Loki Client's Juju topology (application, model and its
+UUID). Such a topology filter is essential to ensure that alert rules submitted by one
+provider charm generates alerts only for that same charm.
 
-Gathering alert rules and generating rule files within the Loki
-charm is easily done using the `alerts()` method of
-`LokiPushApiProvider`. Alerts generated by Loki will
-automatically include Juju topology labels in the alerts. These labels
-indicate the source of the alert. The following labels are
-automatically added to every alert
+The Loki charm may be related to multiple Loki client charms. Without this, filter
+rules submitted by one provider charm will also result in corresponding alerts for other
+provider charms. Hence every alert rule expression must include such a topology filter stub.
+
+Gathering alert rules and generating rule files within the Loki charm is easily done using
+the `alerts()` method of `LokiPushApiProvider`. Alerts generated by Loki will automatically
+include Juju topology labels in the alerts. These labels indicate the source of the alert.
+
+The following labels are automatically added to every alert
 
 - `juju_model`
 - `juju_model_uuid`
 - `juju_application`
 
 
-Whether alert rules files does not contain the keys `alert` or `expr` or
-there is no alert rules file in `alert_rules_path` a `loki_push_api_alert_rules_error` event
-is emitted.
-To handle these situations the event must be observed in the `LokiClientCharm` charm.py file:
+Whether alert rules files does not contain the keys `alert` or `expr` or there is no alert
+rules file in `alert_rules_path` a `loki_push_api_alert_rules_error` event is emitted.
 
+To handle these situations the event must be observed in the `LokiClientCharm` charm.py file:
 
 ```python
 class LokiClientCharm(CharmBase):
@@ -357,12 +357,11 @@ class LokiClientCharm(CharmBase):
 
 ## Relation Data
 
-The Loki charm uses both application and unit relation data to
-obtain information regarding Loki Push API and alert rules.
+The Loki charm uses both application and unit relation data to obtain information regarding
+Loki Push API and alert rules.
 
-Units of consumer charm send their alert rules over app relation
-data using the `alert_rules` key.
-
+Units of consumer charm send their alert rules over app relation data using the `alert_rules`
+key.
 """
 
 import json
@@ -1170,11 +1169,11 @@ class LokiPushApiConsumer(ConsumerBase):
 
         Emits:
             loki_push_api_endpoint_joined: This event is emitted when the relation between the
-                charmed operator that instantiates `LokiPushApiProvider` (Loki charm for instance)
-                and the charmed operator that instantiates `LokiPushApiConsumer` is established.
+                Charmed Operator that instantiates `LokiPushApiProvider` (Loki charm for instance)
+                and the Charmed Operator that instantiates `LokiPushApiConsumer` is established.
             loki_push_api_endpoint_departed: This event is emitted when the relation between the
-                charmed operator that implements `LokiPushApiProvider` (Loki charm for instance)
-                and the charmed operator that implements `LokiPushApiConsumer` is removed.
+                Charmed Operator that implements `LokiPushApiProvider` (Loki charm for instance)
+                and the Charmed Operator that implements `LokiPushApiConsumer` is removed.
             loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
                 file is encountered or if `alert_rules_path` is empty.
         """
@@ -1352,7 +1351,7 @@ class LogProxyConsumer(RelationManagerBase):
                 return self._charm.unit.get_container([*containers].pop())
 
             msg = (
-                "No 'container_name' parameter has been specified; since this charmed operator"
+                "No 'container_name' parameter has been specified; since this Charmed Operator"
                 " is not running exactly one container, it must be specified which container"
                 " to get logs from."
             )
