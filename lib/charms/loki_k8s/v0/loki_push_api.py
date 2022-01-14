@@ -17,9 +17,9 @@ For instance a Loki charm.
 send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
 For instance a Promtail or Grafana agent charm that needs to send logs to Loki.
 
-- `LogProxyConsumer`: This object can be used by any K8s charmed operator that needs to
-send logs to Loki through a Log Proxy by implementing the consumer side of the `loki_push_api`
-relation interface.
+- `LogProxyConsumer`: This object can be used by any Charmed Operator that needs to
+send telemetry, such as logs to Loki through a Log Proxy by implementing the consumer side of the
+`loki_push_api` relation interface.
 Filtering logs in Loki is largely performed on the basis of labels.
 In the Juju ecosystem, Juju topology labels are used to uniquely identify the workload that
 generates telemetry like logs.
