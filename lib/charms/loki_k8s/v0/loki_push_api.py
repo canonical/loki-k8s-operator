@@ -1248,8 +1248,46 @@ class PromtailDigestError(Exception):
     """Raised if there is an error with Promtail binary file."""
 
 
-class LogProxyConsumer(RelationManagerBase):
-    """LogProxyConsumer class."""
+class LogProxyConsumer(ConsumerBase):
+    """LogProxyConsumer class.
+
+    The `LogProxyConsumer` object provides a method for attaching `promtail` to
+    a workload in order to generate structured logging data from applications
+    which traditionally log to syslog or do not have native Loki integration.
+    The `LogProxyConsumer` can be instantiated as follows:
+
+        self._log_proxy_consumer = LogProxyConsumer(self, log_files=["/var/log/messages"])
+
+    Args:
+        charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
+            Typically this is `self` in the instantiating class.
+        log_files: a list of log files to monitor with Promtail.
+        relation_name: the string name of the relation interface to look up.
+            If `charm` has exactly one relation with this interface, the relation's
+            name is returned. If none or multiple relations with the provided interface
+            are found, this method will raise either an exception of type
+            NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
+            respectively.
+        enable_syslog: Whether or not to enable syslog integration.
+        syslog_port: The port syslog is attached to.
+        alert_rules_path: an optional path for the location of alert rules
+            files. Defaults to "./src/loki_alert_rules",
+            resolved from the directory hosting the charm entry file.
+            The alert rules are automatically updated on charm upgrade.
+        allow_free_standing_rules: A boolean to allow rules which are not in
+            `alert_rules_path`.
+        container_name: An optional container name to inject the payload into.
+
+    Raises:
+        RelationNotFoundError: If there is no relation in the charm's metadata.yaml
+            with the same name as provided via `relation_name` argument.
+        RelationInterfaceMismatchError: The relation with the same name as provided
+            via `relation_name` argument does not have the `loki_push_api` relation
+            interface.
+        RelationRoleMismatchError: If the relation with the same name as provided
+            via `relation_name` argument does not have the `RelationRole.provides`
+            role.
+    """
 
     _stored = StoredState()
 
@@ -1257,12 +1295,14 @@ class LogProxyConsumer(RelationManagerBase):
         self,
         charm,
         log_files: list = [],
-        container_name: Optional[str] = None,
         relation_name: str = "log_proxy",
         enable_syslog: bool = False,
         syslog_port: int = 1514,
+        alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        allow_free_standing_rules: bool = False,
+        container_name: Optional[str] = None,
     ):
-        super().__init__(charm, relation_name)
+        super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
         self._stored.set_default(grafana_agents="{}")
         self._charm = charm
         self._relation_name = relation_name
