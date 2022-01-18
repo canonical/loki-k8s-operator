@@ -9,8 +9,7 @@ display-name: Loki
 description: |
   Loki for Kubernetes cluster
 summary: |
-  Loki is a cost-efficient tool for compressing, storing and consuming 
-  logs indexed by log metadata.
+  Loki is a set of components that can be composed into a fully featured logging stack.
 
 maintainers:
     - Jose Massón <jose.masson@canonical.com>
