@@ -4,7 +4,6 @@
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import unittest
-from typing import Dict
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import yaml
