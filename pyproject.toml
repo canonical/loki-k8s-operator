@@ -1,3 +1,6 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
@@ -49,11 +52,12 @@ allow_redefinition = true
 
 # Ignore libraries that do not have type hint nor stubs
 [[tool.mypy.overrides]]
-module = ["ops.*", "pytest_operator.*"]
+module = ["ops.*", "pytest_operator.*", "requests.packages.urllib3.*"]
 ignore_missing_imports = true
+follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-module = ["charms.alertmanager_k8s.v0.*", "charms.grafana_k8s.v0.*"]
+module = ["charms.prometheus_k8s.*"]
 follow_imports = "silent"
 
 [tool.pytest.ini_options]
