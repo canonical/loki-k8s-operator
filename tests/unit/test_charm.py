@@ -93,9 +93,13 @@ class PushPullMock:
 class TestCharm(unittest.TestCase):
     def setUp(self):
         self.container_name: str = "loki"
-        self.push_pull_mock = PushPullMock()
+        version_patcher = patch(
+            "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
+        )
+        self.mock_version = version_patcher.start()
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
+        self.addCleanup(version_patcher.stop)
         self.harness.set_leader(True)
         self.harness.begin()
 
@@ -116,30 +120,32 @@ class TestCharm(unittest.TestCase):
             self.harness.charm._alerting_config()
             self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
 
+    @patch("ops.model.Container.can_connect", return_value=False)
     @patch("charm.LokiOperatorCharm._loki_config")
     def test__on_config_cannot_connect(self, mock_loki_config, *unused):
         self.harness.set_leader(True)
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
-        self.harness.charm._container.can_connect = Mock()
-        self.harness.charm._container.can_connect.return_value = False
-        self.harness.update_config(yaml.safe_load(LOKI_CONFIG))
+
+        # Since harness was not started with begin_with_initial_hooks(), this must
+        # be emitted by hand to actually trigger _configure()
+        self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
     @patch("ops.testing._TestingPebbleClient.push")
+    @patch("ops.testing._TestingPebbleClient.make_dir")
+    @patch("ops.model.Container.can_connect", return_value=True)
     @patch("charm.LokiOperatorCharm._loki_config")
     def test__on_config_can_connect(self, mock_loki_config, *unused):
-        self.harness.set_leader(True)
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
-        self.harness.charm._container.can_connect = Mock()
-        self.harness.charm._container.can_connect.return_value = True
-        self.harness.update_config(yaml.safe_load(LOKI_CONFIG))
+        self.harness.set_leader(True)
+
+        # Since harness was not started with begin_with_initial_hooks(), this must
+        # be emitted by hand to actually trigger _configure()
+        self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @patch("ops.testing._TestingPebbleClient.make_dir")
-    @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    def test__provide_loki(self, mock_version, *unused):
-        mock_version.return_value = "3.14159"
-
+    def test__provide_loki(self, *unused):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
             self.assertEqual(
@@ -147,23 +153,18 @@ class TestCharm(unittest.TestCase):
                 ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
             )
 
-    @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    def test__provide_loki_not_ready(self, mock_version):
-        mock_version.side_effect = LokiServerNotReadyError
+    def test__provide_loki_not_ready(self):
+        self.mock_version.side_effect = LokiServerNotReadyError
         self.harness.charm._provide_loki()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
-    @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    def test__provide_loki_server_error(self, mock_version):
-        mock_version.side_effect = LokiServerError
+    def test__provide_loki_server_error(self):
+        self.mock_version.side_effect = LokiServerError
         self.harness.charm._provide_loki()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
     @patch("ops.testing._TestingPebbleClient.make_dir")
-    @patch("loki_server.LokiServer.version", new_callable=PropertyMock)
-    def test__loki_config(self, mock_version, *unused):
-        mock_version.return_value = "3.14159"
-
+    def test__loki_config(self, *unused):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
             self.assertEqual(
