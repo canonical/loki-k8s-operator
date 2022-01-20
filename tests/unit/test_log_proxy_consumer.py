@@ -147,10 +147,10 @@ class TestLogProxyConsumer(unittest.TestCase):
                 self.assertEqual(set(job["syslog"]["labels"]), expected)
 
     def test__add_client(self):
-        expected_clients = [
-            {"url": "http://10.20.30.1:3500/loki/api/v1/push"},
-            {"url": "http://10.20.30.2:3500/loki/api/v1/push"},
-        ]
+        expected_clients = {
+            "http://10.20.30.1:3500/loki/api/v1/push",
+            "http://10.20.30.2:3500/loki/api/v1/push",
+        }
         rel_id = self.harness.add_relation("log_proxy", "agent")
         self.harness.add_relation_unit(rel_id, "agent/0")
         self.harness.update_relation_data(
@@ -164,7 +164,9 @@ class TestLogProxyConsumer(unittest.TestCase):
             "agent/1",
             {"loki_push_api": '{"url": "http://10.20.30.2:3500/loki/api/v1/push"}'},
         )
-        self.assertEqual(self.harness.charm._log_proxy._clients_list(), expected_clients)
+        self.assertEqual(
+            {x["url"] for x in self.harness.charm._log_proxy._clients_list()}, expected_clients
+        )
 
     def test__get_container_container_name_not_exist(self):
         # Container do not exist

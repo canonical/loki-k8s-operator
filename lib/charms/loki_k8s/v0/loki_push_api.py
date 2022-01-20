@@ -430,16 +430,8 @@ from ops.charm import (
     RelationRole,
     WorkloadEvent,
 )
-from ops.framework import (
-    EventBase,
-    EventSource,
-    Object,
-    ObjectEvents,
-    StoredDict,
-    StoredList,
-    StoredState,
-)
 from ops.model import Container, ModelError, Relation
+from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.pebble import APIError
 
 # The unique Charmhub library identifier, never change it
@@ -1490,6 +1482,7 @@ class LogProxyConsumer(ConsumerBase):
 
 class LogProxyConsumer(RelationManagerBase):
     """LogProxyConsumer class."""
+
     def __init__(
         self,
         charm,
