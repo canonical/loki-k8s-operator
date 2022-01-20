@@ -115,7 +115,7 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
     @patch("charm.LokiOperatorCharm._loki_config")
-    def test__on_config_can_connect(self, mock_loki_config, *unused):
+    def test__on_config_can_connect(self, mock_loki_config):
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
         self.harness.set_leader(True)
 
@@ -124,7 +124,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
-    def test__provide_loki(self, *unused):
+    def test__provide_loki(self):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
             self.assertEqual(
