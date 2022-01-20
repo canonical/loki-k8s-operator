@@ -5,7 +5,7 @@
 
 import unittest
 from typing import Dict
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import yaml
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
@@ -103,9 +103,9 @@ class TestCharm(unittest.TestCase):
             self.harness.charm._alerting_config()
             self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
 
-    @patch("ops.model.Container.can_connect", return_value=False)
+    @patch("ops.model.Container.can_connect", MagicMock(return_value=False))
     @patch("charm.LokiOperatorCharm._loki_config")
-    def test__on_config_cannot_connect(self, mock_loki_config, *unused):
+    def test__on_config_cannot_connect(self, mock_loki_config):
         self.harness.set_leader(True)
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
 
@@ -114,10 +114,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
-    @patch("ops.testing._TestingPebbleClient.push")
-    @patch("ops.model.Container.can_connect", return_value=True)
+    @patch("ops.testing._TestingPebbleClient.push", Mock())
+    @patch("ops.model.Container.can_connect", MagicMock(return_value=True))
     @patch("charm.LokiOperatorCharm._loki_config")
-    def test__on_config_can_connect(self, mock_loki_config, *unused):
+    def test__on_config_can_connect(self, mock_loki_config):
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
         self.harness.set_leader(True)
 
@@ -126,7 +126,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
-    def test__provide_loki(self, *unused):
+    def test__provide_loki(self):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
             self.assertEqual(
@@ -144,7 +144,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._provide_loki()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
-    def test__loki_config(self, *unused):
+    def test__loki_config(self):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
             self.assertEqual(
