@@ -84,6 +84,7 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(version_patcher.stop)
         self.harness.set_leader(True)
         self.harness.begin()
+        self.harness.charm._stored.config = LOKI_CONFIG
 
     def test__alerting_config(self):
         self.harness.charm.alertmanager_consumer = Mock()
@@ -113,7 +114,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
-    @patch("ops.testing._TestingPebbleClient.push", Mock())
     @patch("ops.model.Container.can_connect", MagicMock(return_value=True))
     @patch("charm.LokiOperatorCharm._loki_config")
     def test__on_config_can_connect(self, mock_loki_config):
