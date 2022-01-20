@@ -7,7 +7,6 @@ from hashlib import sha256
 from unittest.mock import MagicMock, mock_open, patch
 
 from charms.loki_k8s.v0.loki_push_api import ContainerNotFoundError, LogProxyConsumer
-from deepdiff import DeepDiff  # type: ignore
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.model import Container
@@ -78,7 +77,7 @@ class ConsumerCharm(CharmBase):
         self._port = 3100
         self._stored.set_default(invalid_events=0)
         self._log_proxy = LogProxyConsumer(
-            charm=self, log_files=LOG_FILES, container_name="consumercharm", enable_syslog=True
+            charm=self, container_name="loki", log_files=LOG_FILES, enable_syslog=True
         )
 
         self.framework.observe(
@@ -94,14 +93,12 @@ class ConsumerCharmSyslogDisabled(ConsumerCharm):
         super(ConsumerCharm, self).__init__(*args)
         self._port = 3100
         self._log_proxy = LogProxyConsumer(
-            charm=self, log_files=LOG_FILES, container_name="consumercharm", enable_syslog=False
+            charm=self, container_name="loki", log_files=LOG_FILES, enable_syslog=False
         )
 
 
 class TestLogProxyConsumer(unittest.TestCase):
-    @patch("charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._get_container")
-    def setUp(self, mock_container):
-        mock_container.return_value = True
+    def setUp(self):
 
         self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
         self.harness.set_model_info(name="MODEL", uuid="123456")
@@ -113,21 +110,21 @@ class TestLogProxyConsumer(unittest.TestCase):
         self.assertIn("-config.file=", self.harness.charm._log_proxy._cli_args)
 
     def test__initial_config_sections(self):
-        expected_sections = {"positions", "scrape_configs", "server"}
-        self.assertEqual(set(self.harness.charm._log_proxy._initial_config), expected_sections)
+        expected_sections = {"clients", "positions", "scrape_configs", "server"}
+        self.assertEqual(set(self.harness.charm._log_proxy._promtail_config), expected_sections)
 
     def test__initial_config_jobs(self):
         expected_jobs = {"system", "syslog"}
         self.assertEqual(
             {
                 x["job_name"]
-                for x in self.harness.charm._log_proxy._initial_config["scrape_configs"]
+                for x in self.harness.charm._log_proxy._promtail_config["scrape_configs"]
             },
             expected_jobs,
         )
 
     def test__initial_config_labels(self):
-        for job in self.harness.charm._log_proxy._initial_config["scrape_configs"]:
+        for job in self.harness.charm._log_proxy._promtail_config["scrape_configs"]:
             if job["job_name"] == "system":
                 expected = {
                     "__path__",
@@ -149,35 +146,25 @@ class TestLogProxyConsumer(unittest.TestCase):
                 }
                 self.assertEqual(set(job["syslog"]["labels"]), expected)
 
-    def test__add_client_with_client_section(self):
-        agent_url1 = "http://10.20.30.1:3500/loki/api/v1/push"
-        agent_url2 = "http://10.20.30.2:3500/loki/api/v1/push"
-
-        expected_config = CONFIG.copy()
-        expected_config["clients"] = [{"url": agent_url1}, {"url": agent_url2}]
-        self.harness.charm._log_proxy._add_client(CONFIG, agent_url1)
-        conf = self.harness.charm._log_proxy._add_client(CONFIG, agent_url2)
-        self.assertEqual(DeepDiff(conf, expected_config, ignore_order=True), {})
-
-    def test__add_client_without_client_section(self):
-        agent_url1 = "http://10.20.30.1:3500/loki/api/v1/push"
-        agent_url2 = "http://10.20.30.2:3500/loki/api/v1/push"
-        CONFIG.pop("clients")
-        expected_config2 = CONFIG.copy()
-        expected_config2["clients"] = [{"url": agent_url1}, {"url": agent_url2}]
-        self.harness.charm._log_proxy._add_client(CONFIG, agent_url1)
-        conf1 = self.harness.charm._log_proxy._add_client(CONFIG, agent_url2)
-        self.assertEqual(DeepDiff(conf1, expected_config2, ignore_order=True), {})
-
-    def test__remove_client(self):
-        agent_url1 = "http://10.20.30.1:3500/loki/api/v1/push"
-        agent_url2 = "http://10.20.30.2:3500/loki/api/v1/push"
-        CONFIG["clients"] = [{"url": agent_url1}, {"url": agent_url2}]
-        expected_config: dict = CONFIG.copy()
-        expected_config["clients"].pop(0)
-
-        conf = self.harness.charm._log_proxy._remove_client(CONFIG, agent_url1)
-        self.assertEqual(DeepDiff(conf, expected_config, ignore_order=True), {})
+    def test__add_client(self):
+        expected_clients = [
+            {"url": "http://10.20.30.1:3500/loki/api/v1/push"},
+            {"url": "http://10.20.30.2:3500/loki/api/v1/push"},
+        ]
+        rel_id = self.harness.add_relation("log_proxy", "agent")
+        self.harness.add_relation_unit(rel_id, "agent/0")
+        self.harness.update_relation_data(
+            rel_id,
+            "agent/0",
+            {"loki_push_api": '{"url": "http://10.20.30.1:3500/loki/api/v1/push"}'},
+        )
+        self.harness.add_relation_unit(rel_id, "agent/1")
+        self.harness.update_relation_data(
+            rel_id,
+            "agent/1",
+            {"loki_push_api": '{"url": "http://10.20.30.2:3500/loki/api/v1/push"}'},
+        )
+        self.assertEqual(self.harness.charm._log_proxy._clients_list(), expected_clients)
 
     def test__get_container_container_name_not_exist(self):
         # Container do not exist
@@ -303,6 +290,6 @@ class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
             "syslog"
             not in {
                 x["job_name"]
-                for x in self.harness.charm._log_proxy._initial_config["scrape_configs"]
+                for x in self.harness.charm._log_proxy._promtail_config["scrape_configs"]
             }
         )
