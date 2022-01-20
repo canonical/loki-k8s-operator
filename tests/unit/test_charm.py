@@ -73,23 +73,6 @@ table_manager:
 """
 
 
-class PushPullMock:
-    def __init__(self):
-        self._filesystem: Dict[str, str] = {}
-
-    def pull(self, path: str, *args, **kwargs) -> str:
-        return self._filesystem.get(path, "")
-
-    def push(self, path: str, source: str, *args, **kwargs) -> None:
-        self._filesystem[path] = source
-
-    def patch_push(self):
-        return patch("ops.testing._TestingPebbleClient.push", self.push)
-
-    def patch_pull(self):
-        return patch("ops.testing._TestingPebbleClient.pull", self.pull)
-
-
 class TestCharm(unittest.TestCase):
     def setUp(self):
         self.container_name: str = "loki"
@@ -132,7 +115,6 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
     @patch("ops.testing._TestingPebbleClient.push")
-    @patch("ops.testing._TestingPebbleClient.make_dir")
     @patch("ops.model.Container.can_connect", return_value=True)
     @patch("charm.LokiOperatorCharm._loki_config")
     def test__on_config_can_connect(self, mock_loki_config, *unused):
@@ -144,7 +126,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
-    @patch("ops.testing._TestingPebbleClient.make_dir")
     def test__provide_loki(self, *unused):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
@@ -163,7 +144,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._provide_loki()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
-    @patch("ops.testing._TestingPebbleClient.make_dir")
     def test__loki_config(self, *unused):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
