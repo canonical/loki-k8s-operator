@@ -609,19 +609,6 @@ def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
     return True
 
 
-def _type_convert_stored(obj):
-    """Convert Stored* to their appropriate types, recursively."""
-    if isinstance(obj, StoredList):
-        return list(map(_type_convert_stored, obj))
-    elif isinstance(obj, StoredDict):
-        rdict = {}  # type: Dict[Any, Any]
-        for k in obj.keys():
-            rdict[k] = _type_convert_stored(obj[k])
-        return rdict
-    else:
-        return obj
-
-
 class JujuTopology:
     """Class for storing and formatting juju topology information."""
 
@@ -1447,6 +1434,7 @@ class LogProxyEndpointDeparted(EventBase):
 class LogProxyEndpointJoined(EventBase):
     """Event emitted when a Log Proxy joins."""
 
+<<<<<<< HEAD
 
 class LogProxyEvents(ObjectEvents):
     """Event descriptor for events raised by `LogProxyConsumer`."""
@@ -1500,6 +1488,8 @@ class LogProxyConsumer(ConsumerBase):
     on = LogProxyEvents()
     _stored = StoredState()
 
+class LogProxyConsumer(RelationManagerBase):
+    """LogProxyConsumer class."""
     def __init__(
         self,
         charm,
@@ -1511,8 +1501,7 @@ class LogProxyConsumer(ConsumerBase):
         allow_free_standing_rules: bool = False,
         container_name: Optional[str] = None,
     ):
-        super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
-        self._stored.set_default(grafana_agents="{}")
+        super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
