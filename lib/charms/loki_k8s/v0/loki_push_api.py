@@ -794,7 +794,7 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         self.relations = relations
         self.message = (
             "Multiple relations with interface '{}' found in the meta of the '{}' charm.".format(
-                relation_interface, charm.name
+                relation_interface, charm.meta.name
             )
         )
         super().__init__(self.message)
