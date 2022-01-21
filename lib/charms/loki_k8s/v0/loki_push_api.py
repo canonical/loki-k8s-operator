@@ -1272,8 +1272,12 @@ class ConsumerBase(RelationManagerBase):
 class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
 
+<<<<<<< HEAD
     on = LokiPushApiEvents()
     _stored = StoredState()
+=======
+    on = LoggingEvents()
+>>>>>>> Types in the library, remove more StoredState
 
     def __init__(
         self,
@@ -1325,8 +1329,12 @@ class LokiPushApiConsumer(ConsumerBase):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
+<<<<<<< HEAD
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._stored.set_default(loki_push_api={})
+=======
+        super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
+>>>>>>> Types in the library, remove more StoredState
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
@@ -1363,7 +1371,11 @@ class LokiPushApiConsumer(ConsumerBase):
         self._handle_alert_rules(relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
+<<<<<<< HEAD
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
+=======
+    def _on_logging_relation_departed(self, _: RelationEvent):
+>>>>>>> Types in the library, remove more StoredState
         """Handle departures in related providers.
 
         Anytime there are departures in relations between the consumer charm and Loki
@@ -1372,7 +1384,6 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         # Provide default to avoid throwing, as in some complicated scenarios with
         # upgrades and hook failures we might not have data in the storage
-        self._stored.loki_push_api.pop(event.relation.id, None)
         self.on.loki_push_api_endpoint_departed.emit()
 
     @property
@@ -1486,7 +1497,12 @@ class LogProxyConsumer(RelationManagerBase):
     def __init__(
         self,
         charm,
+<<<<<<< HEAD
         log_files: list = [],
+=======
+        log_files: list = None,
+        container_name: Optional[str] = None,
+>>>>>>> Types in the library, remove more StoredState
         relation_name: str = "log_proxy",
         enable_syslog: bool = False,
         syslog_port: int = 1514,
@@ -1499,39 +1515,48 @@ class LogProxyConsumer(RelationManagerBase):
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
         self._container_name = self._get_container_name(container_name)
-        self._log_files = log_files
+        self._log_files = log_files or []
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = JujuTopology.from_charm(charm)
 
-        self.framework.observe(
-            self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created
-        )
-        self.framework.observe(
-            self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed
-        )
-        self.framework.observe(
-            self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed
-        )
+        events = self._charm.on[relation_name]
+        self.framework.observe(events.relation_created, self._on_relation_created)
+        self.framework.observe(events.relation_changed, self._on_relation_changed)
+        self.framework.observe(events.relation_departed, self._on_relation_departed)
         self.framework.observe(
             getattr(self._charm.on, "{}_pebble_ready".format(self._container_name)),
             self._on_pebble_ready,
         )
 
+<<<<<<< HEAD
     def _on_pebble_ready(self, _: WorkloadEvent):
+=======
+    def _on_pebble_ready(self, _: HookEvent) -> None:
+>>>>>>> Types in the library, remove more StoredState
         """Event handler for `pebble_ready`."""
         if self.model.relations[self._relation_name] and not self._is_promtail_installed():
             self._setup_promtail()
 
+<<<<<<< HEAD
     def _on_log_proxy_relation_created(self, _: RelationCreatedEvent):
         """Event handler for the `log_proxy_relation_created`."""
+=======
+    def _on_relation_created(self, _: RelationEvent) -> None:
+        """Event handler for `relation_created`."""
+>>>>>>> Types in the library, remove more StoredState
         if not self._container.can_connect():
             return
         if not self._is_promtail_installed():
             self._setup_promtail()
 
+<<<<<<< HEAD
     def _on_log_proxy_relation_changed(self, _: RelationChangedEvent):
         """Event handler for the `log_proxy_relation_changed`.
+=======
+    def _on_relation_changed(self, _: RelationEvent) -> None:
+        """Event handler for `relation_changed`.
+>>>>>>> Types in the library, remove more StoredState
 
         Args:
             event: The event object `RelationChangedEvent`.
@@ -1545,23 +1570,32 @@ class LogProxyConsumer(RelationManagerBase):
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
 
+<<<<<<< HEAD
     def _on_log_proxy_relation_departed(self, _: RelationDepartedEvent):
         """Event handler for the `log_proxy_relation_departed`.
+=======
+    def _on_relation_departed(self, _: RelationEvent) -> None:
+        """Event handler for `relation_departed`.
+>>>>>>> Types in the library, remove more StoredState
 
         Args:
             event: The event object `RelationDepartedEvent`.
         """
+        if not self._charm.model.relations[self._relation_name]:
+            self._container.stop(WORKLOAD_SERVICE_NAME)
+            return
+
         new_config = self._promtail_config
         if new_config != self._current_config:
             self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
 
-        if not self._charm.model.relations[self._relation_name]:
-            self._container.stop(WORKLOAD_SERVICE_NAME)
-        else:
-            self._container.restart(WORKLOAD_SERVICE_NAME)
+        self._container.restart(WORKLOAD_SERVICE_NAME)
 
+<<<<<<< HEAD
         self.on.log_proxy_endpoint_departed.emit()
 
+=======
+>>>>>>> Types in the library, remove more StoredState
     def _get_container(self, container_name: Optional[str] = "") -> Container:
         """Gets a single container by name or using the only container running in the Pod.
 
@@ -1614,7 +1648,7 @@ class LogProxyConsumer(RelationManagerBase):
 
         raise ContainerNotFoundError
 
-    def _add_pebble_layer(self):
+    def _add_pebble_layer(self) -> None:
         """Adds Pebble layer that manages Promtail service in Workload container."""
         pebble_layer = {
             "summary": "promtail layer",
@@ -1875,7 +1909,7 @@ class LogProxyConsumer(RelationManagerBase):
 
         return static_configs
 
-    def _setup_promtail(self):
+    def _setup_promtail(self) -> None:
         if (
             self._charm.model.relations[self._relation_name][0].data.get(
                 "promtail_binary_zip_url", None
@@ -1898,7 +1932,7 @@ class LogProxyConsumer(RelationManagerBase):
             self._container.restart(WORKLOAD_SERVICE_NAME)
             self.on.log_proxy_endpoint_joined.emit()
 
-    def _is_promtail_installed(self):
+    def _is_promtail_installed(self) -> bool:
         """Determine if promtail has already been installed to the container."""
         try:
             self._container.list_files(WORKLOAD_BINARY_PATH)
@@ -1907,7 +1941,11 @@ class LogProxyConsumer(RelationManagerBase):
         return True
 
     @property
+<<<<<<< HEAD
     def syslog_port(self) -> str:
+=======
+    def syslog_port(self) -> int:
+>>>>>>> Types in the library, remove more StoredState
         """Gets the port on which promtail is listening for syslog.
 
         Returns:
@@ -1916,7 +1954,7 @@ class LogProxyConsumer(RelationManagerBase):
         return str(self._syslog_port)
 
     @property
-    def rsyslog_config(self):
+    def rsyslog_config(self) -> str:
         """Generates a config line for use with rsyslog.
 
         Returns:
