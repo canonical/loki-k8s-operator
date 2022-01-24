@@ -1204,11 +1204,22 @@ class LokiPushApiConsumer(ConsumerBase):
                 file is encountered or if `alert_rules_path` is empty.
         """
         if isinstance(event, RelationEvent):
-            self._process_logging_relation_changed(event.relation)
+            self.refresh(event.relation)
         else:
             # Upgrade event or other charm-level event
-            for relation in self._charm.model.relations[self._relation_name]:
-                self._process_logging_relation_changed(relation)
+            self.refresh()
+
+    def refresh(self, relation: Relation = None):
+        """Refresh relation(s).
+
+        Args:
+            relation: the relation to refresh, or refresh all relations if omitted.
+        """
+        relations_to_refresh = (
+            [relation] if relation else self._charm.model.relations[self._relation_name]
+        )
+        for rel in relations_to_refresh:
+            self._process_logging_relation_changed(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
         loki_push_api_data = relation.data[relation.app].get("loki_push_api")
