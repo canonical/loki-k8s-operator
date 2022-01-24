@@ -5,7 +5,7 @@ import json
 import os
 import textwrap
 import unittest
-from unittest.mock import PropertyMock, patch
+from unittest.mock import patch
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, _is_valid_rule
@@ -100,12 +100,10 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             None,
         )
 
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.load_alert_rules_from_dir",
-        new_callable=PropertyMock,
-    )
-    def test__on_logging_relation_changed(self, mock_alert_rules):
-        mock_alert_rules.return_value = (LABELED_ALERT_RULES, [])
+    @patch("charms.loki_k8s.v0.loki_push_api.AlertRules.add_path")
+    @patch("charms.loki_k8s.v0.loki_push_api.AlertRules.as_dict", new=lambda *a, **kw: {})
+    def test__on_logging_relation_changed(self, mock_as_dict):
+        mock_as_dict.return_value = (LABELED_ALERT_RULES, {})
         loki_push_api = "http://10.1.2.3:3100/loki/api/v1/push"
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
@@ -194,7 +192,7 @@ class TestReloadAlertRules(unittest.TestCase):
                 super().__init__(*args)
                 self._port = 3100
                 self.loki_consumer = LokiPushApiConsumer(
-                    self, alert_rules_path=alert_rules_path, allow_free_standing_rules=True
+                    self, alert_rules_path=alert_rules_path, recursive=True
                 )
 
         self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
