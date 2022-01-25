@@ -1093,7 +1093,9 @@ class ConsumerBase(RelationManagerBase):
                 self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
 
             relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
+            relation.data[self._charm.app]["alert_rules"] = json.dumps(
+                {"groups": alert_groups} if alert_groups else {}
+            )
 
     def _check_alert_rules(self, alert_groups, invalid_files) -> str:
         """Check alert rules.
