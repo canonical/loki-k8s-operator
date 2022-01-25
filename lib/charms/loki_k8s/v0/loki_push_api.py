@@ -1212,7 +1212,7 @@ class LokiPushApiConsumer(ConsumerBase):
             for relation in self._charm.model.relations[self._relation_name]:
                 self._process_logging_relation_changed(relation)
 
-    def reload_alert_rules(self):
+    def _reinitialize_alert_rules(self):
         """Reloads alert rules and updates all relations."""
         for relation in self._charm.model.relations[self._relation_name]:
             self._handle_alert_rules(relation)
