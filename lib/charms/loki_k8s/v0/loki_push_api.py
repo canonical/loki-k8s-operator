@@ -405,7 +405,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 logger = logging.getLogger(__name__)
 
@@ -1093,7 +1093,9 @@ class ConsumerBase(RelationManagerBase):
                 self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
 
             relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
+            relation.data[self._charm.app]["alert_rules"] = json.dumps(
+                {"groups": alert_groups} if alert_groups else {}
+            )
 
     def _check_alert_rules(self, alert_groups, invalid_files) -> str:
         """Check alert rules.
@@ -1209,6 +1211,11 @@ class LokiPushApiConsumer(ConsumerBase):
             # Upgrade event or other charm-level event
             for relation in self._charm.model.relations[self._relation_name]:
                 self._process_logging_relation_changed(relation)
+
+    def _reinitialize_alert_rules(self):
+        """Reloads alert rules and updates all relations."""
+        for relation in self._charm.model.relations[self._relation_name]:
+            self._handle_alert_rules(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
         loki_push_api_data = relation.data[relation.app].get("loki_push_api")
