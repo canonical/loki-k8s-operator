@@ -448,6 +448,7 @@ logger = logging.getLogger(__name__)
 RELATION_INTERFACE_NAME = "loki_push_api"
 DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
+DEFAULT_LOG_PROXY_RELATION_NAME = "log-proxy"
 
 PROMTAIL_BINARY_ZIP_URL = (
     "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
@@ -1454,7 +1455,7 @@ class LogProxyConsumer(ConsumerBase):
         self,
         charm,
         log_files: list = None,
-        relation_name: str = "log-proxy",
+        relation_name: str = DEFAULT_LOG_PROXY_RELATION_NAME,
         enable_syslog: bool = False,
         syslog_port: int = 1514,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
