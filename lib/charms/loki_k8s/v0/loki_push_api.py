@@ -1518,6 +1518,8 @@ class LogProxyConsumer(ConsumerBase):
         Args:
             event: The event object `RelationDepartedEvent`.
         """
+        if not self._container.can_connect():
+            return
         if not self._charm.model.relations[self._relation_name]:
             self._container.stop(WORKLOAD_SERVICE_NAME)
             return
