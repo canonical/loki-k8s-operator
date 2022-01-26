@@ -414,7 +414,7 @@ from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from urllib.error import HTTPError
 from urllib.request import urlopen
 from zipfile import ZipFile
@@ -423,15 +423,14 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
-    RelationChangedEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
     RelationRole,
     WorkloadEvent,
 )
+from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
-from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.pebble import APIError
 
 # The unique Charmhub library identifier, never change it
@@ -580,25 +579,6 @@ def _validate_relation_by_interface_and_direction(
             )
     else:
         raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
-
-
-def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
-    """This method validates if an alert rule is well formed.
-
-    Args:
-        rule: A dictionary containing an alert rule definition
-
-    Returns:
-        True if the alert rule is well formed; False otherwise.
-    """
-    mandatory = ["alert", "expr"]
-    if any(field not in rule for field in mandatory):
-        return False
-
-    if not allow_free_standing and "%%juju_topology%%" not in rule["expr"]:
-        return False
-
-    return True
 
 
 class JujuTopology:
@@ -976,22 +956,6 @@ class RelationManagerBase(Object):
         self.name = relation_name
 
 
-class LokiPushApiAlertRulesError(EventBase):
-    """Event emitted when an AlertRulesError exception is raised."""
-
-    def __init__(self, handle, message):
-        super().__init__(handle)
-        self.message = message
-
-    def snapshot(self) -> dict:
-        """Save message information."""
-        return {"message": self.message}
-
-    def restore(self, snapshot):
-        """Restore message information."""
-        self.message = snapshot["message"]
-
-
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -1003,7 +967,6 @@ class LokiPushApiEndpointJoined(EventBase):
 class LokiPushApiEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
-    loki_push_api_alert_rules_error = EventSource(LokiPushApiAlertRulesError)
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
     loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
 
@@ -1224,10 +1187,6 @@ class LokiPushApiProvider(RelationManagerBase):
         return alerts
 
 
-class InvalidAlertRulesError(Exception):
-    """Raised when there are problem encountered in processing alert rules."""
-
-
 class ConsumerBase(RelationManagerBase):
     """Consumer's base class."""
 
@@ -1256,34 +1215,8 @@ class ConsumerBase(RelationManagerBase):
         self._recursive = recursive
 
     def _handle_alert_rules(self, relation):
-        if self._charm.unit.is_leader():
-            alert_groups, invalid_files = load_alert_rules_from_dir(
-                self._alert_rules_path,
-                self.topology,
-                recursive=False,
-                allow_free_standing=self.allow_free_standing_rules,
-            )
-
-            alert_rules_error_message = self._check_alert_rules(alert_groups, invalid_files)
-
-            relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
-
-            if alert_rules_error_message:
-                raise InvalidAlertRulesError(alert_rules_error_message)
-
-    def _check_alert_rules(self, alert_groups, invalid_files) -> str:
-        """Check alert rules.
-
-        Args:
-            alert_groups: a list of prometheus alert rule groups.
-            invalid_files: a list of invalid rules files.
-
-        Returns:
-            A string with the validation message. The message is not empty whether there are
-            invalid alert rules files or there are no alert rules groups.
-        """
-        message = ""
+        if not self._charm.unit.is_leader():
+            return
 
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
@@ -1302,7 +1235,7 @@ class ConsumerBase(RelationManagerBase):
 class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
 
-    on = LoggingEvents()
+    on = LokiPushApiEvents()
 
     def __init__(
         self,
@@ -1329,6 +1262,7 @@ class LokiPushApiConsumer(ConsumerBase):
                 are found, this method will raise either an exception of type
                 NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
                 respectively.
+            alert_rules_path: a string indicating a path where alert rules can be found
             recursive: Whether or not to scan for rule files recursively.
 
         Raises:
@@ -1354,7 +1288,7 @@ class LokiPushApiConsumer(ConsumerBase):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
-        super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
+        super().__init__(charm, relation_name, alert_rules_path, recursive)
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
@@ -1388,11 +1322,7 @@ class LokiPushApiConsumer(ConsumerBase):
             self._handle_alert_rules(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
-        try:
-            self._handle_alert_rules(relation)
-        except InvalidAlertRulesError as e:
-            self.on.loki_push_api_alert_rules_error.emit(str(e))
-
+        self._handle_alert_rules(relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _: RelationEvent):
@@ -1469,7 +1399,6 @@ class LogProxyEndpointDeparted(EventBase):
 class LogProxyEndpointJoined(EventBase):
     """Event emitted when a Log Proxy joins."""
 
-<<<<<<< HEAD
 
 class LogProxyEvents(ObjectEvents):
     """Event descriptor for events raised by `LogProxyConsumer`."""
@@ -1505,8 +1434,7 @@ class LogProxyConsumer(ConsumerBase):
             files. Defaults to "./src/loki_alert_rules",
             resolved from the directory hosting the charm entry file.
             The alert rules are automatically updated on charm upgrade.
-        allow_free_standing_rules: A boolean to allow rules which are not in
-            `alert_rules_path`.
+        recursive: Whether or not to scan for rule files recursively.
         container_name: An optional container name to inject the payload into.
 
     Raises:
@@ -1521,10 +1449,6 @@ class LogProxyConsumer(ConsumerBase):
     """
 
     on = LogProxyEvents()
-    _stored = StoredState()
-
-class LogProxyConsumer(RelationManagerBase):
-    """LogProxyConsumer class."""
 
     def __init__(
         self,
@@ -1534,10 +1458,10 @@ class LogProxyConsumer(RelationManagerBase):
         enable_syslog: bool = False,
         syslog_port: int = 1514,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
-        allow_free_standing_rules: bool = False,
+        recursive: bool = False,
         container_name: Optional[str] = None,
     ):
-        super().__init__(charm, relation_name)
+        super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._charm = charm
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
@@ -1574,10 +1498,7 @@ class LogProxyConsumer(RelationManagerBase):
         Args:
             event: The event object `RelationChangedEvent`.
         """
-        try:
-            self._handle_alert_rules(event.relation)
-        except InvalidAlertRulesError as e:
-            logger.error("A problem was encountered when processing alert rules: {}".format(e))
+        self._handle_alert_rules(event.relation)
 
         if not self._container.can_connect():
             return
