@@ -1739,11 +1739,7 @@ class LogProxyConsumer(ConsumerBase):
 
     @property
     def _promtail_config(self) -> dict:
-        """Generates an initial config for Promtail.
-
-        This config it's going to be completed with the `client` section
-        once a relation between Grafana Agent charm and a workload charm is established.
-        """
+        """Generates the config file for Promtail."""
         config = {"clients": self._clients_list()}
         config.update(self._server_config())
         config.update(self._positions())
