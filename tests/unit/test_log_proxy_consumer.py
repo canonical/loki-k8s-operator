@@ -6,7 +6,7 @@ import unittest
 from hashlib import sha256
 from unittest.mock import MagicMock, mock_open, patch
 
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, PromtailDigestError
+from charms.loki_k8s.v0.loki_push_api import ContainerNotFoundError, LogProxyConsumer
 from deepdiff import DeepDiff  # type: ignore
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -76,9 +76,17 @@ class ConsumerCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
+        self._stored.set_default(invalid_events=0)
         self._log_proxy = LogProxyConsumer(
             charm=self, log_files=LOG_FILES, container_name="consumercharm", enable_syslog=True
         )
+
+        self.framework.observe(
+            self._log_proxy.on.promtail_digest_error, self._register_promtail_error
+        )
+
+    def _register_promtail_error(self, _):
+        self._stored.invalid_events += 1
 
 
 class ConsumerCharmSyslogDisabled(ConsumerCharm):
@@ -174,11 +182,9 @@ class TestLogProxyConsumer(unittest.TestCase):
     def test__get_container_container_name_not_exist(self):
         # Container do not exist
         container_name = "loki_container"
+        self.harness.charm._log_proxy._get_container(container_name)
 
-        with self.assertRaises(PromtailDigestError) as context:
-            self.harness.charm._log_proxy._get_container(container_name)
-
-        self.assertEqual(f"container '{container_name}' not found", str(context.exception))
+        self.assertEqual(self.harness.charm._stored.invalid_events, 1)
 
     def test__get_container_container_name_exist(self):
         # Container exist
@@ -190,7 +196,7 @@ class TestLogProxyConsumer(unittest.TestCase):
     def test__get_container_more_than_one_container(self):
         # More than 1 container in Pod
         container_name = ""
-        with self.assertRaises(PromtailDigestError):
+        with self.assertRaises(ContainerNotFoundError):
             self.harness.charm._log_proxy._get_container(container_name)
 
     def test__sha256sums_matches_match(self):

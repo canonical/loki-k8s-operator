@@ -60,6 +60,11 @@ follow_imports = "skip"
 module = ["charms.prometheus_k8s.*"]
 follow_imports = "silent"
 
+[[tool.mypy.overrides]]
+module = ["charms.grafana_k8s.*"]
+follow_imports = "silent"
+warn_unused_ignores = false
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"

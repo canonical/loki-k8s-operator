@@ -119,7 +119,7 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             loki_push_api,
         )
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LoggingEvents.loki_push_api_endpoint_joined")
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiEvents.loki_push_api_endpoint_joined")
     def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self, mock_events):
         self.harness.set_leader(True)
 
@@ -132,7 +132,7 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         )
         mock_events.emit.assert_called_once()
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LoggingEvents.loki_push_api_endpoint_joined")
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiEvents.loki_push_api_endpoint_joined")
     def test__on_upgrade_charm_endpoint_joined_event_fired_for_follower(self, mock_events):
         self.harness.set_leader(False)
 
