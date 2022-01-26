@@ -1483,15 +1483,14 @@ class LogProxyConsumer(ConsumerBase):
 
     def _on_pebble_ready(self, _: WorkloadEvent):
         """Event handler for `pebble_ready`."""
-        if self.model.relations[self._relation_name] and not self._is_promtail_installed():
+        if self.model.relations[self._relation_name]:
             self._setup_promtail()
 
     def _on_relation_created(self, _: RelationCreatedEvent) -> None:
         """Event handler for `relation_created`."""
         if not self._container.can_connect():
             return
-        if not self._is_promtail_installed():
-            self._setup_promtail()
+        self._setup_promtail()
 
     def _on_relation_changed(self, event: RelationEvent) -> None:
         """Event handler for `relation_changed`.
@@ -1503,7 +1502,7 @@ class LogProxyConsumer(ConsumerBase):
 
         if not self._container.can_connect():
             return
-        if self.model.relations[self._relation_name] and not self._is_promtail_installed():
+        if self.model.relations[self._relation_name]:
             self._setup_promtail()
         else:
             new_config = self._promtail_config
@@ -1844,6 +1843,8 @@ class LogProxyConsumer(ConsumerBase):
         return static_configs
 
     def _setup_promtail(self) -> None:
+        if self._is_promtail_installed():
+            return
         relation = self._charm.model.relations[self._relation_name][0]
         if relation.data[relation.app].get("promtail_binary_zip_url", None) is None:
             return
