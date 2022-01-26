@@ -1482,7 +1482,7 @@ class LogProxyConsumer(ConsumerBase):
     def _get_container_name(self, container_name: Optional[str] = "") -> str:
         """Gets a container_name.
 
-        If there is more than one container in the Pod a `PromtailDigestError` is emitted.
+        If there is more than one container in the Pod a `ContainerNotFoundError` is raised.
 
         Args:
             container_name: The container name.
