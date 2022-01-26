@@ -104,7 +104,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
     )
     def test_relation_data(self, mock_unit_ip):
         mock_unit_ip.return_value = "10.1.2.3"
-        expected_value = '{"url": "http://10.1.2.3:3100/loki/api/v1/push"}'
+        expected_value = '{"url": "http://10.1.2.3:3100/loki/api/v1/push", "node_type": "writer"}'
         self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
 
     @patch(

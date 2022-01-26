@@ -1094,10 +1094,10 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             relation: the `Relation` instance to update.
         """
-        relation.data[self._charm.unit].update({"loki_push_api": self._loki_push_api})
+        relation.data[self._charm.unit].update({"node_info": self._loki_push_api})
         logger.debug("Saved Loki url in relation data %s", self._loki_push_api)
         if self._charm.unit.is_leader():
-            relation.data[self._charm.app].update({"data": self._promtail_binary_url})
+            relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
 
         if relation.data.get(relation.app).get("alert_rules"):
@@ -1116,9 +1116,9 @@ class LokiPushApiProvider(RelationManagerBase):
             self._remove_alert_rules_files(self.container)
 
     @property
-    def _promtail_binary_url(self) -> str:
+    def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
-        return json.dumps({"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL})
+        return {"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL}
 
     @property
     def _loki_push_api(self) -> str:
@@ -1128,7 +1128,7 @@ class LokiPushApiProvider(RelationManagerBase):
             Loki push API URL as json string
         """
         endpoint_url = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self.port)
-        return json.dumps({"url": endpoint_url})
+        return json.dumps({"url": endpoint_url, "node_type": "writer"})
 
     @property
     def unit_ip(self) -> str:
@@ -1272,12 +1272,7 @@ class ConsumerBase(RelationManagerBase):
 class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
 
-<<<<<<< HEAD
-    on = LokiPushApiEvents()
-    _stored = StoredState()
-=======
     on = LoggingEvents()
->>>>>>> Types in the library, remove more StoredState
 
     def __init__(
         self,
@@ -1329,12 +1324,7 @@ class LokiPushApiConsumer(ConsumerBase):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
-<<<<<<< HEAD
-        super().__init__(charm, relation_name, alert_rules_path, recursive)
-        self._stored.set_default(loki_push_api={})
-=======
         super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
->>>>>>> Types in the library, remove more StoredState
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
@@ -1371,11 +1361,7 @@ class LokiPushApiConsumer(ConsumerBase):
         self._handle_alert_rules(relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
-<<<<<<< HEAD
-    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
-=======
     def _on_logging_relation_departed(self, _: RelationEvent):
->>>>>>> Types in the library, remove more StoredState
         """Handle departures in related providers.
 
         Anytime there are departures in relations between the consumer charm and Loki
@@ -1387,7 +1373,7 @@ class LokiPushApiConsumer(ConsumerBase):
         self.on.loki_push_api_endpoint_departed.emit()
 
     @property
-    def loki_push_api(self) -> List[str]:
+    def loki_push_api(self) -> List[dict]:
         """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
 
         Returns:
@@ -1396,8 +1382,20 @@ class LokiPushApiConsumer(ConsumerBase):
         endpoints = []
         for relation in self._charm.model.relations[self._relation_name]:
             for unit in relation.units:
-                endpoints.append(json.loads(relation.data[unit]["loki_push_api"]))
+                endpoints.append(json.loads(relation.data[unit]["node_info"]))
         return endpoints
+
+    @property
+    def loki_writers(self) -> List[dict]:
+        """Fetch only the loki endpoints which are writers.
+
+        Returns:
+            A list with Loki Push API endpoints.
+        """
+        writers = [
+            endpoint for endpoint in self.loki_push_api if endpoint["node_type"] == "writer"
+        ]
+        return [{"url": endpoint["url"]} for endpoint in writers]
 
 
 class ContainerNotFoundError(Exception):
@@ -1497,13 +1495,8 @@ class LogProxyConsumer(RelationManagerBase):
     def __init__(
         self,
         charm,
-<<<<<<< HEAD
-        log_files: list = [],
-=======
         log_files: list = None,
-        container_name: Optional[str] = None,
->>>>>>> Types in the library, remove more StoredState
-        relation_name: str = "log_proxy",
+        relation_name: str = "log-proxy",
         enable_syslog: bool = False,
         syslog_port: int = 1514,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
@@ -1529,38 +1522,26 @@ class LogProxyConsumer(RelationManagerBase):
             self._on_pebble_ready,
         )
 
-<<<<<<< HEAD
     def _on_pebble_ready(self, _: WorkloadEvent):
-=======
-    def _on_pebble_ready(self, _: HookEvent) -> None:
->>>>>>> Types in the library, remove more StoredState
         """Event handler for `pebble_ready`."""
         if self.model.relations[self._relation_name] and not self._is_promtail_installed():
             self._setup_promtail()
 
-<<<<<<< HEAD
-    def _on_log_proxy_relation_created(self, _: RelationCreatedEvent):
-        """Event handler for the `log_proxy_relation_created`."""
-=======
-    def _on_relation_created(self, _: RelationEvent) -> None:
+    def _on_relation_created(self, _: RelationCreatedEvent) -> None:
         """Event handler for `relation_created`."""
->>>>>>> Types in the library, remove more StoredState
         if not self._container.can_connect():
             return
         if not self._is_promtail_installed():
             self._setup_promtail()
 
-<<<<<<< HEAD
-    def _on_log_proxy_relation_changed(self, _: RelationChangedEvent):
-        """Event handler for the `log_proxy_relation_changed`.
-=======
     def _on_relation_changed(self, _: RelationEvent) -> None:
         """Event handler for `relation_changed`.
->>>>>>> Types in the library, remove more StoredState
 
         Args:
             event: The event object `RelationChangedEvent`.
         """
+        if not self._container.can_connect():
+            return
         if self.model.relations[self._relation_name] and not self._is_promtail_installed():
             self._setup_promtail()
         else:
@@ -1570,13 +1551,8 @@ class LogProxyConsumer(RelationManagerBase):
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
 
-<<<<<<< HEAD
-    def _on_log_proxy_relation_departed(self, _: RelationDepartedEvent):
-        """Event handler for the `log_proxy_relation_departed`.
-=======
     def _on_relation_departed(self, _: RelationEvent) -> None:
         """Event handler for `relation_departed`.
->>>>>>> Types in the library, remove more StoredState
 
         Args:
             event: The event object `RelationDepartedEvent`.
@@ -1589,13 +1565,12 @@ class LogProxyConsumer(RelationManagerBase):
         if new_config != self._current_config:
             self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
 
-        self._container.restart(WORKLOAD_SERVICE_NAME)
-
-<<<<<<< HEAD
+        if new_config["clients"]:
+            self._container.restart(WORKLOAD_SERVICE_NAME)
+        else:
+            self._container.stop(WORKLOAD_SERVICE_NAME)
         self.on.log_proxy_endpoint_departed.emit()
 
-=======
->>>>>>> Types in the library, remove more StoredState
     def _get_container(self, container_name: Optional[str] = "") -> Container:
         """Gets a single container by name or using the only container running in the Pod.
 
@@ -1658,7 +1633,7 @@ class LogProxyConsumer(RelationManagerBase):
                     "override": "replace",
                     "summary": WORKLOAD_SERVICE_NAME,
                     "command": "{} {}".format(WORKLOAD_BINARY_PATH, self._cli_args),
-                    "startup": "enabled",
+                    "startup": "disabled",
                 }
             },
         }
@@ -1766,9 +1741,7 @@ class LogProxyConsumer(RelationManagerBase):
                     relations[0].app.name
                 )
             )
-        url = json.loads(relations[0].data[relations[0].app].get("data"))[
-            "promtail_binary_zip_url"
-        ]
+        url = relations[0].data[relations[0].app].get("promtail_binary_zip_url")
 
         with urlopen(url) as r:
             file_bytes = r.read()
@@ -1826,7 +1799,9 @@ class LogProxyConsumer(RelationManagerBase):
         clients = []
         for relation in self._charm.model.relations.get(self._relation_name, []):
             for unit in relation.units:
-                clients.append(json.loads(relation.data[unit].get("loki_push_api")))
+                client = json.loads(relation.data[unit].get("node_info", {}))
+                if client and client["node_type"] == "writer":
+                    clients.append({"url": client["url"]})
         return clients
 
     def _server_config(self) -> dict:
@@ -1910,12 +1885,8 @@ class LogProxyConsumer(RelationManagerBase):
         return static_configs
 
     def _setup_promtail(self) -> None:
-        if (
-            self._charm.model.relations[self._relation_name][0].data.get(
-                "promtail_binary_zip_url", None
-            )
-            is None
-        ):
+        relation = self._charm.model.relations[self._relation_name][0]
+        if relation.data[relation.app].get("promtail_binary_zip_url", None) is None:
             return
         self._create_directories()
         self._container.push(
@@ -1928,7 +1899,7 @@ class LogProxyConsumer(RelationManagerBase):
             msg = "Promtail binary couldn't be download - {}".format(str(e))
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
-        else:
+        if self._current_config["clients"]:
             self._container.restart(WORKLOAD_SERVICE_NAME)
             self.on.log_proxy_endpoint_joined.emit()
 
@@ -1941,11 +1912,7 @@ class LogProxyConsumer(RelationManagerBase):
         return True
 
     @property
-<<<<<<< HEAD
     def syslog_port(self) -> str:
-=======
-    def syslog_port(self) -> int:
->>>>>>> Types in the library, remove more StoredState
         """Gets the port on which promtail is listening for syslog.
 
         Returns:

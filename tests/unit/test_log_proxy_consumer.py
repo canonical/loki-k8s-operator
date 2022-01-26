@@ -151,18 +151,22 @@ class TestLogProxyConsumer(unittest.TestCase):
             "http://10.20.30.1:3500/loki/api/v1/push",
             "http://10.20.30.2:3500/loki/api/v1/push",
         }
-        rel_id = self.harness.add_relation("log_proxy", "agent")
+        rel_id = self.harness.add_relation("log-proxy", "agent")
         self.harness.add_relation_unit(rel_id, "agent/0")
         self.harness.update_relation_data(
             rel_id,
             "agent/0",
-            {"loki_push_api": '{"url": "http://10.20.30.1:3500/loki/api/v1/push"}'},
+            {
+                "node_info": '{"url": "http://10.20.30.1:3500/loki/api/v1/push", "node_type": "writer"}'
+            },
         )
         self.harness.add_relation_unit(rel_id, "agent/1")
         self.harness.update_relation_data(
             rel_id,
             "agent/1",
-            {"loki_push_api": '{"url": "http://10.20.30.2:3500/loki/api/v1/push"}'},
+            {
+                "node_info": '{"url": "http://10.20.30.2:3500/loki/api/v1/push", "node_type": "writer"}'
+            },
         )
         self.assertEqual(
             {x["url"] for x in self.harness.charm._log_proxy._clients_list()}, expected_clients
