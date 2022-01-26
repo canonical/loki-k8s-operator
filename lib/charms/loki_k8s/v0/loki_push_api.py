@@ -1224,6 +1224,10 @@ class LokiPushApiProvider(RelationManagerBase):
         return alerts
 
 
+class InvalidAlertRulesError(Exception):
+    """Raised when there are problem encountered in processing alert rules."""
+
+
 class ConsumerBase(RelationManagerBase):
     """Consumer's base class."""
 
@@ -1252,8 +1256,34 @@ class ConsumerBase(RelationManagerBase):
         self._recursive = recursive
 
     def _handle_alert_rules(self, relation):
-        if not self._charm.unit.is_leader():
-            return
+        if self._charm.unit.is_leader():
+            alert_groups, invalid_files = load_alert_rules_from_dir(
+                self._alert_rules_path,
+                self.topology,
+                recursive=False,
+                allow_free_standing=self.allow_free_standing_rules,
+            )
+
+            alert_rules_error_message = self._check_alert_rules(alert_groups, invalid_files)
+
+            relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
+            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": alert_groups})
+
+            if alert_rules_error_message:
+                raise InvalidAlertRulesError(alert_rules_error_message)
+
+    def _check_alert_rules(self, alert_groups, invalid_files) -> str:
+        """Check alert rules.
+
+        Args:
+            alert_groups: a list of prometheus alert rule groups.
+            invalid_files: a list of invalid rules files.
+
+        Returns:
+            A string with the validation message. The message is not empty whether there are
+            invalid alert rules files or there are no alert rules groups.
+        """
+        message = ""
 
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
@@ -1358,7 +1388,11 @@ class LokiPushApiConsumer(ConsumerBase):
             self._handle_alert_rules(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
-        self._handle_alert_rules(relation)
+        try:
+            self._handle_alert_rules(relation)
+        except InvalidAlertRulesError as e:
+            self.on.loki_push_api_alert_rules_error.emit(str(e))
+
         self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _: RelationEvent):
@@ -1534,12 +1568,17 @@ class LogProxyConsumer(RelationManagerBase):
         if not self._is_promtail_installed():
             self._setup_promtail()
 
-    def _on_relation_changed(self, _: RelationEvent) -> None:
+    def _on_relation_changed(self, event: RelationEvent) -> None:
         """Event handler for `relation_changed`.
 
         Args:
             event: The event object `RelationChangedEvent`.
         """
+        try:
+            self._handle_alert_rules(event.relation)
+        except InvalidAlertRulesError as e:
+            logger.error("A problem was encountered when processing alert rules: {}".format(e))
+
         if not self._container.can_connect():
             return
         if self.model.relations[self._relation_name] and not self._is_promtail_installed():
