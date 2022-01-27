@@ -131,6 +131,7 @@ class TestLogProxyConsumer(unittest.TestCase):
                     "job",
                     "juju_application",
                     "juju_charm",
+                    "juju_unit",
                     "juju_model",
                     "juju_model_uuid",
                 }
@@ -141,6 +142,7 @@ class TestLogProxyConsumer(unittest.TestCase):
                     "job",
                     "juju_application",
                     "juju_charm",
+                    "juju_unit",
                     "juju_model",
                     "juju_model_uuid",
                 }
