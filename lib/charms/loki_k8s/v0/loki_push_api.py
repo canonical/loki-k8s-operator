@@ -627,7 +627,7 @@ class JujuTopology:
         self.unit = unit
 
     @classmethod
-    def from_charm(cls, charm):
+    def from_charm(cls, charm) -> "JujuTopology":
         """Factory method for creating `JujuTopology` children from a given charm.
 
         Args:
@@ -645,7 +645,7 @@ class JujuTopology:
         )
 
     @classmethod
-    def from_relation_data(cls, data: dict):
+    def from_relation_data(cls, data: dict) -> "JujuTopology":
         """Factory method for creating `JujuTopology` children from a dictionary.
 
         Args:
@@ -716,7 +716,7 @@ class JujuTopology:
 
         return ret
 
-    def as_promql_label_dict(self):
+    def as_promql_label_dict(self) -> dict:
         """Format the topology information into a dict with keys having 'juju_' as prefix."""
         vals = {
             "juju_{}".format(key): val
@@ -725,7 +725,7 @@ class JujuTopology:
 
         return vals
 
-    def render(self, template: str):
+    def render(self, template: str) -> str:
         """Render a juju-topology template string with topology info."""
         return template.replace(JujuTopology.STUB, self.promql_labels)
 
@@ -734,7 +734,9 @@ class AggregatorTopology(JujuTopology):
     """Class for initializing topology information for MetricsEndpointAggregator."""
 
     @classmethod
-    def create(cls, model: str, model_uuid: str, application: str, unit: str):
+    def create(
+        cls, model: str, model_uuid: str, application: str, unit: str
+    ) -> "AggregatorTopology":
         """Factory method for creating the `AggregatorTopology` dataclass from a given charm.
 
         Args:
@@ -753,7 +755,7 @@ class AggregatorTopology(JujuTopology):
             unit=unit,
         )
 
-    def as_promql_label_dict(self):
+    def as_promql_label_dict(self) -> dict:
         """Format the topology information into a dict with keys having 'juju_' as prefix."""
         vals = {"juju_{}".format(key): val for key, val in self.as_dict().items()}
 
@@ -767,7 +769,7 @@ class ProviderTopology(JujuTopology):
     """Class for initializing topology information for MetricsEndpointProvider."""
 
     @property
-    def scrape_identifier(self):
+    def scrape_identifier(self) -> str:
         """Format the topology information into a scrape identifier."""
         # This is used only by Metrics[Consumer|Provider] and does not need a
         # unit name, so only check for the charm name
