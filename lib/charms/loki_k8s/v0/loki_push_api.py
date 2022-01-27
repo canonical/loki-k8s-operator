@@ -302,11 +302,14 @@ juju deploy \
     --resource promtail-bin=/tmp/promtail-linux-amd64
 ```
 
-The object can raise a `PromtailDigestError` when:
+The object can emit a `PromtailDigestError` event:
 
 - Promtail binary cannot be downloaded.
-- No `container_name` parameter has been specified and the Pod has more than 1 container.
 - The sha256 sum mismatch for promtail binary.
+
+The object can raise a `ContainerNotFoundError` event:
+
+- No `container_name` parameter has been specified and the Pod has more than 1 container.
 
 These can be monitored via the PromtailDigestError events via:
 
@@ -411,7 +414,7 @@ from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from urllib.error import HTTPError
 from urllib.request import urlopen
 from zipfile import ZipFile
@@ -420,22 +423,15 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
-    RelationChangedEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
     RelationRole,
+    WorkloadEvent,
 )
-from ops.framework import (
-    EventBase,
-    EventSource,
-    Object,
-    ObjectEvents,
-    StoredDict,
-    StoredList,
-    StoredState,
-)
+from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
+from ops.pebble import APIError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -452,6 +448,7 @@ logger = logging.getLogger(__name__)
 RELATION_INTERFACE_NAME = "loki_push_api"
 DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
+DEFAULT_LOG_PROXY_RELATION_NAME = "log-proxy"
 
 PROMTAIL_BINARY_ZIP_URL = (
     "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
@@ -583,38 +580,6 @@ def _validate_relation_by_interface_and_direction(
             )
     else:
         raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
-
-
-def _is_valid_rule(rule: dict, allow_free_standing: bool) -> bool:
-    """This method validates if an alert rule is well formed.
-
-    Args:
-        rule: A dictionary containing an alert rule definition
-
-    Returns:
-        True if the alert rule is well formed; False otherwise.
-    """
-    mandatory = ["alert", "expr"]
-    if any(field not in rule for field in mandatory):
-        return False
-
-    if not allow_free_standing and "%%juju_topology%%" not in rule["expr"]:
-        return False
-
-    return True
-
-
-def _type_convert_stored(obj):
-    """Convert Stored* to their appropriate types, recursively."""
-    if isinstance(obj, StoredList):
-        return list(map(_type_convert_stored, obj))
-    elif isinstance(obj, StoredDict):
-        rdict = {}  # type: Dict[Any, Any]
-        for k in obj.keys():
-            rdict[k] = _type_convert_stored(obj[k])
-        return rdict
-    else:
-        return obj
 
 
 class JujuTopology:
@@ -992,22 +957,6 @@ class RelationManagerBase(Object):
         self.name = relation_name
 
 
-class LokiPushApiAlertRulesError(EventBase):
-    """Event emitted when an AlertRulesError exception is raised."""
-
-    def __init__(self, handle, message):
-        super().__init__(handle)
-        self.message = message
-
-    def snapshot(self) -> dict:
-        """Save message information."""
-        return {"message": self.message}
-
-    def restore(self, snapshot):
-        """Restore message information."""
-        self.message = snapshot["message"]
-
-
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -1019,7 +968,6 @@ class LokiPushApiEndpointJoined(EventBase):
 class LokiPushApiEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
-    loki_push_api_alert_rules_error = EventSource(LokiPushApiAlertRulesError)
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
     loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
 
@@ -1110,10 +1058,11 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             relation: the `Relation` instance to update.
         """
+        relation.data[self._charm.unit].update({"node_info": self._loki_push_api})
+        logger.debug("Saved Loki url in relation data %s", self._loki_push_api)
         if self._charm.unit.is_leader():
-            relation.data[self._charm.app].update({"loki_push_api": self._loki_push_api})
-            relation.data[self._charm.app].update({"data": self._promtail_binary_url})
-            logger.debug("Saved Loki url in relation data %s", self._loki_push_api)
+            relation.data[self._charm.app].update(self._promtail_binary_url)
+            logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
 
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
@@ -1131,9 +1080,9 @@ class LokiPushApiProvider(RelationManagerBase):
             self._remove_alert_rules_files(self.container)
 
     @property
-    def _promtail_binary_url(self) -> str:
+    def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
-        return json.dumps({"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL})
+        return {"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL}
 
     @property
     def _loki_push_api(self) -> str:
@@ -1143,7 +1092,7 @@ class LokiPushApiProvider(RelationManagerBase):
             Loki push API URL as json string
         """
         endpoint_url = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self.port)
-        return json.dumps({"url": endpoint_url})
+        return json.dumps({"url": endpoint_url, "node_type": "writer"})
 
     @property
     def unit_ip(self) -> str:
@@ -1288,7 +1237,6 @@ class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
 
     on = LokiPushApiEvents()
-    _stored = StoredState()
 
     def __init__(
         self,
@@ -1315,6 +1263,7 @@ class LokiPushApiConsumer(ConsumerBase):
                 are found, this method will raise either an exception of type
                 NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
                 respectively.
+            alert_rules_path: a string indicating a path where alert rules can be found
             recursive: Whether or not to scan for rule files recursively.
 
         Raises:
@@ -1341,7 +1290,6 @@ class LokiPushApiConsumer(ConsumerBase):
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
         super().__init__(charm, relation_name, alert_rules_path, recursive)
-        self._stored.set_default(loki_push_api={})
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
@@ -1375,15 +1323,10 @@ class LokiPushApiConsumer(ConsumerBase):
             self._handle_alert_rules(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
-        loki_push_api_data = relation.data[relation.app].get("loki_push_api")
-
-        if loki_push_api_data:
-            self._stored.loki_push_api[relation.id] = json.loads(loki_push_api_data)
-
         self._handle_alert_rules(relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
+    def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.
 
         Anytime there are departures in relations between the consumer charm and Loki
@@ -1392,20 +1335,32 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         # Provide default to avoid throwing, as in some complicated scenarios with
         # upgrades and hook failures we might not have data in the storage
-        self._stored.loki_push_api.pop(event.relation.id, None)
         self.on.loki_push_api_endpoint_departed.emit()
 
     @property
-    def loki_push_api(self) -> List[str]:
+    def loki_push_api(self) -> List[dict]:
         """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
 
         Returns:
             A list with Loki Push API endpoints.
         """
-        return [
-            _type_convert_stored(loki_endpoint)
-            for loki_endpoint in self._stored.loki_push_api.values()
+        endpoints = []
+        for relation in self._charm.model.relations[self._relation_name]:
+            for unit in relation.units:
+                endpoints.append(json.loads(relation.data[unit]["node_info"]))
+        return endpoints
+
+    @property
+    def loki_writers(self) -> List[dict]:
+        """Fetch only the loki endpoints which are writers.
+
+        Returns:
+            A list with Loki Push API endpoints.
+        """
+        writers = [
+            endpoint for endpoint in self.loki_push_api if endpoint["node_type"] == "writer"
         ]
+        return [{"url": endpoint["url"]} for endpoint in writers]
 
 
 class ContainerNotFoundError(Exception):
@@ -1447,7 +1402,7 @@ class LogProxyEndpointJoined(EventBase):
 
 
 class LogProxyEvents(ObjectEvents):
-    """Event descriptor for events raised by `LokiPushApiProvider`."""
+    """Event descriptor for events raised by `LogProxyConsumer`."""
 
     promtail_digest_error = EventSource(PromtailDigestError)
     log_proxy_endpoint_departed = EventSource(LogProxyEndpointDeparted)
@@ -1480,8 +1435,7 @@ class LogProxyConsumer(ConsumerBase):
             files. Defaults to "./src/loki_alert_rules",
             resolved from the directory hosting the charm entry file.
             The alert rules are automatically updated on charm upgrade.
-        allow_free_standing_rules: A boolean to allow rules which are not in
-            `alert_rules_path`.
+        recursive: Whether or not to scan for rule files recursively.
         container_name: An optional container name to inject the payload into.
 
     Raises:
@@ -1496,81 +1450,88 @@ class LogProxyConsumer(ConsumerBase):
     """
 
     on = LogProxyEvents()
-    _stored = StoredState()
 
     def __init__(
         self,
         charm,
-        log_files: list = [],
-        relation_name: str = "log_proxy",
+        log_files: list = None,
+        relation_name: str = DEFAULT_LOG_PROXY_RELATION_NAME,
         enable_syslog: bool = False,
         syslog_port: int = 1514,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
-        allow_free_standing_rules: bool = False,
+        recursive: bool = False,
         container_name: Optional[str] = None,
     ):
-        super().__init__(charm, relation_name, alert_rules_path, allow_free_standing_rules)
-        self._stored.set_default(grafana_agents="{}")
+        super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._charm = charm
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
         self._container_name = self._get_container_name(container_name)
-        self._log_files = log_files
+        self._log_files = log_files or []
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = JujuTopology.from_charm(charm)
 
+        events = self._charm.on[relation_name]
+        self.framework.observe(events.relation_created, self._on_relation_created)
+        self.framework.observe(events.relation_changed, self._on_relation_changed)
+        self.framework.observe(events.relation_departed, self._on_relation_departed)
         self.framework.observe(
-            self._charm.on.log_proxy_relation_created, self._on_log_proxy_relation_created
-        )
-        self.framework.observe(
-            self._charm.on.log_proxy_relation_changed, self._on_log_proxy_relation_changed
-        )
-        self.framework.observe(
-            self._charm.on.log_proxy_relation_departed, self._on_log_proxy_relation_departed
+            getattr(self._charm.on, "{}_pebble_ready".format(self._container_name)),
+            self._on_pebble_ready,
         )
 
-    def _on_log_proxy_relation_created(self, _: RelationCreatedEvent):
-        """Event handler for the `log_proxy_relation_created`."""
-        self._create_directories()
-        self._container.push(
-            WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._initial_config), make_dirs=True
-        )
+    def _on_pebble_ready(self, _: WorkloadEvent):
+        """Event handler for `pebble_ready`."""
+        if self.model.relations[self._relation_name] and not self._is_promtail_installed():
+            self._setup_promtail()
 
-    def _on_log_proxy_relation_changed(self, event: RelationChangedEvent):
-        """Event handler for the `log_proxy_relation_changed`.
+    def _on_relation_created(self, _: RelationCreatedEvent) -> None:
+        """Event handler for `relation_created`."""
+        if not self._container.can_connect():
+            return
+        if not self._is_promtail_installed():
+            self._setup_promtail()
+
+    def _on_relation_changed(self, event: RelationEvent) -> None:
+        """Event handler for `relation_changed`.
 
         Args:
             event: The event object `RelationChangedEvent`.
         """
-        if event.relation.data[event.app].get("data", None):
-            try:
-                self._obtain_promtail(event)
-            except HTTPError as e:
-                msg = "Promtail binary couldn't be downloaded - {}".format(str(e))
-                logger.warning(msg)
-                self.on.promtail_digest_error.emit(msg)
-            else:
-                self._update_config(event)
-                self._update_agents_list(event)
-                self._add_pebble_layer()
+        self._handle_alert_rules(event.relation)
+
+        if not self._container.can_connect():
+            return
+        if self.model.relations[self._relation_name] and not self._is_promtail_installed():
+            self._setup_promtail()
+        else:
+            new_config = self._promtail_config
+            if new_config != self._current_config:
+                self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
 
-    def _on_log_proxy_relation_departed(self, event: RelationDepartedEvent):
-        """Event handler for the `log_proxy_relation_departed`.
+    def _on_relation_departed(self, _: RelationEvent) -> None:
+        """Event handler for `relation_departed`.
 
         Args:
             event: The event object `RelationDepartedEvent`.
         """
-        self._update_config(event)
-        self._update_agents_list(event)
-
-        if len(self._current_config["clients"]) == 0:
+        if not self._container.can_connect():
+            return
+        if not self._charm.model.relations[self._relation_name]:
             self._container.stop(WORKLOAD_SERVICE_NAME)
-        else:
-            self._container.restart(WORKLOAD_SERVICE_NAME)
+            return
 
+        new_config = self._promtail_config
+        if new_config != self._current_config:
+            self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
+
+        if new_config["clients"]:
+            self._container.restart(WORKLOAD_SERVICE_NAME)
+        else:
+            self._container.stop(WORKLOAD_SERVICE_NAME)
         self.on.log_proxy_endpoint_departed.emit()
 
     def _get_container(self, container_name: Optional[str] = "") -> Container:
@@ -1625,7 +1586,7 @@ class LogProxyConsumer(ConsumerBase):
 
         raise ContainerNotFoundError
 
-    def _add_pebble_layer(self):
+    def _add_pebble_layer(self) -> None:
         """Adds Pebble layer that manages Promtail service in Workload container."""
         pebble_layer = {
             "summary": "promtail layer",
@@ -1635,7 +1596,7 @@ class LogProxyConsumer(ConsumerBase):
                     "override": "replace",
                     "summary": WORKLOAD_SERVICE_NAME,
                     "command": "{} {}".format(WORKLOAD_BINARY_PATH, self._cli_args),
-                    "startup": "enabled",
+                    "startup": "disabled",
                 }
             },
         }
@@ -1646,17 +1607,17 @@ class LogProxyConsumer(ConsumerBase):
         self._container.make_dir(path=WORKLOAD_BINARY_DIR, make_parents=True)
         self._container.make_dir(path=WORKLOAD_CONFIG_DIR, make_parents=True)
 
-    def _obtain_promtail(self, event: RelationChangedEvent) -> None:
+    def _obtain_promtail(self) -> None:
         """Obtain promtail binary from an attached resource or download it."""
         if self._is_promtail_attached():
             return
 
         if self._promtail_must_be_downloaded():
-            self._download_and_push_promtail_to_workload(event)
+            self._download_and_push_promtail_to_workload()
         else:
             self._push_binary_to_workload()
 
-    def _push_binary_to_workload(self, resource_path=BINARY_PATH) -> None:
+    def _push_binary_to_workload(self, resource_path: str = BINARY_PATH) -> None:
         with open(resource_path, "rb") as f:
             self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
             logger.debug("The promtail binary file has been pushed to the workload container.")
@@ -1720,7 +1681,7 @@ class LogProxyConsumer(ConsumerBase):
                     return False
 
                 return True
-        except FileNotFoundError:
+        except (APIError, FileNotFoundError):
             msg = "File: '{}' could not be opened".format(file_path)
             logger.error(msg)
             return False
@@ -1733,9 +1694,17 @@ class LogProxyConsumer(ConsumerBase):
         """
         return True if Path(BINARY_PATH).is_file() else False
 
-    def _download_and_push_promtail_to_workload(self, event: RelationChangedEvent) -> None:
+    def _download_and_push_promtail_to_workload(self) -> None:
         """Downloads a Promtail zip file and pushes the binary to the workload."""
-        url = json.loads(event.relation.data[event.app].get("data"))["promtail_binary_zip_url"]
+        # Use the first
+        relations = self._charm.model.relations[self._relation_name]
+        if len(relations) > 1:
+            logger.debug(
+                "Multiple log_proxy relations. Getting Promtail from application {}".format(
+                    relations[0].app.name
+                )
+            )
+        url = relations[0].data[relations[0].app].get("promtail_binary_zip_url")
 
         with urlopen(url) as r:
             file_bytes = r.read()
@@ -1750,31 +1719,6 @@ class LogProxyConsumer(ConsumerBase):
             logger.debug("Promtail binary file has been downloaded.")
 
         self._push_binary_to_workload()
-
-    def _update_agents_list(self, event: RelationChangedEvent):
-        """Updates the active Grafana agents list.
-
-        Args:
-            event: The event object `RelationChangedEvent` or `RelationDepartedEvent`
-        """
-        grafana_agents = json.loads(self._stored.grafana_agents)
-
-        if isinstance(event, RelationChangedEvent):
-            agent_url = json.loads(event.relation.data[event.app].get("loki_push_api"))["url"]
-            grafana_agents[str(event.app)] = agent_url
-            self._stored.grafana_agents = json.dumps(grafana_agents)
-        elif isinstance(event, RelationDepartedEvent):
-            agent_url = grafana_agents.pop(str(event.app))
-            self._stored.grafana_agents = json.dumps(grafana_agents)
-
-    def _update_config(self, event: RelationEvent):
-        """Updates the config file for Promtail and upload it to the side-car container.
-
-        Args:
-            event: `RelationChangedEvent` or `RelationDepartedEvent`
-        """
-        config = self._build_config_file(event)
-        self._container.push(WORKLOAD_CONFIG_PATH, config, make_dirs=True)
 
     @property
     def _cli_args(self) -> str:
@@ -1796,75 +1740,28 @@ class LogProxyConsumer(ConsumerBase):
         current_config = yaml.safe_load(raw_current)
         return current_config
 
-    def _build_config_file(self, event: RelationEvent) -> str:
-        """Generates config file str based on the event received.
-
-        Args:
-            event: `RelationChangedEvent` or `RelationDepartedEvent`
-
-        Returns:
-            A yaml string with Promtail config.
-        """
-        config = {}
-        current_config = self._current_config.copy()
-
-        if isinstance(event, RelationChangedEvent):
-            agent_url = json.loads(event.relation.data[event.app].get("loki_push_api"))["url"]
-            config = self._add_client(current_config, agent_url)
-        elif isinstance(event, RelationDepartedEvent):
-            agent_url = json.loads(self._stored.grafana_agents)[str(event.app)]
-            config = self._remove_client(current_config, agent_url)
-
-        return yaml.safe_dump(config)
-
     @property
-    def _initial_config(self) -> dict:
-        """Generates an initial config for Promtail.
-
-        This config it's going to be completed with the `client` section
-        once a relation between Grafana Agent charm and a workload charm is established.
-        """
-        config = {}
+    def _promtail_config(self) -> dict:
+        """Generates the config file for Promtail."""
+        config = {"clients": self._clients_list()}
         config.update(self._server_config())
         config.update(self._positions())
         config.update(self._scrape_configs())
         return config
 
-    def _add_client(self, current_config: dict, agent_url: str) -> dict:
-        """Updates Promtail's current configuration by adding a Grafana Agent URL.
-
-        Args:
-            current_config: A dictionary containing Promtail current configuration.
-            agent_url: A string with Grafana Agent URL.
+    def _clients_list(self) -> list:
+        """Generates a list of clients for use in the promtail config.
 
         Returns:
-            Updated Promtail configuration.
+            A list of endpoints
         """
-        if "clients" in current_config:
-            current_config["clients"].append({"url": agent_url})
-        else:
-            current_config["clients"] = [{"url": agent_url}]
-
-        return current_config
-
-    def _remove_client(self, current_config: dict, agent_url: str) -> dict:
-        """Updates Promtail's current configuration by removing a Grafana Agent URL.
-
-        Args:
-            current_config: A dictionary containing Promtail current configuration.
-            agent_url: A string with Grafana Agent URL.
-
-        Returns:
-            Updated Promtail configuration.
-        """
-        clients = current_config.get("clients", None)
-
-        if clients:
-            clients = [c for c in clients if c != {"url": agent_url}]
-            current_config["clients"] = clients
-            return current_config
-
-        return current_config
+        clients = []
+        for relation in self._charm.model.relations.get(self._relation_name, []):
+            for unit in relation.units:
+                client = json.loads(relation.data[unit].get("node_info", {}))
+                if client and client["node_type"] == "writer":
+                    clients.append({"url": client["url"]})
+        return clients
 
     def _server_config(self) -> dict:
         """Generates the server section of the Promtail config file.
@@ -1946,6 +1843,33 @@ class LogProxyConsumer(ConsumerBase):
 
         return static_configs
 
+    def _setup_promtail(self) -> None:
+        relation = self._charm.model.relations[self._relation_name][0]
+        if relation.data[relation.app].get("promtail_binary_zip_url", None) is None:
+            return
+        self._create_directories()
+        self._container.push(
+            WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._promtail_config), make_dirs=True
+        )
+        self._add_pebble_layer()
+        try:
+            self._obtain_promtail()
+        except HTTPError as e:
+            msg = "Promtail binary couldn't be download - {}".format(str(e))
+            logger.warning(msg)
+            self.on.promtail_digest_error.emit(msg)
+        if self._current_config["clients"]:
+            self._container.restart(WORKLOAD_SERVICE_NAME)
+            self.on.log_proxy_endpoint_joined.emit()
+
+    def _is_promtail_installed(self) -> bool:
+        """Determine if promtail has already been installed to the container."""
+        try:
+            self._container.list_files(WORKLOAD_BINARY_PATH)
+        except (APIError, FileNotFoundError):
+            return False
+        return True
+
     @property
     def syslog_port(self) -> str:
         """Gets the port on which promtail is listening for syslog.
@@ -1956,7 +1880,7 @@ class LogProxyConsumer(ConsumerBase):
         return str(self._syslog_port)
 
     @property
-    def rsyslog_config(self):
+    def rsyslog_config(self) -> str:
         """Generates a config line for use with rsyslog.
 
         Returns:

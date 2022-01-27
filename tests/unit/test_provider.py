@@ -4,7 +4,7 @@
 import json
 import textwrap
 import unittest
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
@@ -99,21 +99,21 @@ class TestLokiPushApiProvider(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
-    @patch("ops.testing._TestingPebbleClient.make_dir", Mock())
     @patch(
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
     )
     def test_relation_data(self, mock_unit_ip):
         mock_unit_ip.return_value = "10.1.2.3"
-        expected_value = '{"url": "http://10.1.2.3:3100/loki/api/v1/push"}'
+        expected_value = '{"url": "http://10.1.2.3:3100/loki/api/v1/push", "node_type": "writer"}'
         self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
 
-    @patch("ops.testing._TestingPebbleClient.make_dir", Mock())
     @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files", Mock()
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files",
+        MagicMock(),
     )
     @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files", Mock()
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
+        MagicMock(),
     )
     @patch(
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
@@ -130,9 +130,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
             )
 
-    @patch("ops.testing._TestingPebbleClient.make_dir", Mock())
-    @patch("os.makedirs", Mock())
-    @patch("ops.testing._TestingPebbleClient.remove_path", Mock())
+    @patch("os.makedirs", MagicMock())
     @patch(
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
     )

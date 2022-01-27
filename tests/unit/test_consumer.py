@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, _is_valid_rule
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from helpers import TempFolderSandbox
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -110,12 +110,14 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "promtail/0")
         self.harness.update_relation_data(
             rel_id,
-            "promtail",
-            {"loki_push_api": '{"url": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+            "promtail/0",
+            {
+                "node_info": '{"url": "http://10.1.2.3:3100/loki/api/v1/push", "node_type": "writer"}'
+            },
         )
 
         self.assertEqual(
-            self.harness.charm.loki_consumer._stored.loki_push_api.get(rel_id)["url"],
+            self.harness.charm.loki_consumer.loki_push_api[0]["url"],
             loki_push_api,
         )
 
@@ -144,21 +146,6 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
         mock_events.emit.assert_called_once()
-
-    def test__is_valid_rule(self):
-        self.assertTrue(_is_valid_rule(ONE_RULE.copy(), allow_free_standing=False))
-
-        rule_1 = ONE_RULE.copy()
-        del rule_1["alert"]
-        self.assertFalse(_is_valid_rule(rule_1, allow_free_standing=False))
-
-        rule_2 = ONE_RULE.copy()
-        del rule_2["expr"]
-        self.assertFalse(_is_valid_rule(rule_2, allow_free_standing=False))
-
-        rule_3 = ONE_RULE.copy()
-        rule_3["expr"] = "Missing Juju topology placeholder"
-        self.assertFalse(_is_valid_rule(rule_3, allow_free_standing=False))
 
 
 class TestReloadAlertRules(unittest.TestCase):

@@ -114,7 +114,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
-    @patch("ops.model.Container.can_connect", MagicMock(return_value=True))
     @patch("charm.LokiOperatorCharm._loki_config")
     def test__on_config_can_connect(self, mock_loki_config):
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
