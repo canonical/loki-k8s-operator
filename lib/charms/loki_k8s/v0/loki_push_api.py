@@ -1193,7 +1193,7 @@ class LokiPushApiProvider(RelationManagerBase):
         """Return a list of Loki Push Api endpoints."""
         return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
 
-    def _url(self, unit_number):
+    def _url(self, unit_number) -> str:
         """Get the url for a given unit."""
         return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
             self._charm.app.name,
