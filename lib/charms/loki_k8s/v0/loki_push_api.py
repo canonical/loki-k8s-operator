@@ -1189,7 +1189,7 @@ class LokiPushApiProvider(RelationManagerBase):
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
 
-    def _endpoints(self):
+    def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
         return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
 
