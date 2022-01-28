@@ -1481,7 +1481,7 @@ class LokiPushApiConsumer(ConsumerBase):
         Returns:
             A list with Loki Push API endpoints.
         """
-        endpoints = []
+        endpoints = []  # type: list
         for relation in self._charm.model.relations[self._relation_name]:
             endpoints = endpoints + json.loads(relation.data[relation.app]["endpoints"])
         return endpoints
@@ -1879,7 +1879,7 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             A list of endpoints
         """
-        clients = []
+        clients = []  # type: list
         for relation in self._charm.model.relations.get(self._relation_name, []):
             clients = clients + json.loads(relation.data[relation.app]["endpoints"])
         return clients
