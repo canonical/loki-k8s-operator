@@ -110,10 +110,8 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, "promtail/0")
         self.harness.update_relation_data(
             rel_id,
-            "promtail/0",
-            {
-                "node_info": '{"url": "http://10.1.2.3:3100/loki/api/v1/push", "node_type": "writer"}'
-            },
+            "promtail",
+            {"endpoints": '[{"url": "http://10.1.2.3:3100/loki/api/v1/push"}]'},
         )
 
         self.assertEqual(

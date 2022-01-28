@@ -99,13 +99,12 @@ class TestLokiPushApiProvider(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
-    )
-    def test_relation_data(self, mock_unit_ip):
-        mock_unit_ip.return_value = "10.1.2.3"
-        expected_value = '{"url": "http://10.1.2.3:3100/loki/api/v1/push", "node_type": "writer"}'
-        self.assertEqual(expected_value, self.harness.charm.loki_provider._loki_push_api)
+    def test_relation_data(self):
+        self.harness.charm.app.name = "loki"
+        expected_value = [
+            {"url": "http://loki-0.loki-endpoints.None.svc.cluster.local:3100/loki/api/v1/push"}
+        ]
+        self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoints())
 
     @patch(
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files",
@@ -126,7 +125,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
 
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
             self.assertEqual(
-                sorted(logger.output)[1],
+                sorted(logger.output)[0],
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
             )
 

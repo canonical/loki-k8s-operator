@@ -1058,16 +1058,30 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             relation: the `Relation` instance to update.
         """
-        relation.data[self._charm.unit].update({"node_info": self._loki_push_api})
-        logger.debug("Saved Loki url in relation data %s", self._loki_push_api)
         if self._charm.unit.is_leader():
             relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
+            relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
+            logger.debug("Saved endpoints in relation data")
 
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
+
+    def _endpoints(self):
+        """Return a list of Loki Push Api endpoints."""
+        return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
+
+    def _url(self, unit_number):
+        """Get the url for a given unit."""
+        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
+            self._charm.app.name,
+            unit_number,
+            self._charm.app.name,
+            self._charm.model.name,
+            self.port,
+        )
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
@@ -1083,16 +1097,6 @@ class LokiPushApiProvider(RelationManagerBase):
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
         return {"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL}
-
-    @property
-    def _loki_push_api(self) -> str:
-        """Fetch Loki push API URL.
-
-        Returns:
-            Loki push API URL as json string
-        """
-        endpoint_url = "http://{}:{}/loki/api/v1/push".format(self.unit_ip, self.port)
-        return json.dumps({"url": endpoint_url, "node_type": "writer"})
 
     @property
     def unit_ip(self) -> str:
@@ -1338,7 +1342,7 @@ class LokiPushApiConsumer(ConsumerBase):
         self.on.loki_push_api_endpoint_departed.emit()
 
     @property
-    def loki_push_api(self) -> List[dict]:
+    def loki_endpoints(self) -> List[dict]:
         """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
 
         Returns:
@@ -1346,21 +1350,8 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         endpoints = []
         for relation in self._charm.model.relations[self._relation_name]:
-            for unit in relation.units:
-                endpoints.append(json.loads(relation.data[unit]["node_info"]))
+            endpoints = endpoints + json.loads(relation.data[relation.app]["endpoints"])
         return endpoints
-
-    @property
-    def loki_writers(self) -> List[dict]:
-        """Fetch only the loki endpoints which are writers.
-
-        Returns:
-            A list with Loki Push API endpoints.
-        """
-        writers = [
-            endpoint for endpoint in self.loki_push_api if endpoint["node_type"] == "writer"
-        ]
-        return [{"url": endpoint["url"]} for endpoint in writers]
 
 
 class ContainerNotFoundError(Exception):
@@ -1757,10 +1748,7 @@ class LogProxyConsumer(ConsumerBase):
         """
         clients = []
         for relation in self._charm.model.relations.get(self._relation_name, []):
-            for unit in relation.units:
-                client = json.loads(relation.data[unit].get("node_info", {}))
-                if client and client["node_type"] == "writer":
-                    clients.append({"url": client["url"]})
+            clients = clients + json.loads(relation.data[relation.app]["endpoints"])
         return clients
 
     def _server_config(self) -> dict:
