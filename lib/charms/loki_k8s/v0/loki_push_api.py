@@ -432,7 +432,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
-from ops.pebble import APIError
+from ops.pebble import APIError, PathError, ProtocolError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -442,7 +442,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 logger = logging.getLogger(__name__)
 
@@ -1142,7 +1142,11 @@ class LokiPushApiProvider(RelationManagerBase):
         self._rules_dir = os.path.join(rules_dir, tenant_id)
         # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
         # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
-        self.container.make_dir(self._rules_dir, make_parents=True)
+        if self.container.can_connect():
+            try:
+                self.container.make_dir(self._rules_dir, make_parents=True)
+            except (FileNotFoundError, ProtocolError, PathError):
+                logger.debug("Could not create loki directory.")
 
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
@@ -1483,7 +1487,7 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         endpoints = []  # type: list
         for relation in self._charm.model.relations[self._relation_name]:
-            endpoints = endpoints + json.loads(relation.data[relation.app]["endpoints"])
+            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
 
 
