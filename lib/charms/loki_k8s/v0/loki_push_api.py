@@ -1142,7 +1142,7 @@ class LokiPushApiProvider(RelationManagerBase):
         self._rules_dir = os.path.join(rules_dir, tenant_id)
         # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
         # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
-        if self.can_connect():
+        if self.container.can_connect():
             try:
                 self.container.make_dir(self._rules_dir, make_parents=True)
             except (FileNotFoundError, ProtocolError, PathError) as e:
