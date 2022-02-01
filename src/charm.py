@@ -20,6 +20,7 @@ import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
+from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -47,6 +48,7 @@ class LokiOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
+        self.service_patch = KubernetesServicePatch(self, [(f"{self.app.name}", self._port)])
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
