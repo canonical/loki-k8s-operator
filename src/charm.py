@@ -26,7 +26,6 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import PathError, ProtocolError
 
-from kubernetes_service import K8sServicePatch, PatchFailed
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
 # Paths in workload container
@@ -55,7 +54,6 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_port=str(self._port),
         )
-        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
@@ -69,15 +67,10 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #           CHARM HOOKS HANDLERS             #
     ##############################################
-    def _on_install(self, _):
-        """Handler for the install event during which we will update the K8s service."""
-        self._patch_k8s_service()
-
     def _on_config_changed(self, event):
         self._configure(event)
 
     def _on_upgrade_charm(self, event):
-        self._patch_k8s_service()
         self._configure(event)
 
     def _on_loki_pebble_ready(self, event):
@@ -165,20 +158,6 @@ class LokiOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus(str(e))
         except LokiServerError as e:
             self.unit.status = BlockedStatus(str(e))
-
-    def _patch_k8s_service(self):
-        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
-        if self.unit.is_leader() and not self._stored.k8s_service_patched:
-            service_ports = [
-                (f"{self.app.name}", self._port, self._port),
-            ]
-            try:
-                K8sServicePatch.set_ports(self.app.name, service_ports)
-            except PatchFailed as e:
-                logger.error("Unable to patch the Kubernetes service: %s", str(e))
-            else:
-                self._stored.k8s_service_patched = True
-                logger.info("Successfully patched the Kubernetes service!")
 
     def _alerting_config(self) -> str:
         """Construct Loki altering configuration.
