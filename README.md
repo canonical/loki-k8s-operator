@@ -1,6 +1,6 @@
 # Loki Charmed Operator for K8s
 
-[![Test Suite](https://github.com/canonical/loki-k8s-operator/actions/workflows/run_tests.yaml/badge.svg)](https://github.com/canonical/loki-k8s-operator/actions/workflows/run_tests.yaml)
+[![Test Suite](https://github.com/canonical/loki-k8s-operator/actions/workflows/ci.yaml/badge.svg)](https://github.com/canonical/loki-k8s-operator/actions/workflows/ci.yaml)
 
 ## Description
 
