@@ -1,3 +1,5 @@
 ops
 kubernetes
 requests
+lightkube
+lightkube-models

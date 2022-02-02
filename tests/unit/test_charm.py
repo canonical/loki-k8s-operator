@@ -73,6 +73,7 @@ table_manager:
 
 
 class TestCharm(unittest.TestCase):
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
         self.container_name: str = "loki"
         version_patcher = patch(
