@@ -48,7 +48,7 @@ class LokiOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
-        self.service_patch = KubernetesServicePatch(self, [(f"{self.app.name}", self._port)])
+        self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
