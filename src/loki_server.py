@@ -80,7 +80,7 @@ class LokiServer:
         return version
 
     async def rules(self, namespace: str = None) -> dict:
-        """Send a GET request to get Prometheus rules.
+        """Send a GET request to get Loki rules.
 
         Args:
           namespace: limit output to alerts under the given namespace (filename).
