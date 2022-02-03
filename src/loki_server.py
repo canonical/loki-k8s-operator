@@ -9,7 +9,10 @@
 
 import logging
 
+import aiohttp
 import requests
+import yaml
+from yaml.scanner import ScannerError
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,7 @@ class LokiServer:
         """
         self.host = host
         self.port = port
+        self.base_url = f"http://{self.host}:{self.port}"
         self.timeout = timeout
 
     def _build_info(self):
@@ -45,8 +49,7 @@ class LokiServer:
             version) of the Loki application. If the Loki
             instance is not reachable then a HTTPError exception is raised.
         """
-        api_path = "loki/api/v1/status/buildinfo"
-        url = f"http://{self.host}:{self.port}/{api_path}"
+        url = f"{self.base_url}/loki/api/v1/status/buildinfo"
 
         response = requests.get(url, timeout=self.timeout)
 
@@ -76,6 +79,31 @@ class LokiServer:
 
         return version
 
+    async def rules(self, namespace: str = None) -> dict:
+        """Send a GET request to get Loki rules.
+
+        Args:
+          namespace: limit output to alerts under the given namespace (filename).
+
+        Returns:
+          Rule Groups list or empty list
+        """
+        url = f"{self.base_url}/loki/api/v1/rules{'/' + namespace if namespace else ''}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                result = await response.text()
+                # response looks like the alert yaml, unless there is an error, in which case an
+                # error message is returned as plain string
+                try:
+                    # error message could have a colon or not, raising ScannerError or ValueError,
+                    # respectively
+                    # error message from the loki server can be:
+                    #   - '404 page not found'
+                    as_yaml = yaml.safe_load(result)
+                    return as_yaml if type(as_yaml) is dict else {}
+                except (ScannerError, ValueError):
+                    return {}
+
     @property
     def loki_push_api(self) -> str:
         """Fetch Loki PUSH API endpoint.
@@ -83,4 +111,4 @@ class LokiServer:
         Returns:
             a string consisting of the Loki Push API ndpoint
         """
-        return f"http://{self.host}:{self.port}/loki/api/v1/push"
+        return f"{self.base_url}/loki/api/v1/push"
