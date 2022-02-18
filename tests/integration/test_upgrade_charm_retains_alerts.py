@@ -3,9 +3,9 @@
 # See LICENSE file for licensing details.
 
 
+import asyncio
 import logging
 from pathlib import Path
-import asyncio
 
 import pytest
 import yaml
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
-rules_app = "cos_config"
+rules_app = "cos-config"
 
 
 @pytest.mark.abort_on_fail
@@ -33,8 +33,8 @@ async def test_deploy_charms(ops_test):
                 "git_repo": "https://github.com/canonical/loki-k8s-operator",
                 "git_branch": "main",
                 "loki_alert_rules_path": "tests/sample_rule_files/free-standing",
-            }
-        )
+            },
+        ),
     )
 
     # force an update, just in case the files showed up on disk after the last hook fired
@@ -45,7 +45,9 @@ async def test_deploy_charms(ops_test):
     await ops_test.model.add_relation(app_name, rules_app)
 
     async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(apps=[app_name, rules_app], status="active", timeout=1000)
+        await ops_test.model.wait_for_idle(
+            apps=[app_name, rules_app], status="active", timeout=1000
+        )
 
     # verify setup is complete and as expected
     assert await is_loki_up(ops_test, app_name)
@@ -62,4 +64,3 @@ async def test_rule_files_are_retained_after_pod_upgraded(ops_test, loki_charm):
 
     assert await is_loki_up(ops_test, app_name)
     assert ops_test.model.applications[app_name].data["alert_rules"] == {"not": "really"}
-
