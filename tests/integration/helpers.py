@@ -1,10 +1,13 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import itertools
 import json
 import logging
 import urllib.request
+from pathlib import Path
 
+import yaml
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -24,6 +27,48 @@ async def is_loki_up(ops_test, app_name) -> bool:
         f"{url}/loki/api/v1/status/buildinfo", data=None, timeout=2.0
     )
     return response.code == 200 and "version" in json.loads(response.read())
+
+
+def get_logpy_path() -> Path:
+    """Return the Path to log.py file in loki-tester
+    """
+    
+    pth = Path.cwd() / './tests/integration/loki-tester/src/log.py'
+    assert pth.exists()
+    return pth.absolute()
+
+
+def oci_image(metadata_file: str, image_name: str) -> str:
+    """Find upstream source for a container image.
+
+    Args:
+        metadata_file: string path of metadata YAML file relative
+            to top level charm directory
+        image_name: OCI container image string name as defined in
+            metadata.yaml file
+
+    Returns:
+        upstream image source
+
+    Raises:
+        FileNotFoundError: if metadata_file path is invalid
+        ValueError: if upstream source for image name can not be found
+    """
+    metadata = yaml.safe_load(Path(metadata_file).read_text())
+
+    resources = metadata.get("resources", {})
+    if not resources:
+        raise ValueError("No resources found")
+
+    image = resources.get(image_name, {})
+    if not image:
+        raise ValueError(f"{image_name} image not found")
+
+    upstream_source = image.get("upstream-source", "")
+    if not upstream_source:
+        raise ValueError("Upstream source not found")
+
+    return upstream_source
 
 
 class IPAddressWorkaround:
@@ -51,3 +96,11 @@ class IPAddressWorkaround:
     async def __aexit__(self, exc_type, exc_value, exc_traceback):
         """On exit, the update status interval is reverted to its original value."""
         await self.ops_test.model.set_config({"update-status-hook-interval": self.revert_to})
+
+
+def all_combinations(sequence):
+    combos = []
+    for i in range(1, len(sequence)+1):
+        combos.extend(map(lambda subseq: ",".join(subseq),
+                          itertools.combinations(sequence, r=i)))
+    return combos

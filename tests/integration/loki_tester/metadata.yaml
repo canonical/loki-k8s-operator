@@ -1,0 +1,25 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+name: loki-tester
+description: |
+  This charm generates test data which is collected by the
+  Loki k8s operator charm
+summary: |
+  A charm to test the Loki operator
+platforms:
+  - kubernetes
+containers:
+  loki-tester:
+    resource: loki-tester-image
+resources:
+  loki-tester-image:
+    type: oci-image
+    description: upstream docker image for loki-tester
+    upstream-source: python:slim
+requires:
+  logging:
+    interface: loki_push_api
+  log-proxy:
+    interface: loki_push_api
+    optional: true
+    

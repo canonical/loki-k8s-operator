@@ -1,0 +1,12 @@
+# Copyright 2021 Canonical Ltd
+# See LICENSE file for licensing details.
+
+options:
+  log-to:
+    default: stdout
+    description: |
+      Where should the charm workload dump its logs? 
+      Supported: `syslog`, `loki`, `file`.
+      Also a comma-separated combination of these is supported, as well as
+      `ALL`, for all modes at once.
+    type: string
