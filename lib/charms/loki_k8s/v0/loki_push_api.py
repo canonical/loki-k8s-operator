@@ -1230,8 +1230,8 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        if event.relation.data.get(event.relation.app):
-            self._remove_alert_rules_files(self.container)
+        if isinstance(event, RelationEvent):
+            self._process_logging_relation_changed(event.relation)
 
     @property
     def _promtail_binary_url(self) -> dict:
