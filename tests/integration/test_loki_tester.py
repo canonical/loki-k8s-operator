@@ -8,6 +8,9 @@ from requests import get
 import pytest
 from helpers import all_combinations, oci_image, get_logpy_path
 from charm import LOGFILE
+from tests.integration.loki_tester.src.log import (
+    SYSLOG_LOG_MSG, LOKI_LOG_MSG, FILE_LOG_MSG)
+
 
 tester_resources = {
     "loki-tester-image": oci_image(
@@ -60,7 +63,7 @@ def test_log_script(modes):
     if 'syslog' in modes:
         with open('/var/log/syslog', 'r') as f:
             logs = f.read()
-            assert 'syslog_test_output{{3}}' in logs
+            assert SYSLOG_LOG_MSG in logs
 
     if 'loki' in modes:
         resp = get(f"http://{loki_address}/loki/api/v1/label/test/values")
@@ -69,8 +72,8 @@ def test_log_script(modes):
         print(proc.stderr.read())
         print(result)
         assert result['status'] == 'success'
-        assert result['data'] == ['test']
+        assert LOKI_LOG_MSG in result['data']
 
     if 'file' in modes:
         with open(LOGFILE, 'r') as f:
-            assert f.read() == '5'
+            assert FILE_LOG_MSG in f.read()

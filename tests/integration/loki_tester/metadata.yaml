@@ -17,8 +17,6 @@ resources:
     description: upstream docker image for loki-tester
     upstream-source: python:slim
 requires:
-  logging:
-    interface: loki_push_api
   log-proxy:
     interface: loki_push_api
     optional: true

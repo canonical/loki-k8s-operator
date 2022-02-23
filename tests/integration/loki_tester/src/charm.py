@@ -42,16 +42,16 @@ class LokiTesterCharm(CharmBase):
 
     @property
     def loki_endpoints(self) -> List[dict]:
-        """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
+        """Fetch Loki Push API endpoints sent from LogProxyConsumer
+         through relation data.
 
         Returns:
             A list with Loki Push API endpoints.
         """
         endpoints = []  # type: list
-        for relation in self.model.relations[self._relation_name]:
+        for relation in self.model.relations['log-proxy']:
             endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
-
 
     def set_active_status(self):
         """Determine active status message, and set it"""

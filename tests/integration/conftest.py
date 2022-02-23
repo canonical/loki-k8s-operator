@@ -13,7 +13,7 @@ from tests.integration.helpers import oci_image
 def copy_loki_library_into_tester_charm(ops_test):
     """Ensure that the tester charm uses the current Prometheus library."""
     library_path = "lib/charms/loki_k8s/v0/loki_push_api.py"
-    install_path = "tests/integration/loki-tester/" + library_path
+    install_path = "tests/integration/loki_tester/" + library_path
     shutil.copyfile(library_path, install_path)
 
 
@@ -27,7 +27,7 @@ async def loki_charm(ops_test: OpsTest):
 @pytest.fixture(scope="module")
 async def loki_tester_charm(ops_test):
     """A charm to integration test the Loki charm."""
-    charm_path = "tests/integration/loki-tester"
+    charm_path = "tests/integration/loki_tester"
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -46,7 +46,7 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
             loki_tester_charm,
             resources={
                 "prometheus-tester-image": oci_image(
-                    "./tests/integration/loki-tester/metadata.yaml",
+                    "./tests/integration/loki_tester/metadata.yaml",
                     "loki-tester-image",
                 )
             },

@@ -4,7 +4,7 @@
 
 import json
 import sys
-from time import time
+from time import time, sleep
 from typing import Optional
 from urllib import request
 
@@ -13,6 +13,7 @@ DEBUG = False
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
 FILE_LOG_MSG = "LOG FILE"
+WAIT = 0.5
 
 
 def _log_to_syslog():
@@ -98,15 +99,25 @@ def main(modes: str,
          loki_address: Optional[str] = None,
          fname: Optional[str] = None):
     if modes == 'ALL':
-        modes = ('syslog', 'loki', 'file')
-    for mode in modes.split(','):
-        try:
-            _log(mode, loki_address, fname)
-        except Exception as e:
-            if DEBUG:
-                raise e
-            print(f'failed to _log({mode!r}, {loki_address!r}, {fname!r}); '
-                  'got {e}')
+        modes = ['syslog', 'loki', 'file']
+    else:
+        modes = modes.split(',')
+
+    # we do it a few times so we have the time to inspect the running process
+    # when debugging
+    for _ in range(200):
+        if not modes:
+            break
+        for mode in modes:
+            try:
+                _log(mode, loki_address, fname)
+            except Exception as e:
+                if DEBUG:
+                    raise e
+                print(f'failed to _log({mode!r}, {loki_address!r}, {fname!r}); '
+                      'got {e}')
+                modes.remove(mode)
+        sleep(WAIT)
 
 
 if __name__ == "__main__":
