@@ -14,6 +14,7 @@ SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
 FILE_LOG_MSG = "LOG FILE"
 WAIT = 0.5
+DEBUG = False
 
 
 def _log_to_syslog():
@@ -45,7 +46,7 @@ def _log_to_loki(loki_address):
     data = {
         "streams": [
             {
-                "stream": {'test': 'test'},
+                "stream": {'job': 'test-job'},
                 "values": [[str(int(time())) + '0'*9, LOKI_LOG_MSG]]
             }
         ]
@@ -72,8 +73,8 @@ def _log_to_loki(loki_address):
 
 
 def _log_to_file(fname: str):
-    with open(fname, 'w+') as f:
-        f.write(FILE_LOG_MSG)
+    with open(fname, 'a+') as f:
+        f.write(FILE_LOG_MSG+'\n')
 
 
 def _log(mode, loki_address: str, fname: str):
@@ -92,7 +93,7 @@ def _log(mode, loki_address: str, fname: str):
             )
         _log_to_file(fname)
     else:
-        raise ValueError(f"unknown logging mode: {str!r}")
+        raise ValueError(f"unknown logging mode: {fname!r}")
 
 
 def main(modes: str,
@@ -105,9 +106,11 @@ def main(modes: str,
 
     # we do it a few times so we have the time to inspect the running process
     # when debugging
-    for _ in range(200):
+    rng = 200 if DEBUG else 1
+    for _ in range(rng):
         if not modes:
             break
+
         for mode in modes:
             try:
                 _log(mode, loki_address, fname)
@@ -115,9 +118,11 @@ def main(modes: str,
                 if DEBUG:
                     raise e
                 print(f'failed to _log({mode!r}, {loki_address!r}, {fname!r}); '
-                      'got {e}')
+                      f'got {e}')
                 modes.remove(mode)
-        sleep(WAIT)
+
+        if DEBUG:
+            sleep(WAIT)
 
 
 if __name__ == "__main__":

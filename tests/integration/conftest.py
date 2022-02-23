@@ -45,7 +45,7 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
         ops_test.model.deploy(
             loki_tester_charm,
             resources={
-                "prometheus-tester-image": oci_image(
+                "loki-tester-image": oci_image(
                     "./tests/integration/loki_tester/metadata.yaml",
                     "loki-tester-image",
                 )
@@ -55,7 +55,6 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
     )
 
     await ops_test.model.wait_for_idle(apps=app_names, status="active")
-    
 
     await ops_test.model.add_relation('loki:logging', 'loki-tester:logging')
     await ops_test.model.add_relation('loki:logging', 'loki-tester:log-proxy')
@@ -65,3 +64,4 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
     yield app_names
     
     await ops_test.model.applications[loki_tester_app_name].remove()
+    await ops_test.model.applications[loki_app_name].remove()

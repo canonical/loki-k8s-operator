@@ -3,19 +3,21 @@
 # See LICENSE file for licensing details.
 
 import os
+from pathlib import Path
 from subprocess import Popen, PIPE
 from requests import get
 import pytest
 from helpers import all_combinations, oci_image, get_logpy_path
-from charm import LOGFILE
+from tests.integration.loki_tester.src.charm import LOGFILE
 from tests.integration.loki_tester.src.log import (
     SYSLOG_LOG_MSG, LOKI_LOG_MSG, FILE_LOG_MSG)
 
-
+this_file = Path(__file__).parent.resolve()
+metadata_file = (this_file / 'loki_tester' / 'metadata.yaml').absolute()
+if not metadata_file.exists():
+    raise RuntimeError(f'path to metadata.yaml incorrect: {metadata_file}')
 tester_resources = {
-    "loki-tester-image": oci_image(
-        "./tests/integration/loki-tester/metadata.yaml", "loki-tester-image"
-    )
+    "loki-tester-image": oci_image(metadata_file, "loki-tester-image")
 }
 
 
@@ -29,12 +31,15 @@ async def test_build_and_deploy_loki_tester(ops_test, loki_tester_charm):
         loki_tester_charm, resources=tester_resources, application_name=app_name
     )
     await ops_test.model.wait_for_idle(apps=[app_name], status="active")
-    await ops_test.model.block_until(lambda: len(ops_test.model.applications[app_name].units) > 0)
+    await ops_test.model.block_until(
+        lambda: len(ops_test.model.applications[app_name].units) > 0)
 
-    assert ops_test.model.applications[app_name].units[0].workload_status == "active"
+    assert ops_test.model.applications[app_name].units[
+               0].workload_status == "active"
 
     await ops_test.model.applications[app_name].remove()
-    await ops_test.model.block_until(lambda: app_name not in ops_test.model.applications)
+    await ops_test.model.block_until(
+        lambda: app_name not in ops_test.model.applications)
     await ops_test.model.reset()
 
 

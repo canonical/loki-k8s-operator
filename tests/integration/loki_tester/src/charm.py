@@ -9,14 +9,15 @@ import logging
 from pathlib import Path
 from typing import List
 
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, \
+    LokiPushApiConsumer
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container
-from ops.pebble import Layer
+from ops.pebble import Layer, ChangeError
 
 logger = logging.getLogger(__name__)
-LOGFILE = "/var/log/loki_tester_msgs"
+LOGFILE = "/loki_tester_msgs.txt"
 
 
 class LokiTesterCharm(CharmBase):
@@ -25,19 +26,19 @@ class LokiTesterCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._name = name = "loki-tester"
-        self._log_py_script = Path("src/log.py")
-
+        self._log_py_script = (Path(__file__).parent.resolve() /
+                               "log.py").absolute()
         self.log_proxy_consumer = LogProxyConsumer(
             self, log_files=[LOGFILE],
-            enable_syslog=True, 
+            enable_syslog=True,
             container_name=name)
-        
+
         self.framework.observe(
-            self.on.loki_tester_pebble_ready, 
+            self.on.loki_tester_pebble_ready,
             self._on_loki_tester_pebble_ready
         )
         self.framework.observe(
-            self.on.config_changed, 
+            self.on.config_changed,
             self._on_config_changed)
 
     @property
@@ -50,7 +51,8 @@ class LokiTesterCharm(CharmBase):
         """
         endpoints = []  # type: list
         for relation in self.model.relations['log-proxy']:
-            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            endpoints = endpoints + json.loads(
+                relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
 
     def set_active_status(self):
@@ -58,24 +60,30 @@ class LokiTesterCharm(CharmBase):
         addr = self._get_loki_url()
         msg = f'Loki ready at {addr}.' if addr else ''
         self.unit.status = ActiveStatus(msg)
-    
-    def _push_logpy(self, container):
+
+    def _push_logpy(self, container: Container):
         """copy logpy script to container"""
         logpy_script = self._log_py()
         container.push("/log.py", logpy_script)
         logger.info("Pushed log.py to container")
+
+    def _ensure_logpy_present(self, container: Container):
+        try:
+            self._push_logpy(container)
+        except Exception as e:
+            print(e)
+        assert '/log.py' in [f.path for f in container.list_files('/')], 'logpy not pushed'
 
     def _on_loki_tester_pebble_ready(self, event):
         """Install the log.py script."""
         container: Container = event.workload
         logger.info(f'container name: {container.name}')
 
-        self._push_logpy(container)
-        
+        self._ensure_logpy_present(container)
         layer = self._tester_pebble_layer()
         container.add_layer(self._name, layer, combine=True)
         self.one_shot_container_start(container)
-        
+
         self.set_active_status()
 
     def _on_config_changed(self, event):
@@ -87,22 +95,28 @@ class LokiTesterCharm(CharmBase):
 
         self._refresh_pebble_layer()
 
-    def one_shot_container_start(self, container):
-        try: # needed?
+    def one_shot_container_start(self, container: Container):
+        try:  # needed?
             container.restart(self._name)
-        except Exception: # ops.pebble.ChangeError
+        except ChangeError:
             try:
                 container.start(self._name)
-            except Exception as exc:
-                #  Start service "cmd" (cannot start service: exited quickly with code 0)
+            except ChangeError as exc:
+                #  Start service "cmd" (cannot start service:
+                #       exited quickly with code 0)
                 if "exited quickly with code 0" in exc.err:
                     logger.info("cmd OK")
                 else:
                     logger.exception("cmd FAIL")
-                    raise exc # reraise, this is not good
+                    exc.err += str([f.path for f in container.list_files('/')])  # see if log.py is in there.
+                    raise exc  # reraise, this is not good
 
     def _refresh_pebble_layer(self):
         container = self.unit.get_container(self._name)
+
+        #  this might get called before pebble-ready, so we push logpy here
+        self._ensure_logpy_present(container)
+
         current_services = container.get_plan().services
         new_layer = self._tester_pebble_layer()
         if current_services != new_layer.services:
@@ -121,14 +135,14 @@ class LokiTesterCharm(CharmBase):
         if not endpoints:
             return ''
         return endpoints[0]['url']
-    
+
     def _tester_pebble_layer(self) -> Layer:
         """Generate Loki tester pebble layer.
         """
         modes = self.config['log-to']
         loki_address = self._get_loki_url() or 'not an address'
         print(f'generated pebble layer with loki address: {loki_address!r}')
-        
+
         layer_spec = {
             "summary": "loki tester",
             "description": "a test data generator for Loki",
@@ -136,10 +150,10 @@ class LokiTesterCharm(CharmBase):
                 self._name: {
                     "override": "replace",
                     "summary": "logger service",
-                    "command": f"python3 /log.py {modes} {loki_address} {LOGFILE} ",
+                    "command": f"python3 log.py {modes} {loki_address} {LOGFILE}",
                     "startup": "enabled",
                 }
-            },
+            }
         }
         return Layer(layer_spec)
 
