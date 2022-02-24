@@ -35,6 +35,7 @@ async def loki_rules(ops_test, app_name) -> dict:
         response = urllib.request.urlopen(f"{url}/loki/api/v1/rules", data=None, timeout=2.0)
         if response.code == 200:
             return yaml.safe_load(response.read())
+        return {}
     except urllib.error.HTTPError:
         return {}
 
