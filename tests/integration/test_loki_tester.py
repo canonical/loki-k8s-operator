@@ -5,6 +5,8 @@
 import os
 from pathlib import Path
 from subprocess import Popen, PIPE
+from unittest.mock import patch
+
 from requests import get
 import pytest
 from helpers import all_combinations, oci_image, get_logpy_path
@@ -51,6 +53,7 @@ async def test_build_and_deploy_loki_tester(ops_test, loki_tester_charm):
         ('syslog', 'loki', 'file')
     )
 )
+@patch('tests.integration.loki_tester.src.log.SYSLOG_PORT', 514)
 def test_log_script(modes):
     loki_address = None
     if 'loki' in modes:

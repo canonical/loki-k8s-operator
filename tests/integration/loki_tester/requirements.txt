@@ -1,2 +1,3 @@
 ops
 typer==0.4.0
+pytest

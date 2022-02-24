@@ -108,7 +108,6 @@ class LokiTesterCharm(CharmBase):
                     logger.info("cmd OK")
                 else:
                     logger.exception("cmd FAIL")
-                    exc.err += str([f.path for f in container.list_files('/')])  # see if log.py is in there.
                     raise exc  # reraise, this is not good
 
     def _refresh_pebble_layer(self):

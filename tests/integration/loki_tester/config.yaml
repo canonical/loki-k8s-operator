@@ -3,7 +3,7 @@
 
 options:
   log-to:
-    default: stdout
+    default: ALL
     description: |
       Where should the charm workload dump its logs? 
       Supported: `syslog`, `loki`, `file`.

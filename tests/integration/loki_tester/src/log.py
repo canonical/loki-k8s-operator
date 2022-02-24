@@ -4,27 +4,30 @@
 
 import json
 import sys
+import logging
+from logging.handlers import SysLogHandler
 from time import time, sleep
 from typing import Optional
 from urllib import request
 
 
+LONG = True
 DEBUG = False
+TEST_JOB_NAME = 'test-job'
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
 FILE_LOG_MSG = "LOG FILE"
-WAIT = 0.5
-DEBUG = False
+WAIT = 0.2
+SYSLOG_PORT = 1514
 
 
 def _log_to_syslog():
-    # will print to syslog something like:
-    # Feb 18 13:04:23 darkstar python3: 3
-    try:
-        import syslog
-        syslog.syslog(SYSLOG_LOG_MSG)
-    except ImportError:
-        raise RuntimeError("This is only going to work on UNIX.")
+    promtail_syslog_logger = logging.getLogger()
+    for handler in promtail_syslog_logger.handlers:
+        promtail_syslog_logger.removeHandler(handler)
+    log_handler = SysLogHandler(address=('localhost', 1514))
+    promtail_syslog_logger.addHandler(log_handler)
+    logging.info(SYSLOG_LOG_MSG)
 
 
 def _log_to_loki(loki_address):
@@ -37,16 +40,16 @@ def _log_to_loki(loki_address):
             resp_text = resp.read()
     except Exception as e:
         raise RuntimeError(
-            f'Could not contact loki api at {loki_base_url}; gotten {e}')
+            f'Could not contact loki api at {loki_base_url!r}; gotten {e!r};'
+            f'loki_address={loki_address!r}')
 
     if not resp_text.decode('ascii').strip() == 'ready':
-        print('loki not ready yet... give it time.')
-        sys.exit()
+        raise RuntimeError('loki not ready yet... give it time.')
 
     data = {
         "streams": [
             {
-                "stream": {'job': 'test-job'},
+                "stream": {'job': TEST_JOB_NAME},
                 "values": [[str(int(time())) + '0'*9, LOKI_LOG_MSG]]
             }
         ]
@@ -55,12 +58,10 @@ def _log_to_loki(loki_address):
     enc = json.dumps(data).encode('ascii')
     req = request.Request(loki_address)
     req.add_header('Content-Type', 'application/json; charset=utf-8')
-    req.add_header('Content-Length', len(enc))
+    req.add_header('Content-Length', str(len(enc)))
 
     try:
-        with request.urlopen(req, enc) as resp:
-            resp
-
+        resp = request.urlopen(req, enc)
     except Exception as e:
         raise RuntimeError(
             f'Could not contact loki api at {loki_address}; gotten {e}')
@@ -104,9 +105,9 @@ def main(modes: str,
     else:
         modes = modes.split(',')
 
-    # we do it a few times so we have the time to inspect the running process
-    # when debugging
-    rng = 200 if DEBUG else 1
+    # we do it a few more times so we have the time to inspect the running
+    # process when debugging
+    rng = 200 if LONG else 10
     for _ in range(rng):
         if not modes:
             break
@@ -121,8 +122,10 @@ def main(modes: str,
                       f'got {e}')
                 modes.remove(mode)
 
-        if DEBUG:
+        if LONG:
             sleep(WAIT)
+
+    print('DONE')
 
 
 if __name__ == "__main__":

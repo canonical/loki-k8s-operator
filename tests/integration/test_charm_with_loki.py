@@ -1,20 +1,23 @@
 import asyncio
 import json
+import time
 from subprocess import Popen, PIPE
+
 import requests
 
 import pytest
 from tests.integration.loki_tester.src.log import (
-    SYSLOG_LOG_MSG, LOKI_LOG_MSG, FILE_LOG_MSG)
+    SYSLOG_LOG_MSG, LOKI_LOG_MSG, FILE_LOG_MSG, TEST_JOB_NAME)
 from pytest_operator.plugin import OpsTest
 from helpers import IPAddressWorkaround, all_combinations, is_loki_up
 
 
 @pytest.mark.parametrize(
     'modes',
-    all_combinations(
-        ('syslog', 'loki', 'file')
-    )
+    # all_combinations(
+    #     ('syslog', 'loki', 'file')
+    # )
+    ['file']
 )
 @pytest.mark.abort_on_fail
 async def test_loki_scraping_with_promtail(
@@ -23,70 +26,103 @@ async def test_loki_scraping_with_promtail(
     """Test the core loki functionality + promtail on several log output
     scenarios.
     """
-    loki_app_name, loki_tester_app_name = loki_tester_deployment
-    # we configure the loki tester app
-    await asyncio.gather(
-        ops_test.run(f'config {loki_tester_app_name} {modes}'),
-        ops_test.run(f'expose {loki_app_name}/0')
-    )
+    app_names = loki_app_name, loki_tester_app_name = loki_tester_deployment
+    await ops_test.juju('config', loki_tester_app_name, f'log-to={modes}'),
+    await ops_test.model.wait_for_idle(apps=[loki_tester_app_name],
+                                       status="active")
 
     # obtain the loki cluster IP to make direct api calls
-    cmd = Popen(f"juju status {loki_tester_app_name} --format=json".split(" "),
+    cmd = Popen(f"juju status --format=json".split(" "),
                 stdout=PIPE)
     jsn = json.loads(cmd.stdout.read().decode('utf-8'))
-    ip = jsn["applications"][f"{loki_tester_app_name}"]["units"] \
-        [f"{loki_tester_app_name}/0"]["address"]
+    loki_address = jsn["applications"][loki_app_name]["units"][
+        f"{loki_app_name}/0"]["address"]
 
-    await asyncio.gather((
-        assert_logs_in_loki(mode, loki_app_name, ops_test, ip)
+    await asyncio.gather(*(
+        assert_logs_in_loki(mode, loki_app_name, ops_test, loki_address)
         for mode in modes.split(','))
     )
 
+
 stream_template = {
     "job": "juju_{model_name}_{uuid}_loki-tester_loki-tester_0_loki-tester",
-     "juju_application": "loki-tester",
-     "juju_charm": "loki-tester",
-     "juju_model": "cos",
-     "juju_model_uuid": "{uuid}",
-     "juju_unit": "loki-tester/0",
+    "juju_application": "loki-tester",
+    "juju_charm": "loki-tester",
+    "juju_model": "{model_name}",
+    "juju_model_uuid": "{uuid}",
+    "juju_unit": "loki-tester/0",
 }
+WAIT = 1.0
+MAX_QUERY_RETRIES = 25
+
 
 async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
-                              ip: str):
-    url = f"http://{ip}:3100"
+                              loki_address: str):
+    url = f"http://{loki_address}:3100"
 
-    def query_job(job_name):
-        jsn = requests.get(f"{url}/loki/api/v1/query",
-                           params={'query': '{job="{%s}"}' % job_name}
-                           ).json()
-        return jsn['data']['result']
+    def query_job(job_name, attempt=0):
+        print(f'Trying to query loki; attempt #{attempt}.')
+        params = {'query': '{job="%s"}' % job_name}
+        query_url = f"{url}/loki/api/v1/query"
+        jsn = requests.get(query_url, params=params).json()
+        results = jsn['data']['result']
+        labels = requests.get(f"{url}/loki/api/v1/labels").json().get('data', '<no data!?>')
+        job_values = requests.get(f"{url}/loki/api/v1/label/job/values").json().get('data', '<no data!?>')
+
+        if not results:
+            if attempt > MAX_QUERY_RETRIES:
+                raise RuntimeError(
+                    f'timeout attempting to query loki '
+                    f'for {job_name} ({WAIT*attempt}s) at url:{query_url!r} with params={params};'
+                    f'available labels = {labels!r};'
+                    f'values for job = {job_values!r}')
+
+            print(f'Loki received no logs yet; retry in {WAIT}')
+            print(f"labels: {labels!r}; job values: {job_values!r}")
+            time.sleep(WAIT)
+
+            return query_job(job_name, attempt + 1)
+
+        print(f"Loki query successful after {attempt} attempts; "
+              f"{WAIT * attempt} seconds elapsed")
+        return results[0]
 
     if mode == 'loki':
-        res = query_job('job-test')
-        assert res[0]["stream"] == {'job': 'test-job'}
-        assert res[0]["values"][0][1] == LOKI_LOG_MSG
+        res = query_job(TEST_JOB_NAME)
+        assert res["stream"] == {'job': TEST_JOB_NAME}
+        assert res["values"][0][1] == LOKI_LOG_MSG
         return
 
-    if mode == 'loki':
+    if mode == 'file':
         suffix = "_loki-tester"
-        msg = LOKI_LOG_MSG
-    else: # syslog mode
+        msg = FILE_LOG_MSG
+        extra_stream = {'filename': "/loki_tester_msgs.txt"}
+    else:  # syslog mode
         suffix = "_syslog"
         msg = SYSLOG_LOG_MSG
+        extra_stream = {}
 
     # get the job name for the log stream
     labels = requests.get(f"{url}/loki/api/v1/label/job/values"
                           ).json()["data"]
-    job_label = next(filter(lambda x: x.endswith(suffix), labels))
+    try:
+        job_label = next(filter(lambda x: x.endswith(suffix), labels))
+    except StopIteration:
+        raise RuntimeError(f'expected label with suffix {suffix} not found in'
+                           f'{labels}.')
+
+    print('job label:', job_label)
 
     res = query_job(job_label)
-    jmuuid_key = "juju_model_uuid"
-    jmuuid = res[0]["stream"][jmuuid_key]
+    juju_model_uuid_key = "juju_model_uuid"
+    juju_model_uuid = res["stream"][juju_model_uuid_key]
     expected_stream = stream_template.copy()
-    expected_stream[jmuuid_key] = jmuuid
+    expected_stream.update(extra_stream)
+    expected_stream['juju_model'] = juju_model_name = res['stream']['juju_model']
+    expected_stream[juju_model_uuid_key] = juju_model_uuid
     expected_stream["job"] = expected_stream["job"].format(
-        uuid=jmuuid,
-        model_name=res[0]["stream"]["juju_model"])
+        uuid=juju_model_uuid,
+        model_name=juju_model_name)
 
-    assert res[0]["stream"] == expected_stream
-    assert res[0]["values"][0][1] == msg
+    assert res["stream"] == expected_stream
+    assert res["values"][0][1] == msg
