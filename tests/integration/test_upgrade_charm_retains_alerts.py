@@ -51,11 +51,12 @@ async def test_deploy_charms(ops_test):
 
     # verify setup is complete and as expected
     rules = await loki_rules(ops_test, app_name)
-    assert rules == {"not": "really"}
+    assert bool(rules)
 
 
 async def test_rule_files_are_retained_after_pod_upgraded(ops_test, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
+    rules_before_upgrade = await loki_rules(ops_test, app_name)
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
 
@@ -63,4 +64,6 @@ async def test_rule_files_are_retained_after_pod_upgraded(ops_test, loki_charm):
         await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     assert await is_loki_up(ops_test, app_name)
-    assert ops_test.model.applications[app_name].data["alert_rules"] == {"not": "really"}
+    rules_after_upgrade = await loki_rules(ops_test, app_name)
+
+    assert rules_after_upgrade == rules_before_upgrade
