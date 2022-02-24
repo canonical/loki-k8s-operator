@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, is_loki_up
+from helpers import IPAddressWorkaround, is_loki_up, loki_rules
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,8 @@ async def test_deploy_charms(ops_test):
         )
 
     # verify setup is complete and as expected
-    assert await is_loki_up(ops_test, app_name)
-    assert ops_test.model.applications[app_name].data["alert_rules"] == {"not": "really"}
+    rules = await loki_rules(ops_test, app_name)
+    assert rules == {"not": "really"}
 
 
 async def test_rule_files_are_retained_after_pod_upgraded(ops_test, loki_charm):

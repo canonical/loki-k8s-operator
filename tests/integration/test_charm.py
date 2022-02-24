@@ -18,14 +18,13 @@ resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test):
+async def test_build_and_deploy(ops_test, loki_charm):
     """Build the charm-under-test and deploy it together with related charms.
 
     Assert on the unit status before any relations/configurations take place.
     """
     # build and deploy charm from local source folder
-    charm_under_test = await ops_test.build_charm(".")
-    await ops_test.model.deploy(charm_under_test, resources=resources, application_name=app_name)
+    await ops_test.model.deploy(loki_charm, resources=resources, application_name=app_name)
 
     async with IPAddressWorkaround(ops_test):
         await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)

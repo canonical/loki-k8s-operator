@@ -5,6 +5,7 @@ import json
 import logging
 import urllib.request
 
+import yaml
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,16 @@ async def is_loki_up(ops_test, app_name) -> bool:
         f"{url}/loki/api/v1/status/buildinfo", data=None, timeout=2.0
     )
     return response.code == 200 and "version" in json.loads(response.read())
+
+
+async def loki_rules(ops_test, app_name) -> dict:
+    address = await get_unit_address(ops_test, app_name, 0)
+    url = f"http://{address}:3100"
+
+    response = urllib.request.urlopen(f"{url}/loki/api/v1/rules", data=None, timeout=2.0)
+    if response.code == 200:
+        return yaml.safe_load(response.read())
+    return {}
 
 
 class IPAddressWorkaround:
