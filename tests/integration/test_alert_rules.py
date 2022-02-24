@@ -45,6 +45,7 @@ async def test_no_rules_files(ops_test):
     rules_before_relation = await loki_rules(ops_test, app_name)
     assert len(rules_before_relation) == 0
 
+
 @pytest.mark.abort_on_fail
 async def test_first_relation_one_alert_rule(ops_test):
     await asyncio.gather(
@@ -105,6 +106,7 @@ async def test_second_relation_second_alert_rule(ops_test):
 
     rules_after_relation2 = await loki_rules(ops_test, app_name)
     assert len(rules_after_relation2) == 2
+
 
 @pytest.mark.abort_on_fail
 async def test_remove_app_one_alert_rules_is_reteined(ops_test):
