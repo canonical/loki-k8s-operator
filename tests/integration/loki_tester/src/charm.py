@@ -71,7 +71,7 @@ class LokiTesterCharm(CharmBase):
         try:
             self._push_logpy(container)
         except Exception as e:
-            print(e)
+            logger.debug('encountered error when pushing logpy:', e)
         assert '/log.py' in [f.path for f in container.list_files('/')], 'logpy not pushed'
 
     def _on_loki_tester_pebble_ready(self, event):
@@ -81,7 +81,7 @@ class LokiTesterCharm(CharmBase):
 
         self._ensure_logpy_present(container)
         layer = self._tester_pebble_layer()
-        container.add_layer(self._name, layer, combine=True)
+        container.add_layer('loki-tester-pebble-layer', layer, combine=True)
         self.one_shot_container_start(container)
 
         self.set_active_status()
@@ -139,9 +139,11 @@ class LokiTesterCharm(CharmBase):
         """Generate Loki tester pebble layer.
         """
         modes = self.config['log-to']
-        loki_address = self._get_loki_url() or 'not an address'
-        print(f'generated pebble layer with loki address: {loki_address!r}')
+        loki_address = self._get_loki_url() or '<not_an_address>'
+        logger.info(f'generated pebble layer with loki address: {loki_address!r}')
+        cmd = f"python3 log.py {modes} {loki_address} {LOGFILE}"
 
+        logger.info(f'pebble layer command: {cmd}')
         layer_spec = {
             "summary": "loki tester",
             "description": "a test data generator for Loki",
@@ -149,7 +151,7 @@ class LokiTesterCharm(CharmBase):
                 self._name: {
                     "override": "replace",
                     "summary": "logger service",
-                    "command": f"python3 log.py {modes} {loki_address} {LOGFILE}",
+                    "command": cmd,
                     "startup": "enabled",
                 }
             }

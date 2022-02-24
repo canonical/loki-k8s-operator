@@ -10,8 +10,15 @@ from time import time, sleep
 from typing import Optional
 from urllib import request
 
+"""
+to run manually inside container:
+j ssh -container loki-tester loki-tester/0 bash
+python3 ./agents/unit-loki-tester-0/charm/src/log.py syslog \
+   http://loki-k8s-0.loki-k8s-endpoints.test-0.svc.cluster.local:3100/loki/api/v1/push \
+   /loki_tester_msgs.txt  
+"""
 
-LONG = True
+LONG = False
 DEBUG = False
 TEST_JOB_NAME = 'test-job'
 SYSLOG_LOG_MSG = "LOG SYSLOG"
@@ -79,6 +86,8 @@ def _log_to_file(fname: str):
 
 
 def _log(mode, loki_address: str, fname: str):
+    if mode == 'NOOP':
+        return
     if mode == 'syslog':
         _log_to_syslog()
     elif mode == 'loki':

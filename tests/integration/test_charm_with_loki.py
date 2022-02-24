@@ -17,7 +17,7 @@ from helpers import IPAddressWorkaround, all_combinations, is_loki_up
     # all_combinations(
     #     ('syslog', 'loki', 'file')
     # )
-    ['file']
+    ['file', 'loki']
 )
 @pytest.mark.abort_on_fail
 async def test_loki_scraping_with_promtail(
@@ -27,7 +27,7 @@ async def test_loki_scraping_with_promtail(
     scenarios.
     """
     app_names = loki_app_name, loki_tester_app_name = loki_tester_deployment
-    await ops_test.juju('config', loki_tester_app_name, f'log-to={modes}'),
+    await ops_test.juju('config', loki_tester_app_name, f'log-to={modes}')
     await ops_test.model.wait_for_idle(apps=[loki_tester_app_name],
                                        status="active")
 
@@ -53,7 +53,7 @@ stream_template = {
     "juju_unit": "loki-tester/0",
 }
 WAIT = 1.0
-MAX_QUERY_RETRIES = 25
+MAX_QUERY_RETRIES = 5
 
 
 async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
@@ -63,7 +63,9 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
     def query_job(job_name, attempt=0):
         print(f'Trying to query loki; attempt #{attempt}.')
         params = {'query': '{job="%s"}' % job_name}
-        query_url = f"{url}/loki/api/v1/query"
+        # query_range goes from now to up to 1h ago, more
+        # certain to capture something
+        query_url = f"{url}/loki/api/v1/query_range"
         jsn = requests.get(query_url, params=params).json()
         results = jsn['data']['result']
         labels = requests.get(f"{url}/loki/api/v1/labels").json().get('data', '<no data!?>')
