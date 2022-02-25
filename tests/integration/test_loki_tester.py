@@ -11,7 +11,6 @@ import pytest
 from helpers import all_combinations, get_logpy_path, oci_image
 from requests import get
 
-from tests.integration.loki_tester.src.charm import LOGFILE
 from tests.integration.loki_tester.src.log import (
     FILE_LOG_MSG,
     LOKI_LOG_MSG,
@@ -46,10 +45,13 @@ async def test_build_and_deploy_loki_tester(ops_test, loki_tester_charm):
 
 # to run this test against a locally available LOKI node:
 # LOKI_ADDRESS="10.1.94.35:3100" pytest ./tests/integration/test_loki_tester.py::test_log_script
-@pytest.mark.parametrize("modes", all_combinations(("syslog", "loki", "file")))
+@pytest.mark.parametrize("modes", ("syslog", "loki", "file", "NOOP", "ALL"))
 @patch("tests.integration.loki_tester.src.log.SYSLOG_PORT", 514)
-def test_log_script(modes):
-    loki_address = None
+def test_log_script(modes, tmp_path):
+    if modes == "ALL":
+        modes = "syslog,loki,file"
+
+    loki_address = "<not_an_address>"
     if "loki" in modes:
         loki_address = os.environ.get("LOKI_ADDRESS")
         if not loki_address:
@@ -58,26 +60,27 @@ def test_log_script(modes):
                 "node address for the `loki`-mode test to work"
             )
 
-    args = ["python3", get_logpy_path(), modes]
+    logfile = tmp_path / 'logpy.log'
+    args = ["python3", get_logpy_path(), modes, loki_address, str(logfile)]
     if loki_address:
         args.append(loki_address)
 
     proc = Popen(args, stdout=PIPE, stderr=PIPE)
+    print(proc.stdout.read())
+    print(proc.stderr.read())
 
     if "syslog" in modes:
-        with open("/var/log/syslog", "r") as f:
-            logs = f.read()
+        pytest.xfail()
+        with open("/var/log/syslog", "rb") as f:
+            logs = f.read().decode(errors='replace')
             assert SYSLOG_LOG_MSG in logs
 
     if "loki" in modes:
         resp = get(f"http://{loki_address}/loki/api/v1/label/test/values")
         result = resp.json()
-        print(proc.stdout.read())
-        print(proc.stderr.read())
-        print(result)
         assert result["status"] == "success"
         assert LOKI_LOG_MSG in result["data"]
 
     if "file" in modes:
-        with open(LOGFILE, "r") as f:
+        with open(logfile, "r") as f:
             assert FILE_LOG_MSG in f.read()

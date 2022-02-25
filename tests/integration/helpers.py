@@ -31,8 +31,9 @@ async def is_loki_up(ops_test, app_name) -> bool:
 
 def get_logpy_path() -> Path:
     """Return the Path to log.py file in loki-tester."""
-    pth = Path.cwd() / "./tests/integration/loki-tester/src/log.py"
-    assert pth.exists()
+    pth = Path(__file__).parent.resolve() / "loki_tester" / "src" / "log.py"
+    print(pth)
+    assert pth.exists(), pth
     return pth.absolute()
 
 

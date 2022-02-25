@@ -42,6 +42,7 @@ def _log_to_syslog():
     log_handler = SysLogHandler(address=address)
     promtail_syslog_logger.addHandler(log_handler)
     logging.info(SYSLOG_LOG_MSG)
+    promtail_syslog_logger.setLevel("INFO")
 
     logger.info(f"logged to syslog at {address}")
 
