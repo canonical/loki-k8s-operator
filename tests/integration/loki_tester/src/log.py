@@ -17,7 +17,11 @@ from urllib import request
 #    /loki_tester_msgs.txt
 
 logger = logging.getLogger(__name__)
-logger.addHandler(logging.FileHandler("/logpy.log"))
+try:
+    logger.addHandler(logging.FileHandler("/logpy.log"))
+except PermissionError:
+    # not in a container; skip this
+    pass
 logger.setLevel("INFO")
 
 LONG = False
