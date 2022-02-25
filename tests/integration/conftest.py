@@ -12,7 +12,7 @@ from tests.integration.helpers import oci_image
 
 @pytest_asyncio.fixture(scope="module", autouse=True)
 def copy_loki_library_into_tester_charm(ops_test):
-    """Ensure that the tester charm uses the current Prometheus library."""
+    """Ensure that the tester charm uses the current Loki library."""
     library_path = "lib/charms/loki_k8s/v0/loki_push_api.py"
     install_path = "tests/integration/loki_tester/" + library_path
     shutil.copyfile(library_path, install_path)

@@ -6,3 +6,5 @@ __pycache__
 build
 venv
 .tox
+.idea
+/tests/integration/loki_tester/lib/charms/loki_k8s/v0/loki_push_api.py
