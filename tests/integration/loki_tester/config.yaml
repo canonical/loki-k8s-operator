@@ -3,7 +3,7 @@
 
 options:
   log-to:
-    default: ALL
+    default: NOOP
     description: |
       Where should the charm workload dump its logs? 
       Supported: `syslog`, `loki`, `file`.

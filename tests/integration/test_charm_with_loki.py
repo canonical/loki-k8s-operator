@@ -1,23 +1,76 @@
 import asyncio
 import json
+import sys
 import time
 from subprocess import Popen, PIPE
 
 import requests
 
 import pytest
-from tests.integration.loki_tester.src.log import (
-    SYSLOG_LOG_MSG, LOKI_LOG_MSG, FILE_LOG_MSG, TEST_JOB_NAME)
+
+from tests.integration.loki_tester.lib.charms.loki_k8s.v0.loki_push_api import (
+    WORKLOAD_BINARY_DIR, BINARY_FILE_NAME, WORKLOAD_CONFIG_DIR,
+    WORKLOAD_CONFIG_FILE_NAME, WORKLOAD_CONFIG_PATH
+)
 from pytest_operator.plugin import OpsTest
 from helpers import IPAddressWorkaround, all_combinations, is_loki_up
+
+TEST_JOB_NAME = 'test-job'
+SYSLOG_LOG_MSG = "LOG SYSLOG"
+LOKI_LOG_MSG = "LOG LOKI"
+FILE_LOG_MSG = "LOG FILE"
+
+
+async def run_in_loki_tester(ops_test: OpsTest, cmd):
+    cmd_line = f"juju ssh --container loki-tester loki-tester/0 {cmd}"
+    return await ops_test.run(*cmd_line.split(" "))
+
+
+async def assert_file_exists(ops_test, file_path, file_name):
+    retcode, stdout, stderr = await run_in_loki_tester(
+        ops_test, f'ls -l {file_path}{file_name}| grep {file_name}')
+    assert stdout
+    assert not stderr
+    assert retcode == 0
+
+
+async def test_logpy_is_in_workload_container(
+        ops_test: OpsTest, loki_tester_deployment
+):
+    """verify that log.py is in the container
+    """
+    # this could be done in a smarter way I guess
+    await assert_file_exists(ops_test, '/', 'log.py')
+
+
+async def test_promtail_files_are_in_workload_container(
+        ops_test: OpsTest, loki_tester_deployment
+):
+    """verify that the promload binary and the config are where they should,
+    """
+    await assert_file_exists(
+        ops_test, WORKLOAD_BINARY_DIR + '/', BINARY_FILE_NAME)
+    await assert_file_exists(
+        ops_test, WORKLOAD_CONFIG_DIR + '/', WORKLOAD_CONFIG_FILE_NAME)
+
+
+async def test_promtail_is_running_in_workload_container(
+        ops_test: OpsTest, loki_tester_deployment
+):
+    """verify that the promtail process is running
+    """
+    await run_in_loki_tester(ops_test, 'apt update -y && apt install procps -y')
+    retcode, stdout, stderr = await run_in_loki_tester(
+        ops_test, 'ps -aux | grep promtail')
+    cmd = f"{BINARY_FILE_NAME} -config.file={WORKLOAD_CONFIG_PATH}"
+    assert cmd in stdout
 
 
 @pytest.mark.parametrize(
     'modes',
-    # all_combinations(
-    #     ('syslog', 'loki', 'file')
-    # )
-    ['file', 'loki']
+    all_combinations(
+        ('loki',)
+    )
 )
 @pytest.mark.abort_on_fail
 async def test_loki_scraping_with_promtail(
@@ -27,21 +80,31 @@ async def test_loki_scraping_with_promtail(
     scenarios.
     """
     app_names = loki_app_name, loki_tester_app_name = loki_tester_deployment
+
+    # at this point the workload should run and fire the logs to the configured targets
+    print(f'configuring {loki_tester_app_name} to {modes}')
     await ops_test.juju('config', loki_tester_app_name, f'log-to={modes}')
+
     await ops_test.model.wait_for_idle(apps=[loki_tester_app_name],
                                        status="active")
 
     # obtain the loki cluster IP to make direct api calls
-    cmd = Popen(f"juju status --format=json".split(" "),
-                stdout=PIPE)
-    jsn = json.loads(cmd.stdout.read().decode('utf-8'))
-    loki_address = jsn["applications"][loki_app_name]["units"][
-        f"{loki_app_name}/0"]["address"]
+    retcode, stdout, stderr = await ops_test.juju("status", "--format=json")
+    try:
+        jsn = json.loads(stdout)
+        loki_address = jsn["applications"][loki_app_name]["units"][
+            f"{loki_app_name}/0"]["address"]
+    except Exception as e:
+        raise RuntimeError(
+            f"failed to fetch loki address; j status returned {retcode!r}"
+            f"with {stdout!r}, {stderr!r}"
+            f"Embedded error: {e}"
+        )
 
     await asyncio.gather(*(
         assert_logs_in_loki(mode, loki_app_name, ops_test, loki_address)
         for mode in modes.split(','))
-    )
+                         )
 
 
 stream_template = {
@@ -68,14 +131,17 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
         query_url = f"{url}/loki/api/v1/query_range"
         jsn = requests.get(query_url, params=params).json()
         results = jsn['data']['result']
-        labels = requests.get(f"{url}/loki/api/v1/labels").json().get('data', '<no data!?>')
-        job_values = requests.get(f"{url}/loki/api/v1/label/job/values").json().get('data', '<no data!?>')
+        labels = requests.get(f"{url}/loki/api/v1/labels").json().get('data',
+                                                                      '<no data!?>')
+        job_values = requests.get(
+            f"{url}/loki/api/v1/label/job/values").json().get('data',
+                                                              '<no data!?>')
 
         if not results:
             if attempt > MAX_QUERY_RETRIES:
                 raise RuntimeError(
                     f'timeout attempting to query loki '
-                    f'for {job_name} ({WAIT*attempt}s) at url:{query_url!r} with params={params};'
+                    f'for {job_name} ({WAIT * attempt}s) at url:{query_url!r} with params={params};'
                     f'available labels = {labels!r};'
                     f'values for job = {job_values!r}')
 
@@ -120,7 +186,8 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
     juju_model_uuid = res["stream"][juju_model_uuid_key]
     expected_stream = stream_template.copy()
     expected_stream.update(extra_stream)
-    expected_stream['juju_model'] = juju_model_name = res['stream']['juju_model']
+    expected_stream['juju_model'] = juju_model_name = res['stream'][
+        'juju_model']
     expected_stream[juju_model_uuid_key] = juju_model_uuid
     expected_stream["job"] = expected_stream["job"].format(
         uuid=juju_model_uuid,

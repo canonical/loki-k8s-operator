@@ -26,6 +26,7 @@ class LokiTesterCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._name = name = "loki-tester"
+        self._pebble_layer_name = 'loki-tester-pebble-layer'
         self._log_py_script = (Path(__file__).parent.resolve() /
                                "log.py").absolute()
         self.log_proxy_consumer = LogProxyConsumer(
@@ -33,10 +34,6 @@ class LokiTesterCharm(CharmBase):
             enable_syslog=True,
             container_name=name)
 
-        self.framework.observe(
-            self.on.loki_tester_pebble_ready,
-            self._on_loki_tester_pebble_ready
-        )
         self.framework.observe(
             self.on.config_changed,
             self._on_config_changed)
@@ -74,18 +71,6 @@ class LokiTesterCharm(CharmBase):
             logger.debug('encountered error when pushing logpy:', e)
         assert '/log.py' in [f.path for f in container.list_files('/')], 'logpy not pushed'
 
-    def _on_loki_tester_pebble_ready(self, event):
-        """Install the log.py script."""
-        container: Container = event.workload
-        logger.info(f'container name: {container.name}')
-
-        self._ensure_logpy_present(container)
-        layer = self._tester_pebble_layer()
-        container.add_layer('loki-tester-pebble-layer', layer, combine=True)
-        self.one_shot_container_start(container)
-
-        self.set_active_status()
-
     def _on_config_changed(self, event):
         """Reconfigure the Loki tester."""
         container = self.unit.get_container(self._name)
@@ -96,19 +81,26 @@ class LokiTesterCharm(CharmBase):
         self._refresh_pebble_layer()
 
     def one_shot_container_start(self, container: Container):
+        def is_quick_exit_exc(exc: ChangeError):
+            #  Start service "cmd" (cannot start service:
+            #       exited quickly with code 0)
+            quick_exit_msg = "exited quickly with code 0"
+            return quick_exit_msg in exc.err
+
         try:  # needed?
             container.restart(self._name)
-        except ChangeError:
-            try:
-                container.start(self._name)
-            except ChangeError as exc:
-                #  Start service "cmd" (cannot start service:
-                #       exited quickly with code 0)
-                if "exited quickly with code 0" in exc.err:
-                    logger.info("cmd OK")
-                else:
-                    logger.exception("cmd FAIL")
-                    raise exc  # reraise, this is not good
+            logger.info('container RESTARTED')
+        except ChangeError as exc:
+            if is_quick_exit_exc(exc):
+                try:
+                    container.start(self._name)
+                    logger.info('container STARTED')
+                except ChangeError as exc:
+                    if is_quick_exit_exc(exc):
+                        logger.exception("cmd FAIL")
+                        raise exc  # reraise, this is not good
+
+        logger.info(f"cmd logpy [{self.config['log-to']}] OK")
 
     def _refresh_pebble_layer(self):
         container = self.unit.get_container(self._name)
@@ -119,7 +111,7 @@ class LokiTesterCharm(CharmBase):
         current_services = container.get_plan().services
         new_layer = self._tester_pebble_layer()
         if current_services != new_layer.services:
-            container.add_layer(self._name, new_layer, combine=True)
+            container.add_layer(self._pebble_layer_name, new_layer, combine=True)
             logger.debug("Added tester layer to container")
 
             self.one_shot_container_start(container)

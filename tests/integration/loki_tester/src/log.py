@@ -13,10 +13,14 @@ from urllib import request
 """
 to run manually inside container:
 j ssh -container loki-tester loki-tester/0 bash
-python3 ./agents/unit-loki-tester-0/charm/src/log.py syslog \
+python3 ./log.py syslog,file,loki \
    http://loki-k8s-0.loki-k8s-endpoints.test-0.svc.cluster.local:3100/loki/api/v1/push \
    /loki_tester_msgs.txt  
 """
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.FileHandler('/logpy.log'))
+logger.setLevel('INFO')
 
 LONG = False
 DEBUG = False
@@ -32,9 +36,12 @@ def _log_to_syslog():
     promtail_syslog_logger = logging.getLogger()
     for handler in promtail_syslog_logger.handlers:
         promtail_syslog_logger.removeHandler(handler)
-    log_handler = SysLogHandler(address=('localhost', 1514))
+    address = ('localhost', 1514)
+    log_handler = SysLogHandler(address=address)
     promtail_syslog_logger.addHandler(log_handler)
     logging.info(SYSLOG_LOG_MSG)
+
+    logger.info(f'logged to syslog at {address}')
 
 
 def _log_to_loki(loki_address):
@@ -79,10 +86,13 @@ def _log_to_loki(loki_address):
             f"gotten {resp.status_code}: {resp.reason}"
         )
 
+    logger.info(f'logged to loki at {loki_address}')
+
 
 def _log_to_file(fname: str):
     with open(fname, 'a+') as f:
         f.write(FILE_LOG_MSG+'\n')
+    logger.info(f'logged to file at {fname}')
 
 
 def _log(mode, loki_address: str, fname: str):
@@ -134,6 +144,7 @@ def main(modes: str,
         if LONG:
             sleep(WAIT)
 
+    logger.info(f'executed: logpy {modes} {loki_address} {fname}')
     print('DONE')
 
 
