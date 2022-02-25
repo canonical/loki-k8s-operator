@@ -70,6 +70,19 @@ def oci_image(metadata_file: str, image_name: str) -> str:
     return upstream_source
 
 
+async def loki_rules(ops_test, app_name) -> dict:
+    address = await get_unit_address(ops_test, app_name, 0)
+    url = f"http://{address}:3100"
+
+    try:
+        response = urllib.request.urlopen(f"{url}/loki/api/v1/rules", data=None, timeout=2.0)
+        if response.code == 200:
+            return yaml.safe_load(response.read())
+        return {}
+    except urllib.error.HTTPError:
+        return {}
+
+
 class IPAddressWorkaround:
     """Context manager for deploying a charm that needs to have its IP address.
 
