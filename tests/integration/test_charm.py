@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, all_combinations, is_loki_up
+from helpers import IPAddressWorkaround, is_loki_up
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +22,11 @@ async def test_build_and_deploy(ops_test, loki_charm):
     Assert on the unit status before any relations/configurations take place.
     """
     # build and deploy charm from local source folder
-    await ops_test.model.deploy('loki', loki_charm, resources=resources,
-                                application_name=app_name)
+    await ops_test.model.deploy("loki", loki_charm, resources=resources, application_name=app_name)
 
     async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(apps=[app_name], status="active",
-                                           timeout=1000)
-        assert ops_test.model.applications[app_name].units[
-                   0].workload_status == "active"
+        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+        app = ops_test.model.applications[app_name]
+        assert app.units[0].workload_status == "active"
 
     assert await is_loki_up(ops_test, app_name)

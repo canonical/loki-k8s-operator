@@ -30,10 +30,8 @@ async def is_loki_up(ops_test, app_name) -> bool:
 
 
 def get_logpy_path() -> Path:
-    """Return the Path to log.py file in loki-tester
-    """
-    
-    pth = Path.cwd() / './tests/integration/loki-tester/src/log.py'
+    """Return the Path to log.py file in loki-tester."""
+    pth = Path.cwd() / "./tests/integration/loki-tester/src/log.py"
     assert pth.exists()
     return pth.absolute()
 
@@ -100,7 +98,6 @@ class IPAddressWorkaround:
 
 def all_combinations(sequence):
     combos = []
-    for i in range(1, len(sequence)+1):
-        combos.extend(map(lambda subseq: ",".join(subseq),
-                          itertools.combinations(sequence, r=i)))
+    for i in range(1, len(sequence) + 1):
+        combos.extend(map(lambda subseq: ",".join(subseq), itertools.combinations(sequence, r=i)))
     return combos

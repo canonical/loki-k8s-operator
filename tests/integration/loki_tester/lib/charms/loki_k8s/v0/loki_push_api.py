@@ -879,7 +879,7 @@ class AlertRules:
         with file_path.open() as rf:
             # Load a list of rules from file then add labels and filters
             try:
-                rule_file = yaml.safe_load(rf) or '' # TODO REMOVE THIS HOTFIX
+                rule_file = yaml.safe_load(rf) or ""
 
             except Exception as e:
                 logger.error("Failed to read alert rules from %s: %s", file_path.name, e)
@@ -1621,7 +1621,9 @@ class LogProxyConsumer(ConsumerBase):
         self.framework.observe(events.relation_changed, self._on_relation_changed)
         self.framework.observe(events.relation_departed, self._on_relation_departed)
         self.framework.observe(
-            getattr(self._charm.on, "{}_pebble_ready".format(self._container_name.replace('-', '_'))),  # TODO REMOVE THIS HOTFIX
+            getattr(
+                self._charm.on, "{}_pebble_ready".format(self._container_name.replace("-", "_"))
+            ),  # TODO REMOVE THIS HOTFIX
             self._on_pebble_ready,
         )
 

@@ -3,6 +3,7 @@
 
 import asyncio
 import shutil
+
 import pytest_asyncio
 from pytest_operator.plugin import OpsTest
 
@@ -34,10 +35,9 @@ async def loki_tester_charm(ops_test):
 
 @pytest_asyncio.fixture(scope="module")
 async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
-    """Simple deployment with loki+loki-tester, related"""
-    app_names = loki_app_name, loki_tester_app_name = \
-        ('loki-k8s', 'loki-tester')
-    
+    """Simple deployment with loki+loki-tester, related."""
+    app_names = loki_app_name, loki_tester_app_name = ("loki-k8s", "loki-tester")
+
     await asyncio.gather(
         ops_test.model.deploy(
             loki_charm,
@@ -60,14 +60,14 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
             application_name=loki_tester_app_name,
         ),
     )
-    await ops_test.model.add_relation(f'{loki_app_name}:logging',
-                                      f'{loki_tester_app_name}:log-proxy')
+    await ops_test.model.add_relation(
+        f"{loki_app_name}:logging", f"{loki_tester_app_name}:log-proxy"
+    )
 
     # before we can expose loki, we need to configure the hostname
-    await ops_test.juju('config', loki_app_name,
-                        'juju-external-hostname=localhost')
+    await ops_test.juju("config", loki_app_name, "juju-external-hostname=localhost")
     await ops_test.model.wait_for_idle(apps=app_names, status="active")
 
-    await ops_test.juju('expose', loki_app_name)
+    await ops_test.juju("expose", loki_app_name)
 
     return app_names

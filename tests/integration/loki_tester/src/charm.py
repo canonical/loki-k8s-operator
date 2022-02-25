@@ -9,12 +9,11 @@ import logging
 from pathlib import Path
 from typing import List
 
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, \
-    LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container
-from ops.pebble import Layer, ChangeError
+from ops.pebble import ChangeError, Layer
 
 logger = logging.getLogger(__name__)
 LOGFILE = "/loki_tester_msgs.txt"
@@ -26,39 +25,36 @@ class LokiTesterCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._name = name = "loki-tester"
-        self._log_py_script = (Path(__file__).parent.resolve() /
-                               "log.py").absolute()
+        this_dir = Path(__file__).parent.resolve()
+        self._log_py_script = (this_dir / "log.py").absolute()
         self.log_proxy_consumer = LogProxyConsumer(
-            self, log_files=[LOGFILE],
-            enable_syslog=True,
-            container_name=name)
+            self, log_files=[LOGFILE], enable_syslog=True, container_name=name
+        )
 
-        self.framework.observe(
-            self.on.config_changed,
-            self._on_config_changed)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
 
     @property
     def loki_endpoints(self) -> List[dict]:
-        """Fetch Loki Push API endpoints sent from LogProxyConsumer
-         through relation data.
+        """Fetch Loki Push API endpoints.
+
+         As sent from LogProxyConsumer through relation data.
 
         Returns:
             A list with Loki Push API endpoints.
         """
         endpoints = []  # type: list
-        for relation in self.model.relations['log-proxy']:
-            endpoints = endpoints + json.loads(
-                relation.data[relation.app].get("endpoints", "[]"))
+        for relation in self.model.relations["log-proxy"]:
+            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
 
     def set_active_status(self):
-        """Determine active status message, and set it"""
+        """Determine active status message, and set it."""
         addr = self._get_loki_url()
-        msg = f'Loki ready at {addr}.' if addr else ''
+        msg = f"Loki ready at {addr}." if addr else ""
         self.unit.status = ActiveStatus(msg)
 
     def _push_logpy(self, container: Container):
-        """copy logpy script to container"""
+        """Copy logpy script to container."""
         logpy_script = self._log_py()
         container.push("/log.py", logpy_script)
         logger.info("Pushed log.py to container")
@@ -67,8 +63,8 @@ class LokiTesterCharm(CharmBase):
         try:
             self._push_logpy(container)
         except Exception as e:
-            logger.debug('encountered error when pushing logpy:', e)
-        assert '/log.py' in [f.path for f in container.list_files('/')], 'logpy not pushed'
+            logger.debug("encountered error when pushing logpy:", e)
+        assert "/log.py" in [f.path for f in container.list_files("/")], "logpy not pushed"
 
     def _on_config_changed(self, event):
         """Reconfigure the Loki tester."""
@@ -83,7 +79,7 @@ class LokiTesterCharm(CharmBase):
     def one_shot_container_start(self, container: Container):
         try:
             container.start(self._name)
-            logger.info('container STARTED')
+            logger.info("container STARTED")
         except ChangeError as exc:
             #  Start service "cmd" (cannot start service:
             #       exited quickly with code 0)
@@ -110,23 +106,23 @@ class LokiTesterCharm(CharmBase):
         self.set_active_status()
 
     def _get_loki_url(self) -> str:
-        """Fetches the loki address; only available if loki_push_api relation 
-        is active.
+        """Fetches the loki address.
+
+        Only available if some loki relation is active.
         """
         endpoints = self.loki_endpoints
         if not endpoints:
-            return ''
-        return endpoints[0]['url']
+            return ""
+        return endpoints[0]["url"]
 
     def _tester_pebble_layer(self) -> Layer:
-        """Generate Loki tester pebble layer.
-        """
-        modes = self.config['log-to']
-        loki_address = self._get_loki_url() or '<not_an_address>'
-        logger.info(f'generated pebble layer with loki address: {loki_address!r}')
+        """Generate Loki tester pebble layer."""
+        modes = self.config["log-to"]
+        loki_address = self._get_loki_url() or "<not_an_address>"
+        logger.info(f"generated pebble layer with loki address: {loki_address!r}")
         cmd = f"python3 log.py {modes} {loki_address} {LOGFILE}"
 
-        logger.info(f'pebble layer command: {cmd}')
+        logger.info(f"pebble layer command: {cmd}")
         layer_spec = {
             "summary": "loki tester",
             "description": "a test data generator for Loki",
@@ -137,7 +133,7 @@ class LokiTesterCharm(CharmBase):
                     "command": cmd,
                     "startup": "enabled",
                 }
-            }
+            },
         }
         return Layer(layer_spec)
 
