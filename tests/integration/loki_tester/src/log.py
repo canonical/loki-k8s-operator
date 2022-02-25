@@ -53,9 +53,15 @@ def _log_to_loki(loki_address):
         with request.urlopen(f"{loki_base_url}/ready") as resp:
             resp_text = resp.read()
     except Exception as e:
+        if resp.getcode() == 503:
+            raise RuntimeError(
+                f'loki gives Service Unavailable at {loki_base_url}'
+            )
+
         raise RuntimeError(
             f'Could not contact loki api at {loki_base_url!r}; gotten {e!r};'
-            f'loki_address={loki_address!r}')
+            f'loki_address={loki_address!r}'
+        )
 
     if not resp_text.decode('ascii').strip() == 'ready':
         raise RuntimeError('loki not ready yet... give it time.')
@@ -120,31 +126,31 @@ def main(modes: str,
          loki_address: Optional[str] = None,
          fname: Optional[str] = None):
     if modes == 'ALL':
-        modes = ['syslog', 'loki', 'file']
+        log_modes = ['syslog', 'loki', 'file']
+    elif modes:
+        log_modes = modes.split(',')
     else:
-        modes = modes.split(',')
+        raise ValueError(f'modes cannot be {modes!r}')
 
     # we do it a few more times so we have the time to inspect the running
     # process when debugging
-    rng = 200 if LONG else 10
+    rng = 200 if LONG else 10 # TODO try lowering to 1
     for _ in range(rng):
-        if not modes:
+        if not log_modes:
             break
 
-        for mode in modes:
+        for mode in log_modes:
             try:
                 _log(mode, loki_address, fname)
             except Exception as e:
                 if DEBUG:
                     raise e
-                print(f'failed to _log({mode!r}, {loki_address!r}, {fname!r}); '
+                logger.error(f'failed to _log({mode!r}, {loki_address!r}, {fname!r}); '
                       f'got {e}')
-                modes.remove(mode)
-
         if LONG:
             sleep(WAIT)
 
-    logger.info(f'executed: logpy {modes} {loki_address} {fname}')
+    logger.info(f'executed: logpy {log_modes}({modes}) {loki_address} {fname}')
     print('DONE')
 
 

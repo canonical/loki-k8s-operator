@@ -62,7 +62,7 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
     )
     await ops_test.model.add_relation(f'{loki_app_name}:logging',
                                       f'{loki_tester_app_name}:log-proxy')
-    
+
     # before we can expose loki, we need to configure the hostname
     await ops_test.juju('config', loki_app_name,
                         'juju-external-hostname=localhost')

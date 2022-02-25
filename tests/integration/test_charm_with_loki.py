@@ -7,6 +7,7 @@ from subprocess import Popen, PIPE
 import requests
 
 import pytest
+from requests import HTTPError
 
 from tests.integration.loki_tester.lib.charms.loki_k8s.v0.loki_push_api import (
     WORKLOAD_BINARY_DIR, BINARY_FILE_NAME, WORKLOAD_CONFIG_DIR,
@@ -66,10 +67,29 @@ async def test_promtail_is_running_in_workload_container(
     assert cmd in stdout
 
 
+async def get_loki_address(ops_test, loki_app_name):
+    # obtain the loki cluster IP to make direct api calls
+    retcode, stdout, stderr = await ops_test.juju("status", "--format=json")
+    try:
+        jsn = json.loads(stdout)
+        return jsn["applications"][loki_app_name]["units"][
+            f"{loki_app_name}/0"]["address"]
+    except Exception as e:
+        raise RuntimeError(
+            f"failed to fetch loki address; j status returned {retcode!r}"
+            f"with {stdout!r}, {stderr!r}"
+            f"Embedded error: {e}"
+        )
+
+
 @pytest.mark.parametrize(
     'modes',
     all_combinations(
-        ('loki',)
+        (
+            'loki',
+            'file',
+            # 'syslog'
+        )
     )
 )
 @pytest.mark.abort_on_fail
@@ -81,30 +101,39 @@ async def test_loki_scraping_with_promtail(
     """
     app_names = loki_app_name, loki_tester_app_name = loki_tester_deployment
 
+    # we block until loki is ready before proceeding, else the tester
+    # app will fire into the void
+    loki_address = await get_loki_address(ops_test, loki_app_name)
+    await loki_ready(loki_address)
+
     # at this point the workload should run and fire the logs to the configured targets
     print(f'configuring {loki_tester_app_name} to {modes}')
+    await ops_test.juju('config', loki_tester_app_name, f'log-to={modes}')
+    await ops_test.juju('config', loki_tester_app_name, f'log-to=NOOP')
     await ops_test.juju('config', loki_tester_app_name, f'log-to={modes}')
 
     await ops_test.model.wait_for_idle(apps=[loki_tester_app_name],
                                        status="active")
 
-    # obtain the loki cluster IP to make direct api calls
-    retcode, stdout, stderr = await ops_test.juju("status", "--format=json")
-    try:
-        jsn = json.loads(stdout)
-        loki_address = jsn["applications"][loki_app_name]["units"][
-            f"{loki_app_name}/0"]["address"]
-    except Exception as e:
-        raise RuntimeError(
-            f"failed to fetch loki address; j status returned {retcode!r}"
-            f"with {stdout!r}, {stderr!r}"
-            f"Embedded error: {e}"
-        )
-
     await asyncio.gather(*(
         assert_logs_in_loki(mode, loki_app_name, ops_test, loki_address)
         for mode in modes.split(','))
-                         )
+        )
+
+
+async def loki_ready(address):
+    waited = 0
+    MAX_WAIT = 60
+    while waited <= MAX_WAIT:
+        resp = requests.get(f"http://{address}:3100/ready")
+        if resp.status_code <= 200:
+            assert resp.text.strip() == 'ready'
+            print('loki ready!')
+            return
+        time.sleep(1)
+        waited += 1
+        print(f'waiting for loki to come up at {address} ({waited})...')
+    raise RuntimeError(f'loki not ready in {MAX_WAIT}s')
 
 
 stream_template = {
@@ -123,7 +152,9 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
                               loki_address: str):
     url = f"http://{loki_address}:3100"
 
-    def query_job(job_name, attempt=0):
+    async def query_job(job_name, attempt=0):
+        await loki_ready(loki_address)
+
         print(f'Trying to query loki; attempt #{attempt}.')
         params = {'query': '{job="%s"}' % job_name}
         # query_range goes from now to up to 1h ago, more
@@ -149,14 +180,14 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
             print(f"labels: {labels!r}; job values: {job_values!r}")
             time.sleep(WAIT)
 
-            return query_job(job_name, attempt + 1)
+            return await query_job(job_name, attempt + 1)
 
         print(f"Loki query successful after {attempt} attempts; "
               f"{WAIT * attempt} seconds elapsed")
         return results[0]
 
     if mode == 'loki':
-        res = query_job(TEST_JOB_NAME)
+        res = await query_job(TEST_JOB_NAME)
         assert res["stream"] == {'job': TEST_JOB_NAME}
         assert res["values"][0][1] == LOKI_LOG_MSG
         return
@@ -181,7 +212,7 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
 
     print('job label:', job_label)
 
-    res = query_job(job_label)
+    res = await query_job(job_label)
     juju_model_uuid_key = "juju_model_uuid"
     juju_model_uuid = res["stream"][juju_model_uuid_key]
     expected_stream = stream_template.copy()
