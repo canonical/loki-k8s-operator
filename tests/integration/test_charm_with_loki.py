@@ -12,7 +12,7 @@ import requests
 from helpers import all_combinations
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.loki_tester.lib.charms.loki_k8s.v0.loki_push_api import (
+from lib.charms.loki_k8s.v0.loki_push_api import (
     BINARY_FILE_NAME,
     WORKLOAD_BINARY_DIR,
     WORKLOAD_CONFIG_DIR,

@@ -1622,8 +1622,8 @@ class LogProxyConsumer(ConsumerBase):
         self.framework.observe(events.relation_departed, self._on_relation_departed)
         self.framework.observe(
             getattr(
-                self._charm.on, "{}_pebble_ready".format(self._container_name.replace("-", "_"))
-            ),  # TODO REMOVE THIS HOTFIX
+                self._charm.on, "{}_pebble_ready".format(self._container_name)
+            ),
             self._on_pebble_ready,
         )
 
