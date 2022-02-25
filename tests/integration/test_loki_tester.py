@@ -70,7 +70,7 @@ def test_log_script(modes, tmp_path):
     print(proc.stderr.read())
 
     if "syslog" in modes:
-        pytest.xfail()
+        pytest.xfail('todo; figure out how to log to syslog')
         with open("/var/log/syslog", "rb") as f:
             logs = f.read().decode(errors='replace')
             assert SYSLOG_LOG_MSG in logs
