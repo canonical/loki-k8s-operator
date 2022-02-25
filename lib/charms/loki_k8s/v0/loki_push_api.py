@@ -442,7 +442,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 9
+LIBPATCH = 10
 
 logger = logging.getLogger(__name__)
 
@@ -1230,8 +1230,7 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        if event.relation.data.get(event.relation.app):
-            self._remove_alert_rules_files(self.container)
+        self._process_logging_relation_changed(event.relation)
 
     @property
     def _promtail_binary_url(self) -> dict:
