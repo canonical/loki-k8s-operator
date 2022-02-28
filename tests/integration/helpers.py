@@ -29,14 +29,6 @@ async def is_loki_up(ops_test, app_name) -> bool:
     return response.code == 200 and "version" in json.loads(response.read())
 
 
-def get_logpy_path() -> Path:
-    """Return the Path to log.py file in loki-tester."""
-    pth = Path(__file__).parent.resolve() / "loki_tester" / "src" / "log.py"
-    print(pth)
-    assert pth.exists(), pth
-    return pth.absolute()
-
-
 def oci_image(metadata_file: str, image_name: str) -> str:
     """Find upstream source for a container image.
 

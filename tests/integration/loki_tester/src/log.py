@@ -30,21 +30,21 @@ TEST_JOB_NAME = "test-job"
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
 FILE_LOG_MSG = "LOG FILE"
-WAIT = 0.2
 SYSLOG_PORT = 1514
+SYSLOG_ADDRESS = ("localhost", SYSLOG_PORT)
+WAIT = 0.2
 
 
 def _log_to_syslog():
     promtail_syslog_logger = logging.getLogger()
     for handler in promtail_syslog_logger.handlers:
         promtail_syslog_logger.removeHandler(handler)
-    address = ("localhost", 1514)
-    log_handler = SysLogHandler(address=address)
+    log_handler = SysLogHandler(address=SYSLOG_ADDRESS)
     promtail_syslog_logger.addHandler(log_handler)
     logging.info(SYSLOG_LOG_MSG)
     promtail_syslog_logger.setLevel("INFO")
 
-    logger.info(f"logged to syslog at {address}")
+    logger.info(f"logged to syslog at {SYSLOG_ADDRESS}")
 
 
 def _log_to_loki(loki_address):
