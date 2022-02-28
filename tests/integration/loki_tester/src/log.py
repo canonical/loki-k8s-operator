@@ -18,6 +18,9 @@ from urllib import request
 
 logger = logging.getLogger(__name__)
 try:
+    # to debug log.py when running inside a container; we dump the logs
+    # to a logpy.log file; on localhost, this logger will print to stdout
+    # and that is enough.
     logger.addHandler(logging.FileHandler("/logpy.log"))
 except PermissionError:
     # not in a container; skip this

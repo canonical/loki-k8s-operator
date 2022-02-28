@@ -28,7 +28,10 @@ class LokiTesterCharm(CharmBase):
         this_dir = Path(__file__).parent.resolve()
         self._log_py_script = (this_dir / "log.py").absolute()
         self.log_proxy_consumer = LogProxyConsumer(
-            self, log_files=[LOGFILE], enable_syslog=True, container_name=name
+            self,
+            log_files=[LOGFILE],
+            enable_syslog=True,
+            container_name=name
         )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
