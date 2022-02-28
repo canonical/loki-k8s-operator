@@ -19,7 +19,8 @@ FILE_LOG_MSG = "LOG FILE"
 
 def get_logpy_path() -> Path:
     """Return the Path to log.py file in loki-tester."""
-    pth = Path(__file__).parent.resolve() / "loki_tester" / "src" / "log.py"
+    pth = Path(__file__).parent.parent.resolve() / "integration" \
+          / "loki_tester" / "src" / "log.py"
     print(pth)
     assert pth.exists(), pth
     return pth.absolute()
