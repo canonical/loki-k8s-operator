@@ -82,8 +82,8 @@ async def get_loki_address(ops_test, loki_app_name):
     "modes",
     all_combinations(
         (
-            # "loki",
-            # "file",
+            "loki",
+            "file",
             'syslog',
         )
     ),
@@ -102,11 +102,8 @@ async def test_loki_scraping_with_promtail(modes: str, ops_test: OpsTest, loki_t
     await loki_ready(loki_address)
 
     # at this point the workload should run and fire the logs to the configured targets
-    print(f"configuring {loki_tester_app_name} to {modes}")
     await ops_test.juju("config", loki_tester_app_name, f"log-to={modes}")
-
     await ops_test.model.wait_for_idle(apps=[loki_tester_app_name], status="active")
-
     await asyncio.gather(
         *(
             assert_logs_in_loki(mode, loki_app_name, ops_test, loki_address)
@@ -146,38 +143,13 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest, 
 
     async def query_job(job_name, attempt=0):
         await loki_ready(loki_address)
-
-        print(f"Trying to query loki; attempt #{attempt}.")
         params = {"query": '{job="%s"}' % job_name}
         # query_range goes from now to up to 1h ago, more
         # certain to capture something
         query_url = f"{url}/loki/api/v1/query_range"
         jsn = requests.get(query_url, params=params).json()
-        results = jsn["data"]["result"]
-        labels = requests.get(f"{url}/loki/api/v1/labels").json().get("data", "<no data!?>")
-        job_values = (
-            requests.get(f"{url}/loki/api/v1/label/job/values").json().get("data", "<no data!?>")
-        )
-
-        if not results:
-            if attempt > MAX_QUERY_RETRIES:
-                raise RuntimeError(
-                    f"timeout attempting to query loki "
-                    f"for {job_name} ({WAIT * attempt}s) at url:{query_url!r} with params={params};"
-                    f"available labels = {labels!r};"
-                    f"values for job = {job_values!r}"
-                )
-
-            print(f"Loki received no logs yet; retry in {WAIT}")
-            print(f"labels: {labels!r}; job values: {job_values!r}")
-            time.sleep(WAIT)
-
-            return await query_job(job_name, attempt + 1)
-
-        print(
-            f"Loki query successful after {attempt} attempts; " f"{WAIT * attempt} seconds elapsed"
-        )
-        return results[0]
+        results = jsn["data"]["result"][0]
+        return results
 
     if mode == "loki":
         res = await query_job(TEST_JOB_NAME)

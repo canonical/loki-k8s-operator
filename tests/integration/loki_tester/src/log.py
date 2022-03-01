@@ -5,6 +5,7 @@
 import json
 import logging
 import sys
+import syslog
 from logging.handlers import SysLogHandler
 from time import sleep, time
 from typing import Optional
@@ -22,9 +23,10 @@ try:
     # to a logpy.log file; on localhost, this logger will print to stdout
     # and that is enough.
     logger.addHandler(logging.FileHandler("/logpy.log"))
+    CONTAINER = True
 except PermissionError:
     # not in a container; skip this
-    pass
+    CONTAINER = False
 logger.setLevel("INFO")
 
 LONG = False
@@ -33,21 +35,17 @@ TEST_JOB_NAME = "test-job"
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
 FILE_LOG_MSG = "LOG FILE"
-SYSLOG_PORT = 1514
-SYSLOG_ADDRESS = ("localhost", SYSLOG_PORT)
+SYSLOG_LOGFILE = "/var/log/logpy.log"
 WAIT = 0.2
 
 
 def _log_to_syslog():
-    promtail_syslog_logger = logging.getLogger()
-    for handler in promtail_syslog_logger.handlers:
-        promtail_syslog_logger.removeHandler(handler)
-    log_handler = SysLogHandler(address=SYSLOG_ADDRESS)
-    promtail_syslog_logger.addHandler(log_handler)
-    promtail_syslog_logger.info(SYSLOG_LOG_MSG)
-    promtail_syslog_logger.setLevel("INFO")
-
-    logger.info(f"logged to syslog at {SYSLOG_ADDRESS}")
+    if CONTAINER:
+        with open(SYSLOG_LOGFILE, 'a+') as f:
+            f.write(SYSLOG_LOG_MSG)
+    else:
+        syslog.syslog(SYSLOG_LOG_MSG)
+    logger.info(f"logged to syslog at {SYSLOG_LOGFILE}")
 
 
 def _log_to_loki(loki_address):

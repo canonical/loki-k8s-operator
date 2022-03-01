@@ -12,16 +12,21 @@ from typing import List
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, Container
+from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
 from ops.pebble import ChangeError, Layer
 
 logger = logging.getLogger(__name__)
 LOGFILE = "/loki_tester_msgs.txt"
+SYSLOG_LOGFILE = "/var/log/logpy.log"
 
 SYSLOG_PORT = 1514
-RSYSLOG_CFG = 'action(type="omfwd" protocol="tcp" target="127.0.0.1" ' \
-              'port="{}" Template="RSYSLOG_SyslogProtocol23Format" ' \
-              'TCP_Framing="octet-counted")'.format(SYSLOG_PORT)
+# we configure rsyslog to read logs we output to SYSLOG_LOGFILE and push them
+# to the syslog server set up by promtail at localhost:SYSLOG_PORT.
+RSYSLOG_CFG = f"""
+module(load="imfile")
+input(type="imfile" File="{SYSLOG_LOGFILE}" addMetadata="on" Tag="cass")
+action(type="omfwd" protocol="tcp" target="127.0.0.1" port="{SYSLOG_PORT}" Template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")
+"""
 
 
 class LokiTesterCharm(CharmBase):
@@ -43,6 +48,8 @@ class LokiTesterCharm(CharmBase):
                                self._on_pebble_ready)
         self.framework.observe(self.on.config_changed,
                                self._on_config_changed)
+        self.framework.observe(self.log_proxy_consumer.on.log_proxy_endpoint_joined,
+                               self._on_log_proxy_joined)
 
     @property
     def loki_endpoints(self) -> List[dict]:
@@ -58,9 +65,16 @@ class LokiTesterCharm(CharmBase):
             endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
 
-    def set_active_status(self):
+    def _on_log_proxy_joined(self, event):
+        self._refresh_pebble_layer()
+        self.check_status()
+
+    def check_status(self):
         """Determine active status message, and set it."""
         addr = self._get_loki_url()
+        if not addr:
+            self.unit.status = WaitingStatus('Waiting for Loki.')
+            return
         msg = f"Loki ready at {addr}." if addr else ""
         self.unit.status = ActiveStatus(msg)
 
@@ -68,7 +82,7 @@ class LokiTesterCharm(CharmBase):
         container = self.unit.get_container(self._name)
         self._ensure_logpy_present(container)
         self._setup_syslog(container)
-        self.set_active_status()
+        self.check_status()
 
     def _setup_syslog(self, container):
         """Push rsyslog conf."""
@@ -120,11 +134,18 @@ class LokiTesterCharm(CharmBase):
         """Reconfigure the Loki tester."""
         container = self.unit.get_container(self._name)
         if not container.can_connect():
-            self.unit.status = BlockedStatus("Waiting for container")
+            self.unit.status = WaitingStatus("Waiting for container")
+            event.defer()
+            return
+
+        if not self._get_loki_url():
+            self.unit.status = WaitingStatus('Waiting for loki (config-changed).')
+            event.defer()
             return
 
         logger.info(f"configured loki-tester: {self.config['log-to']}")
         self._refresh_pebble_layer()
+        self.check_status()
 
     def one_shot_container_start(self, container: Container):
         try:
@@ -153,7 +174,6 @@ class LokiTesterCharm(CharmBase):
 
             self.one_shot_container_start(container)
             logger.info("Restarted tester service")
-        self.set_active_status()
 
     def _get_loki_url(self) -> str:
         """Fetches the loki address.
