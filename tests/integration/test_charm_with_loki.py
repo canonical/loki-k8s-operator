@@ -82,9 +82,9 @@ async def get_loki_address(ops_test, loki_app_name):
     "modes",
     all_combinations(
         (
-            "loki",
-            "file",
-            # 'syslog'
+            # "loki",
+            # "file",
+            'syslog',
         )
     ),
 )

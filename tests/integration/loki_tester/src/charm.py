@@ -18,6 +18,11 @@ from ops.pebble import ChangeError, Layer
 logger = logging.getLogger(__name__)
 LOGFILE = "/loki_tester_msgs.txt"
 
+SYSLOG_PORT = 1514
+RSYSLOG_CFG = 'action(type="omfwd" protocol="tcp" target="127.0.0.1" ' \
+              'port="{}" Template="RSYSLOG_SyslogProtocol23Format" ' \
+              'TCP_Framing="octet-counted")'.format(SYSLOG_PORT)
+
 
 class LokiTesterCharm(CharmBase):
     """A Charm used to test the Loki charm."""
@@ -34,7 +39,10 @@ class LokiTesterCharm(CharmBase):
             container_name=name
         )
 
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.loki_tester_pebble_ready,
+                               self._on_pebble_ready)
+        self.framework.observe(self.on.config_changed,
+                               self._on_config_changed)
 
     @property
     def loki_endpoints(self) -> List[dict]:
@@ -55,6 +63,45 @@ class LokiTesterCharm(CharmBase):
         addr = self._get_loki_url()
         msg = f"Loki ready at {addr}." if addr else ""
         self.unit.status = ActiveStatus(msg)
+
+    def _on_pebble_ready(self, event):
+        container = self.unit.get_container(self._name)
+        self._ensure_logpy_present(container)
+        self._setup_syslog(container)
+        self.set_active_status()
+
+    def _setup_syslog(self, container):
+        """Push rsyslog conf."""
+        proc = container.exec(["apt-get", "--yes", "update"])
+        proc.wait()
+        proc = container.exec(["apt-get", "--yes", "install", "rsyslog"])
+        proc.wait()
+
+        container.push("/etc/rsyslog.conf", RSYSLOG_CFG, make_dirs=True)
+
+        if self._set_rsyslog_layer(container):
+            container.restart("rsyslog")
+
+    def _set_rsyslog_layer(self, container) -> bool:
+        if not container.can_connect():
+            return False
+        layer = {
+            "summary": "Rsyslog Layer",
+            "description": "pebble config layer for rsyslog",
+            "services": {
+                "rsyslog": {
+                    "override": "replace",
+                    "summary": "rsyslog",
+                    "command": "/usr/sbin/rsyslogd -n",
+                    "startup": "enabled",
+                },
+            },
+        }
+        services = container.get_plan().services
+        if services != layer["services"]:
+            container.add_layer("rsyslog", layer, combine=True)
+            return True
+        return False
 
     def _push_logpy(self, container: Container):
         """Copy logpy script to container."""
@@ -95,7 +142,7 @@ class LokiTesterCharm(CharmBase):
     def _refresh_pebble_layer(self):
         container = self.unit.get_container(self._name)
 
-        #  this might get called before pebble-ready, so we push logpy here
+        #  this might get called before pebble-ready, so we check this here too
         self._ensure_logpy_present(container)
 
         current_services = container.get_plan().services
