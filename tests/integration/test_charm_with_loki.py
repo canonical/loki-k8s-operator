@@ -195,7 +195,9 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest, 
         extra_stream = {}
 
     # get the job name for the log stream
-    labels = requests.get(f"{url}/loki/api/v1/label/job/values").json()["data"]
+    labels = requests.get(f"{url}/loki/api/v1/label/job/values").json().get("data")
+    if not labels:
+        raise RuntimeError('no jobs present: nothing was logged yet.')
     try:
         job_label = next(filter(lambda x: x.endswith(suffix), labels))
     except StopIteration:
