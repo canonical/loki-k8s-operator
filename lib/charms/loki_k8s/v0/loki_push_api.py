@@ -130,7 +130,35 @@ The `LokiPushApiProvider` object has several responsibilities:
 
 
 Once these alert rules are sent over relation data, the `LokiPushApiProvider` object
-stores these files in the directory `/loki/rules` inside the Loki charm container.
+stores these files in the directory `/loki/rules` inside the Loki charm container. After
+storing alert rules files, the object will check alert rules by querying
+Loki API endpoint: [`loki/api/v1/rules`](https://grafana.com/docs/loki/latest/api/#list-rule-groups).
+If there are errors with alert rules a `loki_push_api_alert_rules_error` event will
+be emitted, in the other hand if there are no error a `loki_push_api_alert_rules_ok`
+event will be emitted.
+
+These events should be observed in the charm that uses `LokiPushApiProvider`:
+
+```python
+    def __init__(self, *args):
+        super().__init__(*args)
+        ...
+        self.loki_provider = LokiPushApiProvider(self)
+        self.framework.observe(
+            self.loki_provider.on.loki_push_api_alert_rules_error,
+            self._loki_push_api_alert_rules_error,
+        )
+        self.framework.observe(
+            self.loki_provider.on.loki_push_api_alert_rules_ok, self._loki_push_api_alert_rules_ok
+        )
+
+    def _loki_push_api_alert_rules_error(self, event):
+        self.unit.status = BlockedStatus("Errors in alert rule groups. See debug-log.")
+
+    def _loki_push_api_alert_rules_ok(self, event):
+        self.unit.status = ActiveStatus()
+```
+
 
 ## LokiPushApiConsumer Library Usage
 
@@ -416,8 +444,8 @@ from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
-from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
 import yaml
@@ -442,7 +470,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 logger = logging.getLogger(__name__)
 
@@ -1101,15 +1129,27 @@ class LokiPushApiEndpointJoined(EventBase):
     """Event emitted when Loki joined."""
 
 
+class LokiPushApiAlertRulesError(EventBase):
+    """Event emitted if there is an error with Alert Rules."""
+
+
+class LokiPushApiAlertRulesOK(EventBase):
+    """Event emitted if there is no error with Alert Rules."""
+
+
 class LokiPushApiEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
     loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
+    loki_push_api_alert_rules_error = EventSource(LokiPushApiAlertRulesError)
+    loki_push_api_alert_rules_ok = EventSource(LokiPushApiAlertRulesOK)
 
 
 class LokiPushApiProvider(RelationManagerBase):
     """A LokiPushApiProvider class."""
+
+    on = LokiPushApiEvents()
 
     def __init__(
         self,
@@ -1208,6 +1248,7 @@ class LokiPushApiProvider(RelationManagerBase):
             logger.debug("Saved alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
+            self._check_alert_rules()
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1222,6 +1263,49 @@ class LokiPushApiProvider(RelationManagerBase):
             self._charm.model.name,
             self.port,
         )
+
+    def _check_alert_rules(self) -> bool:
+        """Check alert rules using Loki API.
+
+        Returns: bool
+
+        Emits:
+            loki_push_api_alert_rules_ok: This event is emitted when there are no errors with
+                alert rules.
+            loki_push_api_alert_rules_error: This event is emitted when the Loki API returns an
+                error because it failed to list rule group.
+        """
+        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
+        req = Request(url)
+        try:
+            urlopen(req)
+        except HTTPError as e:
+            msg = e.read().decode("utf-8")
+
+            if e.code == 404 and "no rule groups found" in msg:
+                logger.debug("Checking alert rules: No rule groups found")
+                self.on.loki_push_api_alert_rules_ok.emit()
+                return True
+
+            if e.code == 404 and "404 page not found" in msg:
+                logger.error("Checking alert rules: 404 page not found: %s", url)
+                self.on.loki_push_api_alert_rules_error.emit()
+                return False
+
+            message = "{} - {}".format(e.code, msg)
+            logger.error("Checking alert rules: %s", message)
+            self.on.loki_push_api_alert_rules_error.emit()
+            return False
+        except URLError as e:
+            logger.error("Checking alert rules: %s", e.reason)
+            self.on.loki_push_api_alert_rules_error.emit()
+            return False
+        else:
+            logger.debug("Checking alert rules: Ok")
+            self.on.loki_push_api_alert_rules_ok.emit()
+            return True
+
+        return False
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
