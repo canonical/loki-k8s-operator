@@ -76,6 +76,7 @@ class FakeLokiCharm(CharmBase):
                 "make_dir": lambda *a, **kw: None,
                 "remove_path": lambda *a, **kw: None,
                 "can_connect": lambda *a, **kw: True,
+                "list_files": lambda *a, **kw: [],
             },
         )
         with patch("ops.testing._TestingPebbleClient.make_dir"):
