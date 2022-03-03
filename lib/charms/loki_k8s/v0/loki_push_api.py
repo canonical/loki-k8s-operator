@@ -131,8 +131,8 @@ The `LokiPushApiProvider` object has several responsibilities:
 
 Once these alert rules are sent over relation data, the `LokiPushApiProvider` object
 stores these files in the directory `/loki/rules` inside the Loki charm container. After
-storing alert rules files, the object will check alert rules by querying
-Loki API endpoint: [`loki/api/v1/rules`](https://grafana.com/docs/loki/latest/api/#list-rule-groups).
+storing alert rules files, the object will check alert rules by querying Loki API
+endpoint: [`loki/api/v1/rules`](https://grafana.com/docs/loki/latest/api/#list-rule-groups).
 If there are errors with alert rules a `loki_push_api_alert_rules_error` event will
 be emitted, in the other hand if there are no error a `loki_push_api_alert_rules_ok`
 event will be emitted.
