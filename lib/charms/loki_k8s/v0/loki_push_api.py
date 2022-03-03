@@ -1336,11 +1336,11 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             container: Container which has alert rules files to be deleted
         """
-        container.remove_path(self._rules_dir, recursive=True)
+        files = container.list_files(self._rules_dir)
         logger.debug("Previous Alert rules files deleted")
-        # Since container.remove_path deletes the directory itself with its files
-        # we should create it again.
-        os.makedirs(self._rules_dir, exist_ok=True)
+        for f in files:
+            logger.debug("Removing file... %s", f.path)
+            container.remove_path(f.path)
 
     def _generate_alert_rules_files(self, container: Container) -> None:
         """Generate and upload alert rules files.
