@@ -56,15 +56,23 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_port=str(self._port),
         )
+        self._loki_server = LokiServer()
+        self._provide_loki()
+        self.loki_provider = LokiPushApiProvider(self)
+
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
         self.framework.observe(
             self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
         )
-        self.loki_provider = None
-        self._loki_server = LokiServer()
-        self._provide_loki()
+        self.framework.observe(
+            self.loki_provider.on.loki_push_api_alert_rules_error,
+            self._loki_push_api_alert_rules_error,
+        )
+        self.framework.observe(
+            self.loki_provider.on.loki_push_api_alert_rules_ok, self._loki_push_api_alert_rules_ok
+        )
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
@@ -80,6 +88,12 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_alertmanager_change(self, event):
         self._configure(event)
+
+    def _loki_push_api_alert_rules_error(self, event):
+        self.unit.status = BlockedStatus("Errors in alert rule groups. See debug-log.")
+
+    def _loki_push_api_alert_rules_ok(self, event):
+        self.unit.status = ActiveStatus()
 
     def _configure(self, event):
         """Configure Loki charm."""
@@ -154,7 +168,7 @@ class LokiOperatorCharm(CharmBase):
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
         try:
             version = self._loki_server.version
-            self.loki_provider = self.loki_provider or LokiPushApiProvider(self)
+            # self.loki_provider = self.loki_provider or LokiPushApiProvider(self)
             logger.debug("Loki Provider is available. Loki version: %s", version)
         except LokiServerNotReadyError as e:
             self.unit.status = WaitingStatus(str(e))
@@ -193,6 +207,7 @@ class LokiOperatorCharm(CharmBase):
 
             server:
               http_listen_port: {self._port}
+              http_listen_address: 0.0.0.0
 
             common:
               path_prefix: {LOKI_DIR}
