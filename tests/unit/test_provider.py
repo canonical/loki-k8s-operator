@@ -5,6 +5,7 @@ import json
 import textwrap
 import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
+from urllib.error import HTTPError, URLError
 
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
@@ -38,6 +39,8 @@ ALERT_RULES = {
         }
     ]
 }
+
+URL = "http://127.0.0.1:3100/loki/api/v1/rules"
 
 
 class FakeLokiCharm(CharmBase):
@@ -151,3 +154,28 @@ class TestLokiPushApiProvider(unittest.TestCase):
         alerts = self.harness.charm.loki_provider.alerts()
         self.assertEqual(len(alerts), 1)
         self.assertDictEqual(list(alerts.values())[0]["groups"][0], ALERT_RULES["groups"][0])
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_ok(self, mock_urlopen):
+        mock_urlopen.return_value = True
+        self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_httperror_404_ok(self, mock_urlopen):
+        mock_urlopen.side_effect = HTTPError(URL, 404, "no rule groups found", {}, None)  # type: ignore
+        self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_httperror_404_error(self, mock_urlopen):
+        mock_urlopen.side_effect = HTTPError(URL, 404, "404 page not found", {}, None)  # type: ignore
+        self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_httperror_400(self, mock_urlopen):
+        mock_urlopen.side_effect = HTTPError(URL, 400, "Bad Request", {}, None)  # type: ignore
+        self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_urlerror(self, mock_urlopen):
+        mock_urlopen.side_effect = URLError("Unknown host")
+        self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())

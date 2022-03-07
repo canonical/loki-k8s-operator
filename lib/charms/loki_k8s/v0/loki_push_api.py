@@ -444,8 +444,8 @@ from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib import request
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
 import yaml
@@ -1276,12 +1276,11 @@ class LokiPushApiProvider(RelationManagerBase):
                 error because it failed to list rule group.
         """
         url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
-        req = Request(url)
+        req = request.Request(url)
         try:
-            urlopen(req)
+            request.urlopen(req)
         except HTTPError as e:
-            msg = e.read().decode("utf-8")
-
+            msg = e.msg  # type: ignore
             if e.code == 404 and "no rule groups found" in msg:
                 logger.debug("Checking alert rules: No rule groups found")
                 self.on.loki_push_api_alert_rules_ok.emit()
@@ -1933,7 +1932,7 @@ class LogProxyConsumer(ConsumerBase):
             )
         url = relations[0].data[relations[0].app].get("promtail_binary_zip_url")
 
-        with urlopen(url) as r:
+        with request.urlopen(url) as r:
             file_bytes = r.read()
             with open(BINARY_ZIP_PATH, "wb") as f:
                 f.write(file_bytes)
