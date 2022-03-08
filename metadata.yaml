@@ -43,6 +43,9 @@ provides:
 requires:
   alertmanager:
     interface: alertmanager_dispatch
+  ingress-per-unit:
+    interface: ingress_per_unit
+    limit: 1
 
 resources:
   loki-image:

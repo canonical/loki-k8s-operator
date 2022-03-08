@@ -24,6 +24,7 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiProvider,
 )
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
+from charms.traefik_k8s.v0.ingress_per_unit import IngressPerUnitRequirer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -52,6 +53,7 @@ class LokiOperatorCharm(CharmBase):
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
+        self.ingress_per_unit = IngressPerUnitRequirer(self, port=80)
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
@@ -73,6 +75,12 @@ class LokiOperatorCharm(CharmBase):
             self.loki_provider.on.loki_push_api_alert_rules_changed,
             self._loki_push_api_alert_rules_changed,
         )
+        self.framework.observe(
+            self.ingress_per_unit.on.ingress_changed, self._handle_ingress_per_unit
+        )
+        self.loki_provider = None
+        self._loki_server = LokiServer()
+        self._provide_loki()
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
@@ -91,6 +99,9 @@ class LokiOperatorCharm(CharmBase):
 
     def _loki_push_api_alert_rules_changed(self, event):
         self._configure(event)
+
+    def _handle_ingress_per_unit(self, event):
+        logger.info("This unit's ingress URL: %s", self.ingress_per_unit.url)
 
     def _configure(self, event):
         """Configure Loki charm."""
