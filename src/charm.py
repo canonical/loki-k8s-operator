@@ -168,7 +168,6 @@ class LokiOperatorCharm(CharmBase):
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
         try:
             version = self._loki_server.version
-            # self.loki_provider = self.loki_provider or LokiPushApiProvider(self)
             logger.debug("Loki Provider is available. Loki version: %s", version)
         except LokiServerNotReadyError as e:
             self.unit.status = WaitingStatus(str(e))
