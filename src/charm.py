@@ -90,7 +90,7 @@ class LokiOperatorCharm(CharmBase):
         self._configure(event)
 
     def _loki_push_api_alert_rules_error(self, event):
-        self.unit.status = BlockedStatus("Errors in alert rule groups. See debug-log.")
+        self.unit.status = BlockedStatus("Errors in alert rule groups. Check juju debug-log.")
 
     def _loki_push_api_alert_rules_ok(self, event):
         self.unit.status = ActiveStatus()
