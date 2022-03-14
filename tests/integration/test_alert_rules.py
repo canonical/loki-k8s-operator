@@ -141,6 +141,4 @@ async def test_wrong_alert_rule(ops_test):
     await ops_test.model.add_relation(app_name, rules_app3)
 
     async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(
-            apps=[app_name], status="blocked", timeout=1000
-        )
+        await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
