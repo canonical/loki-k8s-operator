@@ -120,17 +120,15 @@ async def test_remove_app_one_alert_rules_is_reteined(ops_test):
 
 @pytest.mark.abort_on_fail
 async def test_wrong_alert_rule(ops_test):
-    await asyncio.gather(
-        ops_test.model.deploy(
-            "ch:cos-configuration-k8s",
-            application_name=rules_app3,
-            channel="edge",
-            config={
-                "git_repo": "https://github.com/canonical/loki-k8s-operator",
-                "git_branch": "error_alerts",
-                "loki_alert_rules_path": "tests/sample_rule_files/free-standing/error",
-            },
-        ),
+    await ops_test.model.deploy(
+        "ch:cos-configuration-k8s",
+        application_name=rules_app3,
+        channel="edge",
+        config={
+            "git_repo": "https://github.com/canonical/loki-k8s-operator",
+            "git_branch": "error_alerts",
+            "loki_alert_rules_path": "tests/sample_rule_files/free-standing/error",
+        },
     )
 
     # force an update, just in case the files showed up on disk after the last hook fired
