@@ -152,7 +152,7 @@ This events should be observed in the charm that uses `LokiPushApiProvider`:
     def _loki_push_api_alert_rules_changed(self, event):
         if event.error:
             self.unit.status = BlockedStatus(event.message)
-            return
+            return False
 
         ...
 
