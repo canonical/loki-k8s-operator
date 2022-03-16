@@ -1,10 +1,12 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import io
 import json
 import textwrap
 import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
+from urllib.error import HTTPError, URLError
 
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
@@ -38,6 +40,8 @@ ALERT_RULES = {
         }
     ]
 }
+
+URL = "http://127.0.0.1:3100/loki/api/v1/rules"
 
 
 class FakeLokiCharm(CharmBase):
@@ -76,6 +80,7 @@ class FakeLokiCharm(CharmBase):
                 "make_dir": lambda *a, **kw: None,
                 "remove_path": lambda *a, **kw: None,
                 "can_connect": lambda *a, **kw: True,
+                "list_files": lambda *a, **kw: [],
             },
         )
         with patch("ops.testing._TestingPebbleClient.make_dir"):
@@ -150,3 +155,34 @@ class TestLokiPushApiProvider(unittest.TestCase):
         alerts = self.harness.charm.loki_provider.alerts()
         self.assertEqual(len(alerts), 1)
         self.assertDictEqual(list(alerts.values())[0]["groups"][0], ALERT_RULES["groups"][0])
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_ok(self, mock_urlopen):
+        mock_urlopen.return_value = True
+        self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_httperror_404_ok(self, mock_urlopen):
+        with patch("http.client.HTTPResponse") as mock_http_response:
+            mock_http_response.read.side_effect = HTTPError(URL, 404, "no rule groups found", {}, io.BytesIO())  # type: ignore
+            mock_urlopen.return_value = mock_http_response
+            self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_httperror_404_error(self, mock_urlopen):
+        with patch("http.client.HTTPResponse") as mock_http_response:
+            mock_urlopen.side_effect = HTTPError(URL, 404, "404 page not found", {}, io.BytesIO())  # type: ignore
+            mock_http_response.read.return_value = mock_urlopen.side_effect
+            self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_httperror_400(self, mock_urlopen):
+        with patch("http.client.HTTPResponse") as mock_http_response:
+            mock_urlopen.side_effect = HTTPError(URL, 400, "Bad Request", {}, io.BytesIO())  # type: ignore
+            mock_http_response.read.return_value = mock_urlopen.side_effect
+            self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
+
+    @patch("urllib.request.urlopen")
+    def test__check_alert_rules_urlerror(self, mock_urlopen):
+        mock_urlopen.side_effect = URLError("Unknown host")
+        self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())

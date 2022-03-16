@@ -130,7 +130,35 @@ The `LokiPushApiProvider` object has several responsibilities:
 
 
 Once these alert rules are sent over relation data, the `LokiPushApiProvider` object
-stores these files in the directory `/loki/rules` inside the Loki charm container.
+stores these files in the directory `/loki/rules` inside the Loki charm container. After
+storing alert rules files, the object will check alert rules by querying Loki API
+endpoint: [`loki/api/v1/rules`](https://grafana.com/docs/loki/latest/api/#list-rule-groups).
+If there are errors with alert rules a `loki_push_api_alert_rules_changed` event will
+be emitted with `event.error=True`, in the other hand if there are no error a
+`loki_push_api_alert_rules_changed` event will be emitted with `event.error=False`
+
+This events should be observed in the charm that uses `LokiPushApiProvider`:
+
+```python
+    def __init__(self, *args):
+        super().__init__(*args)
+        ...
+        self.loki_provider = LokiPushApiProvider(self)
+        self.framework.observe(
+            self.loki_provider.on.loki_push_api_alert_rules_changed,
+            self._loki_push_api_alert_rules_changed,
+        )
+
+    def _loki_push_api_alert_rules_changed(self, event):
+        if event.error:
+            self.unit.status = BlockedStatus(event.message)
+            return False
+
+        ...
+
+        self.unit.status = ActiveStatus()
+```
+
 
 ## LokiPushApiConsumer Library Usage
 
@@ -416,8 +444,8 @@ from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
-from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib import request
+from urllib.error import HTTPError, URLError
 from zipfile import ZipFile
 
 import yaml
@@ -442,7 +470,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 logger = logging.getLogger(__name__)
 
@@ -1101,15 +1129,36 @@ class LokiPushApiEndpointJoined(EventBase):
     """Event emitted when Loki joined."""
 
 
+class LokiPushApiAlertRulesChanged(EventBase):
+    """Event emitted if there is an error with Alert Rules."""
+
+    def __init__(self, handle, error: bool = False, message: str = ""):
+        super().__init__(handle)
+        self.message = message
+        self.error = error
+
+    def snapshot(self) -> Dict:
+        """Save grafana source information."""
+        return {"error": self.error, "message": self.message}
+
+    def restore(self, snapshot):
+        """Restore grafana source information."""
+        self.message = snapshot["message"]
+        self.error = snapshot["error"]
+
+
 class LokiPushApiEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
     loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
+    loki_push_api_alert_rules_changed = EventSource(LokiPushApiAlertRulesChanged)
 
 
 class LokiPushApiProvider(RelationManagerBase):
     """A LokiPushApiProvider class."""
+
+    on = LokiPushApiEvents()
 
     def __init__(
         self,
@@ -1208,6 +1257,7 @@ class LokiPushApiProvider(RelationManagerBase):
             logger.debug("Saved alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
+            self._check_alert_rules()
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1222,6 +1272,57 @@ class LokiPushApiProvider(RelationManagerBase):
             self._charm.model.name,
             self.port,
         )
+
+    def _check_alert_rules(self) -> bool:
+        """Check alert rules using Loki API.
+
+        Returns: bool
+
+        Emits:
+            loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
+        """
+        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
+        req = request.Request(url)
+        try:
+            request.urlopen(req)
+        except HTTPError as e:
+            msg = e.read().decode("utf-8")
+
+            if e.code == 404 and "no rule groups found" in msg:
+                log_msg = "Checking alert rules: No rule groups found"
+                logger.debug(log_msg)
+                self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
+                return True
+
+            if e.code == 404 and "404 page not found" in msg:
+                logger.error("Checking alert rules: 404 page not found: %s", url)
+                self.on.loki_push_api_alert_rules_changed.emit(
+                    error=True,
+                    message="Errors in alert rule groups. Check juju debug-log.",
+                )
+                return False
+
+            message = "{} - {}".format(e.code, e.msg)  # type: ignore
+            logger.error("Checking alert rules: %s", message)
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Errors in alert rule groups. Check juju debug-log.",
+            )
+            return False
+        except URLError as e:
+            logger.error("Checking alert rules: %s", e.reason)
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Errors in alert rule groups. Check juju debug-log.",
+            )
+            return False
+        else:
+            log_msg = "Checking alert rules: Ok"
+            logger.debug(log_msg)
+            self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
+            return True
+
+        return False
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
@@ -1252,11 +1353,11 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             container: Container which has alert rules files to be deleted
         """
-        container.remove_path(self._rules_dir, recursive=True)
+        files = container.list_files(self._rules_dir)
         logger.debug("Previous Alert rules files deleted")
-        # Since container.remove_path deletes the directory itself with its files
-        # we should create it again.
-        os.makedirs(self._rules_dir, exist_ok=True)
+        for f in files:
+            logger.debug("Removing file... %s", f.path)
+            container.remove_path(f.path)
 
     def _generate_alert_rules_files(self, container: Container) -> None:
         """Generate and upload alert rules files.
@@ -1849,7 +1950,7 @@ class LogProxyConsumer(ConsumerBase):
             )
         url = relations[0].data[relations[0].app].get("promtail_binary_zip_url")
 
-        with urlopen(url) as r:
+        with request.urlopen(url) as r:
             file_bytes = r.read()
             with open(BINARY_ZIP_PATH, "wb") as f:
                 f.write(file_bytes)

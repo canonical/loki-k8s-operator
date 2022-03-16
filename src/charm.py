@@ -19,7 +19,10 @@ import textwrap
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
+from charms.loki_k8s.v0.loki_push_api import (
+    LokiPushApiAlertRulesChanged,
+    LokiPushApiProvider,
+)
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -56,15 +59,20 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_port=str(self._port),
         )
+        self._loki_server = LokiServer()
+        self._provide_loki()
+        self.loki_provider = LokiPushApiProvider(self)
+
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
         self.framework.observe(
             self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
         )
-        self.loki_provider = None
-        self._loki_server = LokiServer()
-        self._provide_loki()
+        self.framework.observe(
+            self.loki_provider.on.loki_push_api_alert_rules_changed,
+            self._loki_push_api_alert_rules_changed,
+        )
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
@@ -81,9 +89,16 @@ class LokiOperatorCharm(CharmBase):
     def _on_alertmanager_change(self, event):
         self._configure(event)
 
+    def _loki_push_api_alert_rules_changed(self, event):
+        self._configure(event)
+
     def _configure(self, event):
         """Configure Loki charm."""
         restart = False
+
+        if isinstance(event, LokiPushApiAlertRulesChanged) and event.error:
+            self.unit.status = BlockedStatus(event.message)
+            return False
 
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
@@ -154,7 +169,6 @@ class LokiOperatorCharm(CharmBase):
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
         try:
             version = self._loki_server.version
-            self.loki_provider = self.loki_provider or LokiPushApiProvider(self)
             logger.debug("Loki Provider is available. Loki version: %s", version)
         except LokiServerNotReadyError as e:
             self.unit.status = WaitingStatus(str(e))
@@ -193,6 +207,7 @@ class LokiOperatorCharm(CharmBase):
 
             server:
               http_listen_port: {self._port}
+              http_listen_address: 0.0.0.0
 
             common:
               path_prefix: {LOKI_DIR}
