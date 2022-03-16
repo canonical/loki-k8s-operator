@@ -19,7 +19,10 @@ import textwrap
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
+from charms.loki_k8s.v0.loki_push_api import (
+    LokiPushApiAlertRulesChanged,
+    LokiPushApiProvider,
+)
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -67,11 +70,8 @@ class LokiOperatorCharm(CharmBase):
             self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
         )
         self.framework.observe(
-            self.loki_provider.on.loki_push_api_alert_rules_error,
-            self._loki_push_api_alert_rules_error,
-        )
-        self.framework.observe(
-            self.loki_provider.on.loki_push_api_alert_rules_ok, self._loki_push_api_alert_rules_ok
+            self.loki_provider.on.loki_push_api_alert_rules_changed,
+            self._loki_push_api_alert_rules_changed,
         )
 
     ##############################################
@@ -89,15 +89,16 @@ class LokiOperatorCharm(CharmBase):
     def _on_alertmanager_change(self, event):
         self._configure(event)
 
-    def _loki_push_api_alert_rules_error(self, event):
-        self.unit.status = BlockedStatus("Errors in alert rule groups. Check juju debug-log.")
-
-    def _loki_push_api_alert_rules_ok(self, event):
-        self.unit.status = ActiveStatus()
+    def _loki_push_api_alert_rules_changed(self, event):
+        self._configure(event)
 
     def _configure(self, event):
         """Configure Loki charm."""
         restart = False
+
+        if isinstance(event, LokiPushApiAlertRulesChanged) and event.error:
+            self.unit.status = BlockedStatus(event.message)
+            return False
 
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")

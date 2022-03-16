@@ -1,6 +1,7 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import io
 import json
 import textwrap
 import unittest
@@ -162,18 +163,24 @@ class TestLokiPushApiProvider(unittest.TestCase):
 
     @patch("urllib.request.urlopen")
     def test__check_alert_rules_httperror_404_ok(self, mock_urlopen):
-        mock_urlopen.side_effect = HTTPError(URL, 404, "no rule groups found", {}, None)  # type: ignore
-        self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
+        with patch("http.client.HTTPResponse") as mock_http_response:
+            mock_http_response.read.side_effect = HTTPError(URL, 404, "no rule groups found", {}, io.BytesIO())  # type: ignore
+            mock_urlopen.return_value = mock_http_response
+            self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
 
     @patch("urllib.request.urlopen")
     def test__check_alert_rules_httperror_404_error(self, mock_urlopen):
-        mock_urlopen.side_effect = HTTPError(URL, 404, "404 page not found", {}, None)  # type: ignore
-        self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
+        with patch("http.client.HTTPResponse") as mock_http_response:
+            mock_urlopen.side_effect = HTTPError(URL, 404, "404 page not found", {}, io.BytesIO())  # type: ignore
+            mock_http_response.read.return_value = mock_urlopen.side_effect
+            self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
 
     @patch("urllib.request.urlopen")
     def test__check_alert_rules_httperror_400(self, mock_urlopen):
-        mock_urlopen.side_effect = HTTPError(URL, 400, "Bad Request", {}, None)  # type: ignore
-        self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
+        with patch("http.client.HTTPResponse") as mock_http_response:
+            mock_urlopen.side_effect = HTTPError(URL, 400, "Bad Request", {}, io.BytesIO())  # type: ignore
+            mock_http_response.read.return_value = mock_urlopen.side_effect
+            self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
 
     @patch("urllib.request.urlopen")
     def test__check_alert_rules_urlerror(self, mock_urlopen):
