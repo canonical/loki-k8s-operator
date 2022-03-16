@@ -133,11 +133,11 @@ Once these alert rules are sent over relation data, the `LokiPushApiProvider` ob
 stores these files in the directory `/loki/rules` inside the Loki charm container. After
 storing alert rules files, the object will check alert rules by querying Loki API
 endpoint: [`loki/api/v1/rules`](https://grafana.com/docs/loki/latest/api/#list-rule-groups).
-If there are errors with alert rules a `loki_push_api_alert_rules_error` event will
-be emitted, in the other hand if there are no error a `loki_push_api_alert_rules_ok`
-event will be emitted.
+If there are errors with alert rules a `loki_push_api_alert_rules_changed` event will
+be emitted with `event.error=True`, in the other hand if there are no error a
+`loki_push_api_alert_rules_changed` event will be emitted with `event.error=False`
 
-These events should be observed in the charm that uses `LokiPushApiProvider`:
+This events should be observed in the charm that uses `LokiPushApiProvider`:
 
 ```python
     def __init__(self, *args):
@@ -145,17 +145,17 @@ These events should be observed in the charm that uses `LokiPushApiProvider`:
         ...
         self.loki_provider = LokiPushApiProvider(self)
         self.framework.observe(
-            self.loki_provider.on.loki_push_api_alert_rules_error,
-            self._loki_push_api_alert_rules_error,
-        )
-        self.framework.observe(
-            self.loki_provider.on.loki_push_api_alert_rules_ok, self._loki_push_api_alert_rules_ok
+            self.loki_provider.on.loki_push_api_alert_rules_changed,
+            self._loki_push_api_alert_rules_changed,
         )
 
-    def _loki_push_api_alert_rules_error(self, event):
-        self.unit.status = BlockedStatus("Errors in alert rule groups. Check juju debug-log.")
+    def _loki_push_api_alert_rules_changed(self, event):
+        if event.error:
+            self.unit.status = BlockedStatus(event.message)
+            return
 
-    def _loki_push_api_alert_rules_ok(self, event):
+        ...
+
         self.unit.status = ActiveStatus()
 ```
 
@@ -1129,12 +1129,22 @@ class LokiPushApiEndpointJoined(EventBase):
     """Event emitted when Loki joined."""
 
 
-class LokiPushApiAlertRulesError(EventBase):
+class LokiPushApiAlertRulesChanged(EventBase):
     """Event emitted if there is an error with Alert Rules."""
 
+    def __init__(self, handle, error: bool = False, message: str = ""):
+        super().__init__(handle)
+        self.message = message
+        self.error = error
 
-class LokiPushApiAlertRulesOK(EventBase):
-    """Event emitted if there is no error with Alert Rules."""
+    def snapshot(self) -> Dict:
+        """Save grafana source information."""
+        return {"error": self.error, "message": self.message}
+
+    def restore(self, snapshot):
+        """Restore grafana source information."""
+        self.message = snapshot["message"]
+        self.error = snapshot["error"]
 
 
 class LokiPushApiEvents(ObjectEvents):
@@ -1142,8 +1152,7 @@ class LokiPushApiEvents(ObjectEvents):
 
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
     loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
-    loki_push_api_alert_rules_error = EventSource(LokiPushApiAlertRulesError)
-    loki_push_api_alert_rules_ok = EventSource(LokiPushApiAlertRulesOK)
+    loki_push_api_alert_rules_changed = EventSource(LokiPushApiAlertRulesChanged)
 
 
 class LokiPushApiProvider(RelationManagerBase):
@@ -1270,38 +1279,47 @@ class LokiPushApiProvider(RelationManagerBase):
         Returns: bool
 
         Emits:
-            loki_push_api_alert_rules_ok: This event is emitted when there are no errors with
-                alert rules.
-            loki_push_api_alert_rules_error: This event is emitted when the Loki API returns an
-                error because it failed to list rule group.
+            loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
         """
         url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
         req = request.Request(url)
         try:
             request.urlopen(req)
         except HTTPError as e:
-            msg = e.msg  # type: ignore
+            msg = e.read().decode("utf-8")
+
             if e.code == 404 and "no rule groups found" in msg:
-                logger.debug("Checking alert rules: No rule groups found")
-                self.on.loki_push_api_alert_rules_ok.emit()
+                log_msg = "Checking alert rules: No rule groups found"
+                logger.debug(log_msg)
+                self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
                 return True
 
             if e.code == 404 and "404 page not found" in msg:
                 logger.error("Checking alert rules: 404 page not found: %s", url)
-                self.on.loki_push_api_alert_rules_error.emit()
+                self.on.loki_push_api_alert_rules_changed.emit(
+                    error=True,
+                    message="Errors in alert rule groups. Check juju debug-log.",
+                )
                 return False
 
-            message = "{} - {}".format(e.code, msg)
+            message = "{} - {}".format(e.code, e.msg)  # type: ignore
             logger.error("Checking alert rules: %s", message)
-            self.on.loki_push_api_alert_rules_error.emit()
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Errors in alert rule groups. Check juju debug-log.",
+            )
             return False
         except URLError as e:
             logger.error("Checking alert rules: %s", e.reason)
-            self.on.loki_push_api_alert_rules_error.emit()
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Errors in alert rule groups. Check juju debug-log.",
+            )
             return False
         else:
-            logger.debug("Checking alert rules: Ok")
-            self.on.loki_push_api_alert_rules_ok.emit()
+            log_msg = "Checking alert rules: Ok"
+            logger.debug(log_msg)
+            self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
             return True
 
         return False
