@@ -167,6 +167,12 @@ class TestLogProxyConsumer(unittest.TestCase):
             {x["url"] for x in self.harness.charm._log_proxy._clients_list()}, expected_clients
         )
 
+    def test__empty_clients_list(self):
+        # Ensure we do not raise an exception if the clients list is empty
+        rel_id = self.harness.add_relation("log-proxy", "agent")
+        self.harness.add_relation_unit(rel_id, "agent/0")
+        self.assertEqual(self.harness.charm._log_proxy._clients_list(), [])
+
     def test__get_container_container_name_not_exist(self):
         # Container do not exist
         container_name = "loki_container"
