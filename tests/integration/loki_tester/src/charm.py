@@ -3,13 +3,14 @@
 # See LICENSE file for licensing details.
 
 """A Charm to functionally test the Loki Operator."""
-
+import contextlib
 import json
 import logging
 from pathlib import Path
 from typing import List
 
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, \
+    LokiPushApiConsumer
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
@@ -17,16 +18,18 @@ from ops.pebble import ChangeError, Layer
 
 logger = logging.getLogger(__name__)
 LOGFILE = "/loki_tester_msgs.txt"
-SYSLOG_LOGFILE = "/var/log/logpy.log"
 
-SYSLOG_PORT = 1514
-# we configure rsyslog to read logs we output to SYSLOG_LOGFILE and push them
-# to the syslog server set up by promtail at localhost:SYSLOG_PORT.
-RSYSLOG_CFG = f"""
-module(load="imfile")
-input(type="imfile" File="{SYSLOG_LOGFILE}" addMetadata="on" Tag="cass")
-action(type="omfwd" protocol="tcp" target="127.0.0.1" port="{SYSLOG_PORT}" Template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")
-"""
+
+@contextlib.contextmanager
+def _catch_quick_exit_errors():
+    try:
+        yield
+    except ChangeError as exc:
+        #  Start service "cmd" (cannot start service:
+        #       exited quickly with code 0)
+        if "exited quickly with code 0" not in exc.err:
+            logger.exception("cmd FAIL")
+            raise exc  # reraise, this is not good
 
 
 class LokiTesterCharm(CharmBase):
@@ -35,6 +38,8 @@ class LokiTesterCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._name = name = "loki-tester"
+        self.container = self.unit.get_container(self._name)
+
         this_dir = Path(__file__).parent.resolve()
         self._log_py_script = (this_dir / "log.py").absolute()
         self.log_proxy_consumer = LogProxyConsumer(
@@ -44,15 +49,18 @@ class LokiTesterCharm(CharmBase):
             container_name=name
         )
 
-        self.framework.observe(self.on.loki_tester_pebble_ready,
-                               self._on_pebble_ready)
-        self.framework.observe(self.on.config_changed,
-                               self._on_config_changed)
-        self.framework.observe(self.log_proxy_consumer.on.log_proxy_endpoint_joined,
-                               self._on_log_proxy_joined)
+        self.framework.observe(
+            self.on.loki_tester_pebble_ready,
+            self._on_pebble_ready)
+        self.framework.observe(
+            self.on.config_changed,
+            self._on_config_changed)
+        self.framework.observe(
+            self.log_proxy_consumer.on.log_proxy_endpoint_joined,
+            self._on_log_proxy_joined)
 
     @property
-    def loki_endpoints(self) -> List[dict]:
+    def _loki_endpoints(self) -> List[dict]:
         """Fetch Loki Push API endpoints.
 
          As sent from LogProxyConsumer through relation data.
@@ -67,9 +75,9 @@ class LokiTesterCharm(CharmBase):
 
     def _on_log_proxy_joined(self, event):
         self._refresh_pebble_layer()
-        self.check_status()
+        self._set_active_status()
 
-    def check_status(self):
+    def _set_active_status(self):
         """Determine active status message, and set it."""
         addr = self._get_loki_url()
         if not addr:
@@ -79,100 +87,53 @@ class LokiTesterCharm(CharmBase):
         self.unit.status = ActiveStatus(msg)
 
     def _on_pebble_ready(self, event):
-        container = self.unit.get_container(self._name)
-        self._ensure_logpy_present(container)
-        self._setup_syslog(container)
-        self.check_status()
+        self._ensure_logpy_present()
+        self._set_active_status()
 
-    def _setup_syslog(self, container):
-        """Push rsyslog conf."""
-        proc = container.exec(["apt-get", "--yes", "update"])
-        proc.wait()
-        proc = container.exec(["apt-get", "--yes", "install", "rsyslog"])
-        proc.wait()
+    def _ensure_logpy_present(self):
+        with self._log_py_script.open() as script:
+            logpy_script = script.read()
+            self.container.push("/log.py", logpy_script)
+            logger.info("Pushed log.py to container")
 
-        container.push("/etc/rsyslog.conf", RSYSLOG_CFG, make_dirs=True)
-
-        if self._set_rsyslog_layer(container):
-            container.restart("rsyslog")
-
-    def _set_rsyslog_layer(self, container) -> bool:
-        if not container.can_connect():
-            return False
-        layer = {
-            "summary": "Rsyslog Layer",
-            "description": "pebble config layer for rsyslog",
-            "services": {
-                "rsyslog": {
-                    "override": "replace",
-                    "summary": "rsyslog",
-                    "command": "/usr/sbin/rsyslogd -n",
-                    "startup": "enabled",
-                },
-            },
-        }
-        services = container.get_plan().services
-        if services != layer["services"]:
-            container.add_layer("rsyslog", layer, combine=True)
-            return True
-        return False
-
-    def _push_logpy(self, container: Container):
-        """Copy logpy script to container."""
-        logpy_script = self._log_py()
-        container.push("/log.py", logpy_script)
-        logger.info("Pushed log.py to container")
-
-    def _ensure_logpy_present(self, container: Container):
-        try:
-            self._push_logpy(container)
-        except Exception as e:
-            logger.debug("encountered error when pushing logpy:", e)
-        assert "/log.py" in [f.path for f in container.list_files("/")], "logpy not pushed"
+        filepaths = [f.path for f in self.container.list_files("/")]
+        assert "/log.py" in filepaths, "logpy not pushed"
 
     def _on_config_changed(self, event):
         """Reconfigure the Loki tester."""
-        container = self.unit.get_container(self._name)
-        if not container.can_connect():
+        if not self.container.can_connect():
             self.unit.status = WaitingStatus("Waiting for container")
             event.defer()
             return
 
         if not self._get_loki_url():
-            self.unit.status = WaitingStatus('Waiting for loki (config-changed).')
+            self.unit.status = WaitingStatus(
+                'Waiting for loki (config-changed).'
+            )
             event.defer()
             return
 
         logger.info(f"configured loki-tester: {self.config['log-to']}")
         self._refresh_pebble_layer()
-        self.check_status()
+        self._set_active_status()
 
-    def one_shot_container_start(self, container: Container):
-        try:
-            container.start(self._name)
+    def _one_shot_container_start(self):
+        with _catch_quick_exit_errors():
+            self.container.start(self._name)
             logger.info("container STARTED")
-        except ChangeError as exc:
-            #  Start service "cmd" (cannot start service:
-            #       exited quickly with code 0)
-            if "exited quickly with code 0" not in exc.err:
-                logger.exception("cmd FAIL")
-                raise exc  # reraise, this is not good
-
         logger.info(f"cmd logpy [{self.config['log-to']}] OK")
 
     def _refresh_pebble_layer(self):
-        container = self.unit.get_container(self._name)
-
         #  this might get called before pebble-ready, so we check this here too
-        self._ensure_logpy_present(container)
+        self._ensure_logpy_present()
 
-        current_services = container.get_plan().services
+        current_services = self.container.get_plan().services
         new_layer = self._tester_pebble_layer()
         if current_services != new_layer.services:
-            container.add_layer(self._name, new_layer, combine=True)
+            self.container.add_layer(self._name, new_layer, combine=True)
             logger.debug("Added tester layer to container")
 
-            self.one_shot_container_start(container)
+            self._one_shot_container_start()
             logger.info("Restarted tester service")
 
     def _get_loki_url(self) -> str:
@@ -180,7 +141,8 @@ class LokiTesterCharm(CharmBase):
 
         Only available if some loki relation is active.
         """
-        endpoints = self.loki_endpoints
+        endpoints = self._loki_endpoints
+        # e.g. [{'url': 'http://url:3100/loki/api/v1/push'}]
         if not endpoints:
             return ""
         return endpoints[0]["url"]
@@ -189,7 +151,8 @@ class LokiTesterCharm(CharmBase):
         """Generate Loki tester pebble layer."""
         modes = self.config["log-to"]
         loki_address = self._get_loki_url() or "<not_an_address>"
-        logger.info(f"generated pebble layer with loki address: {loki_address!r}")
+        logger.info(
+            f"generated pebble layer with loki address: {loki_address!r}")
         cmd = f"python3 log.py {modes} {loki_address} {LOGFILE}"
 
         logger.info(f"pebble layer command: {cmd}")
@@ -206,11 +169,6 @@ class LokiTesterCharm(CharmBase):
             },
         }
         return Layer(layer_spec)
-
-    def _log_py(self):
-        """Fetch the log generator script."""
-        with self._log_py_script.open() as script:
-            return script.read()
 
 
 if __name__ == "__main__":

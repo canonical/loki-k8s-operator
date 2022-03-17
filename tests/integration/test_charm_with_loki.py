@@ -79,17 +79,18 @@ async def get_loki_address(ops_test, loki_app_name):
 
 
 @pytest.mark.parametrize(
-    "modes",
-    all_combinations(
-        (
-            "loki",
-            "file",
-            'syslog',
-        )
-    ),
+    "modes", ['file', 'syslog']
+    # all_combinations(
+    #     (
+    #         # "loki",
+    #         # "file",
+    #         'syslog',
+    #     )
+    # )
 )
 @pytest.mark.abort_on_fail
-async def test_loki_scraping_with_promtail(modes: str, ops_test: OpsTest, loki_tester_deployment):
+async def test_loki_scraping_with_promtail(
+        modes: str, ops_test: OpsTest, loki_tester_deployment):
     """Test the core loki functionality + promtail on several log output cases.
 
     Will run on all combinations of loki/file/syslog routes.
@@ -167,13 +168,15 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest, 
         extra_stream = {}
 
     # get the job name for the log stream
-    labels = requests.get(f"{url}/loki/api/v1/label/job/values").json().get("data")
+    labels = requests.get(f"{url}/loki/api/v1/label/job/values"
+                          ).json().get("data")
     if not labels:
         raise RuntimeError('no jobs present: nothing was logged yet.')
     try:
         job_label = next(filter(lambda x: x.endswith(suffix), labels))
     except StopIteration:
-        raise RuntimeError(f"expected label with suffix {suffix} not found in" f"{labels}.")
+        raise RuntimeError(f"expected label with suffix {suffix} not "
+                           f"found in" f"{labels}.")
 
     print("job label:", job_label)
 

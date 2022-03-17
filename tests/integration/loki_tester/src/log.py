@@ -35,17 +35,27 @@ TEST_JOB_NAME = "test-job"
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
 FILE_LOG_MSG = "LOG FILE"
-SYSLOG_LOGFILE = "/var/log/logpy.log"
 WAIT = 0.2
 
 
 def _log_to_syslog():
     if CONTAINER:
-        with open(SYSLOG_LOGFILE, 'a+') as f:
-            f.write(SYSLOG_LOG_MSG)
+        import socket
+        try:
+            from rfc5424logging import Rfc5424SysLogHandler
+        except ImportError:
+            logger.error('could not attempt syslogging via pysyslogclient; '
+                         'do `pip install rfc5424-logging-handler`.')
+            return
+        rfc5424Handler = Rfc5424SysLogHandler(address=('localhost', 1514),
+                                              socktype=socket.SOCK_STREAM)
+        rfc5424Handler.setLevel(logging.DEBUG)
+        logger.addHandler(rfc5424Handler)
+        logger.warning(SYSLOG_LOG_MSG)
+
     else:
         syslog.syslog(SYSLOG_LOG_MSG)
-    logger.info(f"logged to syslog at {SYSLOG_LOGFILE}")
+        logger.info(f"logged to syslog")
 
 
 def _log_to_loki(loki_address):
@@ -57,9 +67,11 @@ def _log_to_loki(loki_address):
         with request.urlopen(f"{loki_base_url}/ready") as resp:
             resp_text = resp.read()
     except Exception as e:
-        if resp.getcode() == 503:
-            raise RuntimeError(f"loki gives Service Unavailable at {loki_base_url}")
-
+        try:
+            if resp.getcode() == 503:
+                raise RuntimeError(f"loki gives Service Unavailable at {loki_base_url}")
+        except:
+            pass
         raise RuntimeError(
             f"Could not contact loki api at {loki_base_url!r}; gotten {e!r};"
             f"loki_address={loki_address!r}"
