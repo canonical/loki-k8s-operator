@@ -16,15 +16,15 @@ async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
     return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
 
 
-async def is_loki_up(ops_test, app_name) -> bool:
-    address = await get_unit_address(ops_test, app_name, 0)
-    url = f"http://{address}:3100"
-    logger.info("Loki public address: %s", url)
+async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
+    addresses = [await get_unit_address(ops_test, app_name, i) for i in range(num_units)]
+    logger.info("Loki addresses: %s", addresses)
 
-    response = urllib.request.urlopen(
-        f"{url}/loki/api/v1/status/buildinfo", data=None, timeout=2.0
-    )
-    return response.code == 200 and "version" in json.loads(response.read())
+    def get(url) -> bool:
+        response = urllib.request.urlopen(url, data=None, timeout=2.0)
+        return response.code == 200 and "version" in json.loads(response.read())
+
+    return all(get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses)
 
 
 async def loki_rules(ops_test, app_name) -> dict:
