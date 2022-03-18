@@ -6,7 +6,7 @@ import os
 import textwrap
 import unittest
 from unittest.mock import patch
-
+from fs.tempfs import TempFS
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
 from helpers import TempFolderSandbox
@@ -268,3 +268,53 @@ class TestReloadAlertRules(unittest.TestCase):
         # THEN relation data is empty again
         relation = self.harness.charm.model.get_relation("logging")
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+
+
+class TestAlertRuleFormats(unittest.TestCase):
+    """Feature: Consumer lib should warn when encountering invalid rules files.
+
+    Background: It is not easy to determine the validity of rule files, but some cases are trivial:
+      - empty files
+
+    In those cases a warning should be emitted.
+    """
+
+    def setUp(self):
+        self.sandbox = TempFS("consumer_rule_files", auto_clean=True)
+        self.addCleanup(self.sandbox.close)
+
+        alert_rules_path = self.sandbox.getsyspath("/")
+
+        class ConsumerCharm(CharmBase):
+            metadata_yaml = textwrap.dedent(
+                """
+                requires:
+                  logging:
+                    interface: loki_push_api
+                peers:
+                  replicas:
+                    interface: consumer_charm_replica
+                """
+            )
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args)
+                self._port = 3100
+                self.loki_consumer = LokiPushApiConsumer(
+                    self, alert_rules_path=alert_rules_path, recursive=True
+                )
+
+        self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
+        self.addCleanup(self.harness.cleanup)
+
+        self.peer_rel_id = self.harness.add_relation("replicas", self.harness.model.app.name)
+        self.harness.set_leader(True)
+
+        self.rel_id = self.harness.add_relation(relation_name="logging", remote_app="loki")
+        self.harness.add_relation_unit(self.rel_id, "loki/0")
+
+    def test_empty_rule_files_are_forwarded_but_produce_a_warning(self):
+        """Scenario: Consumer charm attempts to forward an empty rule file."""
+        # TODO write empty rule file
+        self.sandbox.writetext("empty.rule", "")
+        self.harness.begin_with_initial_hooks()
