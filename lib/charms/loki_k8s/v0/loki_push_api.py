@@ -907,7 +907,7 @@ class AlertRules:
         with file_path.open() as rf:
             # Load a list of rules from file then add labels and filters
             try:
-                rule_file = yaml.safe_load(rf)
+                rule_file = yaml.safe_load(rf) or {}
 
             except Exception as e:
                 logger.error("Failed to read alert rules from %s: %s", file_path.name, e)

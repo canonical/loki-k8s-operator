@@ -317,4 +317,7 @@ class TestAlertRuleFormats(unittest.TestCase):
         """Scenario: Consumer charm attempts to forward an empty rule file."""
         # TODO write empty rule file
         self.sandbox.writetext("empty.rule", "")
-        self.harness.begin_with_initial_hooks()
+
+        with self.assertLogs(level="ERROR") as logger:
+            self.harness.begin_with_initial_hooks()
+            self.assertIn("empty.rule", "\n".join(logger.output))
