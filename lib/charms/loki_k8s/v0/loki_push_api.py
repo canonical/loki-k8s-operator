@@ -907,7 +907,7 @@ class AlertRules:
         with file_path.open() as rf:
             # Load a list of rules from file then add labels and filters
             try:
-                rule_file = yaml.safe_load(rf)
+                rule_file = yaml.safe_load(rf) or {}
 
             except Exception as e:
                 logger.error("Failed to read alert rules from %s: %s", file_path.name, e)
@@ -921,7 +921,8 @@ class AlertRules:
                 alert_groups = [{"name": file_path.stem, "rules": [rule_file]}]
             else:
                 # invalid/unsupported
-                logger.error("Invalid rules file: %s", file_path.name)
+                reason = "file is empty" if not rule_file else "unexpected file structure"
+                logger.error("Invalid rules file (%s): %s", reason, file_path.name)
                 return []
 
             # update rules with additional metadata
