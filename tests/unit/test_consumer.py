@@ -281,6 +281,8 @@ class TestAlertRuleFormat(unittest.TestCase):
     In those cases a warning should be emitted.
     """
 
+    NO_ALERTS = json.dumps({})  # relation data representation for the case of "no alerts"
+
     def setUp(self):
         self.sandbox = TempFS("consumer_rule_files", auto_clean=True)
         self.addCleanup(self.sandbox.close)
@@ -317,14 +319,21 @@ class TestAlertRuleFormat(unittest.TestCase):
 
     def test_empty_rule_files_are_dropped_and_produce_an_error(self):
         """Scenario: Consumer charm attempts to forward an empty rule file."""
+        # GIVEN a bunch of empty rule files (and ONLY empty rule files)
         self.sandbox.writetext("empty.rule", "")
         self.sandbox.writetext("whitespace1.rule", " ")
         self.sandbox.writetext("whitespace2.rule", "\n")
         self.sandbox.writetext("whitespace3.rule", "\r\n")
 
+        # WHEN charm starts
         with self.assertLogs(level="ERROR") as logger:
             self.harness.begin_with_initial_hooks()
 
+        # THEN relation data is empty (empty rule files do not get forwarded in any way)
+        relation = self.harness.charm.model.get_relation("logging")
+        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+
+        # AND an error message is recorded for every empty file
         logger_output = "\n".join(logger.output)
         self.assertIn("empty.rule", logger_output)
         self.assertIn("whitespace1.rule", logger_output)
@@ -333,12 +342,19 @@ class TestAlertRuleFormat(unittest.TestCase):
 
     def test_rules_files_with_invalid_yaml_are_dropped_and_produce_an_error(self):
         """Scenario: Consumer charm attempts to forward a rule file which is invalid yaml."""
+        # GIVEN a bunch of invalid yaml rule files (and ONLY invalid yaml rule files)
         self.sandbox.writetext("tab.rule", "\t")
         self.sandbox.writetext("multicolon.rule", "this: is: not: yaml")
 
+        # WHEN charm starts
         with self.assertLogs(level="ERROR") as logger:
             self.harness.begin_with_initial_hooks()
 
+        # THEN relation data is empty (invalid rule files do not get forwarded in any way)
+        relation = self.harness.charm.model.get_relation("logging")
+        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+
+        # AND an error message is recorded for every invalid file
         logger_output = "\n".join(logger.output)
         self.assertIn("tab.rule", logger_output)
         self.assertIn("multicolon.rule", logger_output)
