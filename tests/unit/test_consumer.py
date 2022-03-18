@@ -6,9 +6,10 @@ import os
 import textwrap
 import unittest
 from unittest.mock import patch
-from fs.tempfs import TempFS
+
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+from fs.tempfs import TempFS
 from helpers import TempFolderSandbox
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -270,11 +271,12 @@ class TestReloadAlertRules(unittest.TestCase):
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
 
-class TestAlertRuleFormats(unittest.TestCase):
+class TestAlertRuleFormat(unittest.TestCase):
     """Feature: Consumer lib should warn when encountering invalid rules files.
 
     Background: It is not easy to determine the validity of rule files, but some cases are trivial:
       - empty files
+      - files made up of only white-spaces that yaml.safe_load parses as None (space, newline)
 
     In those cases a warning should be emitted.
     """
@@ -313,11 +315,30 @@ class TestAlertRuleFormats(unittest.TestCase):
         self.rel_id = self.harness.add_relation(relation_name="logging", remote_app="loki")
         self.harness.add_relation_unit(self.rel_id, "loki/0")
 
-    def test_empty_rule_files_are_forwarded_but_produce_a_warning(self):
+    def test_empty_rule_files_are_dropped_and_produce_an_error(self):
         """Scenario: Consumer charm attempts to forward an empty rule file."""
-        # TODO write empty rule file
         self.sandbox.writetext("empty.rule", "")
+        self.sandbox.writetext("whitespace1.rule", " ")
+        self.sandbox.writetext("whitespace2.rule", "\n")
+        self.sandbox.writetext("whitespace3.rule", "\r\n")
 
         with self.assertLogs(level="ERROR") as logger:
             self.harness.begin_with_initial_hooks()
-            self.assertIn("empty.rule", "\n".join(logger.output))
+
+        logger_output = "\n".join(logger.output)
+        self.assertIn("empty.rule", logger_output)
+        self.assertIn("whitespace1.rule", logger_output)
+        self.assertIn("whitespace2.rule", logger_output)
+        self.assertIn("whitespace3.rule", logger_output)
+
+    def test_rules_files_with_invalid_yaml_are_dropped_and_produce_an_error(self):
+        """Scenario: Consumer charm attempts to forward a rule file which is invalid yaml."""
+        self.sandbox.writetext("tab.rule", "\t")
+        self.sandbox.writetext("multicolon.rule", "this: is: not: yaml")
+
+        with self.assertLogs(level="ERROR") as logger:
+            self.harness.begin_with_initial_hooks()
+
+        logger_output = "\n".join(logger.output)
+        self.assertIn("tab.rule", logger_output)
+        self.assertIn("multicolon.rule", logger_output)
