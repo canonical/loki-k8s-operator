@@ -1,0 +1,7 @@
+alert: AlertOnError
+expr: |
+  count_over_time(({logger="Loki-Tester", level="error", %%juju_topology%%})[10m]) > 0
+labels:
+    severity: high
+annotations:
+    summary: An error message has been logged
