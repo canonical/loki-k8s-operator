@@ -7,7 +7,6 @@ import logging
 import os
 import sys
 import syslog
-
 from time import sleep, time
 from typing import Optional
 from urllib import request
@@ -42,13 +41,14 @@ WAIT = 0.2
 def _log_to_syslog():
     if CONTAINER:
         import socket
+
         try:
             from rfc5424logging import Rfc5424SysLogHandler
         except ImportError as e:
             # we'd normally do this by baking the requirement in the
             # workload image but here we don't really care. we just want the
             # import to succeed
-            os.system('pip install rfc5424-logging-handler')
+            os.system("pip install rfc5424-logging-handler")
             try:
                 return _log_to_syslog()
             except ImportError:
@@ -57,17 +57,16 @@ def _log_to_syslog():
                 raise e
 
         syslogger = logging.getLogger("promtail")
-        handler = Rfc5424SysLogHandler(address=('localhost', 1514),
-                                       socktype=socket.SOCK_STREAM)
+        handler = Rfc5424SysLogHandler(address=("localhost", 1514), socktype=socket.SOCK_STREAM)
         handler.setLevel(logging.DEBUG)
         syslogger.addHandler(handler)
         syslogger.warning(SYSLOG_LOG_MSG, extra={"msgid": 1})
 
-        logger.info('logged to syslog via rfc5424handler.')
+        logger.info("logged to syslog via rfc5424handler.")
 
     else:
         syslog.syslog(SYSLOG_LOG_MSG)
-        logger.info(f"logged to syslog")
+        logger.info("logged to syslog")
 
 
 def _log_to_loki(loki_address):
@@ -81,8 +80,7 @@ def _log_to_loki(loki_address):
     except Exception as e:
         try:
             if resp.getcode() == 503:
-                raise RuntimeError(
-                    f"loki gives Service Unavailable at {loki_base_url}")
+                raise RuntimeError(f"loki gives Service Unavailable at {loki_base_url}")
         except:  # noqa
             pass
         raise RuntimeError(
@@ -110,8 +108,7 @@ def _log_to_loki(loki_address):
     try:
         resp = request.urlopen(req, enc)
     except Exception as e:
-        raise RuntimeError(
-            f"Could not contact loki api at {loki_address}; gotten {e}")
+        raise RuntimeError(f"Could not contact loki api at {loki_address}; gotten {e}")
 
     if resp.getcode() != 204:
         raise RuntimeError(
@@ -135,8 +132,7 @@ def _log(mode, loki_address: str, fname: str):
         _log_to_syslog()
     elif mode == "loki":
         if not loki_address:
-            raise RuntimeError(
-                "loki_address needs to be provided when in `loki` mode")
+            raise RuntimeError("loki_address needs to be provided when in `loki` mode")
         _log_to_loki(loki_address)
     elif mode == "file":
         if not fname:
@@ -146,8 +142,7 @@ def _log(mode, loki_address: str, fname: str):
         raise ValueError(f"unknown logging mode: {fname!r}")
 
 
-def main(modes: str, loki_address: Optional[str] = None,
-         fname: Optional[str] = None):
+def main(modes: str, loki_address: Optional[str] = None, fname: Optional[str] = None):
     if modes == "ALL":
         log_modes = ["syslog", "loki", "file"]
     elif modes:
@@ -168,9 +163,7 @@ def main(modes: str, loki_address: Optional[str] = None,
             except Exception as e:
                 if DEBUG:
                     raise e
-                logger.error(
-                    f"failed to _log({mode!r}, {loki_address!r}, {fname!r}); "
-                    f"got {e}")
+                logger.error(f"failed to _log({mode!r}, {loki_address!r}, {fname!r}); " f"got {e}")
         if LONG:
             sleep(WAIT)
 

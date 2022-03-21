@@ -9,12 +9,10 @@ import logging
 from pathlib import Path
 from typing import List
 
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, \
-    LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus, \
-    MaintenanceStatus
+from ops.model import ActiveStatus, WaitingStatus
 from ops.pebble import ChangeError, Layer
 
 logger = logging.getLogger(__name__)
@@ -44,21 +42,14 @@ class LokiTesterCharm(CharmBase):
         this_dir = Path(__file__).parent.resolve()
         self._log_py_script = (this_dir / "log.py").absolute()
         self.log_proxy_consumer = LogProxyConsumer(
-            self,
-            log_files=[LOGFILE],
-            enable_syslog=True,
-            container_name=name
+            self, log_files=[LOGFILE], enable_syslog=True, container_name=name
         )
 
+        self.framework.observe(self.on.loki_tester_pebble_ready, self._on_pebble_ready)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(
-            self.on.loki_tester_pebble_ready,
-            self._on_pebble_ready)
-        self.framework.observe(
-            self.on.config_changed,
-            self._on_config_changed)
-        self.framework.observe(
-            self.log_proxy_consumer.on.log_proxy_endpoint_joined,
-            self._on_log_proxy_joined)
+            self.log_proxy_consumer.on.log_proxy_endpoint_joined, self._on_log_proxy_joined
+        )
 
     @property
     def _loki_endpoints(self) -> List[dict]:
@@ -85,11 +76,11 @@ class LokiTesterCharm(CharmBase):
     def _set_status(self):
         """Determine status message, and set it."""
         if not self.model.relations:
-            self.unit.status = WaitingStatus('Waiting for relation to Loki.')
+            self.unit.status = WaitingStatus("Waiting for relation to Loki.")
             return
         address = self._get_loki_url()
         if not address:
-            self.unit.status = WaitingStatus('Waiting for Loki.')
+            self.unit.status = WaitingStatus("Waiting for Loki.")
             return
 
         msg = f"Loki ready at {address}." if address else ""
@@ -116,9 +107,7 @@ class LokiTesterCharm(CharmBase):
             return
 
         if not self._get_loki_url():
-            self.unit.status = WaitingStatus(
-                'Waiting for loki (config-changed).'
-            )
+            self.unit.status = WaitingStatus("Waiting for loki (config-changed).")
             event.defer()
             return
 
@@ -160,8 +149,7 @@ class LokiTesterCharm(CharmBase):
         """Generate Loki tester pebble layer."""
         modes = self.config["log-to"]
         loki_address = self._get_loki_url() or "<not_an_address>"
-        logger.info(
-            f"generated pebble layer with loki address: {loki_address!r}")
+        logger.info(f"generated pebble layer with loki address: {loki_address!r}")
         cmd = f"python3 log.py {modes} {loki_address} {LOGFILE}"
 
         logger.info(f"pebble layer command: {cmd}")

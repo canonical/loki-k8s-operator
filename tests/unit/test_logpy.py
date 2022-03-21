@@ -11,7 +11,6 @@ from unittest.mock import patch
 import pytest
 from requests import get
 
-
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
 FILE_LOG_MSG = "LOG FILE"
@@ -19,18 +18,17 @@ FILE_LOG_MSG = "LOG FILE"
 
 def get_logpy_path() -> Path:
     """Return the Path to log.py file in loki-tester."""
-    pth = Path(__file__).parent.parent.resolve() / "integration" \
-          / "loki_tester" / "src" / "log.py"
+    pth = Path(__file__).parent.parent.resolve() / "integration" / "loki_tester" / "src" / "log.py"
     print(pth)
     assert pth.exists(), pth
     return pth.absolute()
 
 
 XFAIL_SYSLOG_TEST = True
-if sys.platform == 'darwin':
-    LOG_DEVICE_ADDRESS = '/var/run/syslog'
-elif 'linux' in sys.platform:
-    LOG_DEVICE_ADDRESS = '/dev/log'
+if sys.platform == "darwin":
+    LOG_DEVICE_ADDRESS = "/var/run/syslog"
+elif "linux" in sys.platform:
+    LOG_DEVICE_ADDRESS = "/dev/log"
 else:
     # TODO: support windows as well?
     LOG_DEVICE_ADDRESS = None
@@ -40,8 +38,7 @@ else:
 # to run this test against a locally available LOKI node:
 # LOKI_ADDRESS="10.1.94.35:3100" pytest ./tests/integration/test_loki_tester.py::test_log_script
 @pytest.mark.parametrize("modes", ("syslog", "loki", "file", "NOOP", "ALL"))
-@patch("tests.integration.loki_tester.src.log.SYSLOG_ADDRESS",
-       LOG_DEVICE_ADDRESS)
+@patch("tests.integration.loki_tester.src.log.SYSLOG_ADDRESS", LOG_DEVICE_ADDRESS)
 def test_log_script(modes, tmp_path):
     if modes == "ALL":
         modes = "syslog,loki,file"
@@ -55,7 +52,7 @@ def test_log_script(modes, tmp_path):
                 "node address for the `loki`-mode test to work"
             )
 
-    logfile = tmp_path / 'logpy.log'
+    logfile = tmp_path / "logpy.log"
     args = ["python3", get_logpy_path(), modes, loki_address, str(logfile)]
     if loki_address:
         args.append(loki_address)
@@ -66,9 +63,9 @@ def test_log_script(modes, tmp_path):
 
     if "syslog" in modes:
         if XFAIL_SYSLOG_TEST:
-            pytest.xfail('this test is not supported on windows')
+            pytest.xfail("this test is not supported on windows")
         with open("/var/log/syslog", "rb") as f:
-            logs = f.read().decode(errors='replace')
+            logs = f.read().decode(errors="replace")
             assert SYSLOG_LOG_MSG in logs
 
     if "loki" in modes:

@@ -1,7 +1,6 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import shutil
 
 import pytest_asyncio
@@ -43,28 +42,28 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
     # tester defers() past his last hook, and we have to wait for update-status
     # to fire.
     await ops_test.model.deploy(
-            loki_charm,
-            resources={
-                "loki-image": oci_image(
-                    "./metadata.yaml",
-                    "loki-image",
-                )
-            },
-            application_name=loki_app_name,
-        )
+        loki_charm,
+        resources={
+            "loki-image": oci_image(
+                "./metadata.yaml",
+                "loki-image",
+            )
+        },
+        application_name=loki_app_name,
+    )
 
     await ops_test.model.wait_for_idle(apps=[loki_app_name], status="active")
 
     await ops_test.model.deploy(
-            loki_tester_charm,
-            resources={
-                "loki-tester-image": oci_image(
-                    "./tests/integration/loki_tester/metadata.yaml",
-                    "loki-tester-image",
-                )
-            },
-            application_name=loki_tester_app_name,
-        )
+        loki_tester_charm,
+        resources={
+            "loki-tester-image": oci_image(
+                "./tests/integration/loki_tester/metadata.yaml",
+                "loki-tester-image",
+            )
+        },
+        application_name=loki_tester_app_name,
+    )
 
     await ops_test.model.add_relation(
         f"{loki_app_name}:logging", f"{loki_tester_app_name}:log-proxy"
@@ -74,8 +73,7 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
     await ops_test.juju("config", loki_app_name, "juju-external-hostname=localhost")
 
     # todo consider a shorter timeout.
-    await ops_test.model.wait_for_idle(apps=app_names, status="active",
-                                       timeout=60)
+    await ops_test.model.wait_for_idle(apps=app_names, status="active", timeout=60)
 
     await ops_test.juju("expose", loki_app_name)
     return app_names
