@@ -44,7 +44,8 @@ def _log_to_syslog():
         import socket
 
         try:
-            from rfc5424logging import Rfc5424SysLogHandler
+            # rfc5424logging has apparently no mypy support
+            from rfc5424logging import Rfc5424SysLogHandler  # type: ignore
         except ImportError as e:
             # we'd normally do this by baking the requirement in the
             # workload image but here we don't really care. we just want the
