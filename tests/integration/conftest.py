@@ -38,8 +38,11 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
     """Simple deployment with loki+loki-tester, related."""
     app_names = loki_app_name, loki_tester_app_name = ("loki-k8s", "loki-tester")
 
-    await asyncio.gather(
-        ops_test.model.deploy(
+    # first deploy loki-k8s, wait for idle, and then
+    # deploy the tester. To avoid that if loki-k8s takes long to come up, the
+    # tester defers() past his last hook, and we have to wait for update-status
+    # to fire.
+    await ops_test.model.deploy(
             loki_charm,
             resources={
                 "loki-image": oci_image(
@@ -48,8 +51,11 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
                 )
             },
             application_name=loki_app_name,
-        ),
-        ops_test.model.deploy(
+        )
+
+    await ops_test.model.wait_for_idle(apps=[loki_app_name], status="active")
+
+    await ops_test.model.deploy(
             loki_tester_charm,
             resources={
                 "loki-tester-image": oci_image(
@@ -58,16 +64,18 @@ async def loki_tester_deployment(ops_test, loki_charm, loki_tester_charm):
                 )
             },
             application_name=loki_tester_app_name,
-        ),
-    )
+        )
+
     await ops_test.model.add_relation(
         f"{loki_app_name}:logging", f"{loki_tester_app_name}:log-proxy"
     )
 
     # before we can expose loki, we need to configure the hostname
     await ops_test.juju("config", loki_app_name, "juju-external-hostname=localhost")
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
+
+    # todo consider a shorter timeout.
+    await ops_test.model.wait_for_idle(apps=app_names, status="active",
+                                       timeout=60)
 
     await ops_test.juju("expose", loki_app_name)
-
     return app_names

@@ -13,7 +13,8 @@ from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, \
     LokiPushApiConsumer
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus, \
+    MaintenanceStatus
 from ops.pebble import ChangeError, Layer
 
 logger = logging.getLogger(__name__)
@@ -68,27 +69,35 @@ class LokiTesterCharm(CharmBase):
         Returns:
             A list with Loki Push API endpoints.
         """
+        if not self.model.relations:
+            # no relation yet
+            return []
         endpoints = []  # type: list
         for relation in self.model.relations["log-proxy"]:
-            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            app_data = relation.data[relation.app]
+            endpoints = endpoints + json.loads(app_data.get("endpoints", "[]"))
         return endpoints
 
     def _on_log_proxy_joined(self, event):
         self._refresh_pebble_layer()
-        self._set_active_status()
+        self._set_status()
 
-    def _set_active_status(self):
-        """Determine active status message, and set it."""
-        addr = self._get_loki_url()
-        if not addr:
+    def _set_status(self):
+        """Determine status message, and set it."""
+        if not self.model.relations:
+            self.unit.status = WaitingStatus('Waiting for relation to Loki.')
+            return
+        address = self._get_loki_url()
+        if not address:
             self.unit.status = WaitingStatus('Waiting for Loki.')
             return
-        msg = f"Loki ready at {addr}." if addr else ""
+
+        msg = f"Loki ready at {address}." if address else ""
         self.unit.status = ActiveStatus(msg)
 
     def _on_pebble_ready(self, event):
         self._ensure_logpy_present()
-        self._set_active_status()
+        self._set_status()
 
     def _ensure_logpy_present(self):
         with self._log_py_script.open() as script:
@@ -115,7 +124,7 @@ class LokiTesterCharm(CharmBase):
 
         logger.info(f"configured loki-tester: {self.config['log-to']}")
         self._refresh_pebble_layer()
-        self._set_active_status()
+        self._set_status()
 
     def _one_shot_container_start(self):
         with _catch_quick_exit_errors():

@@ -9,7 +9,6 @@ import time
 
 import pytest
 import requests
-from helpers import all_combinations
 from pytest_operator.plugin import OpsTest
 
 from lib.charms.loki_k8s.v0.loki_push_api import (
@@ -20,8 +19,7 @@ from lib.charms.loki_k8s.v0.loki_push_api import (
     WORKLOAD_CONFIG_PATH,
 )
 
-# on my machine it typically takes ~15s
-LOKI_MAX_WAIT = os.environ.get("LOKI_MAX_WAIT", 60)
+# copied over from log.py to avoid circular imports
 TEST_JOB_NAME = "test-job"
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
@@ -42,24 +40,29 @@ async def assert_file_exists(ops_test, file_path, file_name):
     assert retcode == 0
 
 
-async def test_logpy_is_in_workload_container(ops_test: OpsTest, loki_tester_deployment):
+async def test_logpy_is_in_workload_container(ops_test: OpsTest,
+                                              loki_tester_deployment):
     """Verify that log.py is in the container."""
     # this could be done in a smarter way I guess
     await assert_file_exists(ops_test, "/", "log.py")
 
 
-async def test_promtail_files_are_in_workload_container(ops_test: OpsTest, loki_tester_deployment):
+async def test_promtail_files_are_in_workload_container(ops_test: OpsTest,
+                                                        loki_tester_deployment):
     """Verify that the promload binary and the config are where they should."""
-    await assert_file_exists(ops_test, WORKLOAD_BINARY_DIR + "/", BINARY_FILE_NAME)
-    await assert_file_exists(ops_test, WORKLOAD_CONFIG_DIR + "/", WORKLOAD_CONFIG_FILE_NAME)
+    await assert_file_exists(ops_test, WORKLOAD_BINARY_DIR + "/",
+                             BINARY_FILE_NAME)
+    await assert_file_exists(ops_test, WORKLOAD_CONFIG_DIR + "/",
+                             WORKLOAD_CONFIG_FILE_NAME)
 
 
 async def test_promtail_is_running_in_workload_container(
-    ops_test: OpsTest, loki_tester_deployment
+        ops_test: OpsTest, loki_tester_deployment
 ):
     """Verify that the promtail process is running."""
     await run_in_loki_tester(ops_test, "apt update -y && apt install procps -y")
-    retcode, stdout, stderr = await run_in_loki_tester(ops_test, "ps -aux | grep promtail")
+    retcode, stdout, stderr = await run_in_loki_tester(ops_test,
+                                                       "ps -aux | grep promtail")
     cmd = f"{BINARY_FILE_NAME} -config.file={WORKLOAD_CONFIG_PATH}"
     assert cmd in stdout
 
@@ -69,7 +72,9 @@ async def get_loki_address(ops_test, loki_app_name):
     retcode, stdout, stderr = await ops_test.juju("status", "--format=json")
     try:
         jsn = json.loads(stdout)
-        return jsn["applications"][loki_app_name]["units"][f"{loki_app_name}/0"]["address"]
+        return \
+            jsn["applications"][loki_app_name]["units"][f"{loki_app_name}/0"][
+                "address"]
     except Exception as e:
         raise RuntimeError(
             f"failed to fetch loki address; j status returned {retcode!r}"
@@ -78,13 +83,39 @@ async def get_loki_address(ops_test, loki_app_name):
         )
 
 
+async def test_log_proxy_relation_data(ops_test: OpsTest):
+    """Verify that loki:log-proxy has set some 'endpoints' application data.
+    """
+    relation_info = None
+    retcode, stdout, stderr = await ops_test.juju(
+        'show-unit', 'loki-tester/0', '--format=json')
+
+    data = json.loads(stdout)
+    lp_relation_info = data['loki-tester/0']['relation-info'][0]
+
+    assert lp_relation_info['endpoint'] == 'log-proxy'
+    assert lp_relation_info['related-endpoint'] == 'logging'
+
+    endpoints = lp_relation_info['application-data'].get('endpoints')
+    assert endpoints
+    assert json.loads(endpoints)[0].get('url')
+
+
+async def test_loki_ready(ops_test: OpsTest, loki_tester_deployment):
+    loki_app_name, loki_tester_app_name = loki_tester_deployment
+    loki_address = await get_loki_address(ops_test, loki_app_name)
+    resp = requests.get(f"http://{loki_address}:3100/ready")
+    if resp.status_code <= 200:
+        assert resp.text.strip() == "ready"
+
+
 @pytest.mark.parametrize(
     "modes", ['file', 'syslog']
     # all_combinations(
     #     (
     #         # "loki",
     #         # "file",
-    #         'syslog',
+    #         'syslog'
     #     )
     # )
 )
@@ -100,31 +131,17 @@ async def test_loki_scraping_with_promtail(
     # we block until loki is ready before proceeding, else the tester
     # app will fire into the void and give errors
     loki_address = await get_loki_address(ops_test, loki_app_name)
-    await loki_ready(loki_address)
 
     # at this point the workload should run and fire the logs to the configured targets
     await ops_test.juju("config", loki_tester_app_name, f"log-to={modes}")
-    await ops_test.model.wait_for_idle(apps=[loki_tester_app_name], status="active")
+    await ops_test.model.wait_for_idle(apps=[loki_tester_app_name],
+                                       status="active")
     await asyncio.gather(
         *(
             assert_logs_in_loki(mode, loki_app_name, ops_test, loki_address)
             for mode in modes.split(",")
         )
     )
-
-
-async def loki_ready(address):
-    waited = 0
-    while waited <= LOKI_MAX_WAIT:
-        resp = requests.get(f"http://{address}:3100/ready")
-        if resp.status_code <= 200:
-            assert resp.text.strip() == "ready"
-            print("loki ready!")
-            return
-        time.sleep(1)
-        waited += 1
-        print(f"waiting for loki to come up at {address} ({waited})...")
-    raise RuntimeError(f"loki not ready in {LOKI_MAX_WAIT}s")
 
 
 stream_template = {
@@ -135,15 +152,13 @@ stream_template = {
     "juju_model_uuid": "{uuid}",
     "juju_unit": "loki-tester/0",
 }
-WAIT = 1.0
-MAX_QUERY_RETRIES = 5
 
 
-async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest, loki_address: str):
+async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest,
+                              loki_address: str):
     url = f"http://{loki_address}:3100"
 
     async def query_job(job_name, attempt=0):
-        await loki_ready(loki_address)
         params = {"query": '{job="%s"}' % job_name}
         # query_range goes from now to up to 1h ago, more
         # certain to capture something
@@ -162,10 +177,14 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest, 
         suffix = "_loki-tester"
         msg = FILE_LOG_MSG
         extra_stream = {"filename": "/loki_tester_msgs.txt"}
+        job_suffix = ''
     else:  # syslog mode
-        suffix = "_syslog"
-        msg = SYSLOG_LOG_MSG
+        suffix = "_loki-tester_syslog"
+        # need to prefix BOM \ufeff because syslog msgs are encoded in some
+        # special way. 'utf-8-sig' perhaps?
+        msg = "\ufeff" + SYSLOG_LOG_MSG
         extra_stream = {}
+        job_suffix = '_syslog'
 
     # get the job name for the log stream
     labels = requests.get(f"{url}/loki/api/v1/label/job/values"
@@ -185,11 +204,12 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest, 
     juju_model_uuid = res["stream"][juju_model_uuid_key]
     expected_stream = stream_template.copy()
     expected_stream.update(extra_stream)
-    expected_stream["juju_model"] = juju_model_name = res["stream"]["juju_model"]
+    expected_stream["juju_model"] = juju_model_name = res["stream"][
+        "juju_model"]
     expected_stream[juju_model_uuid_key] = juju_model_uuid
     expected_stream["job"] = expected_stream["job"].format(
         uuid=juju_model_uuid, model_name=juju_model_name
-    )
+    ) + job_suffix
 
     assert res["stream"] == expected_stream
     assert res["values"][0][1] == msg

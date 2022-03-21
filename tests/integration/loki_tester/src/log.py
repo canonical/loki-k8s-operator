@@ -4,9 +4,10 @@
 
 import json
 import logging
+import os
 import sys
 import syslog
-from logging.handlers import SysLogHandler
+
 from time import sleep, time
 from typing import Optional
 from urllib import request
@@ -14,7 +15,7 @@ from urllib import request
 # to run manually inside container:
 # j ssh -container loki-tester loki-tester/0 bash
 # python3 ./log.py syslog,file,loki \
-#    http://loki-k8s-0.loki-k8s-endpoints.test-0.svc.cluster.local:3100/loki/api/v1/push \
+#    http://loki-k8s-0.loki-k8s-endpoints.test-0.svc.cluster.local:3100/loki/api/v1/push \  # noqa
 #    /loki_tester_msgs.txt
 
 logger = logging.getLogger(__name__)
@@ -43,15 +44,26 @@ def _log_to_syslog():
         import socket
         try:
             from rfc5424logging import Rfc5424SysLogHandler
-        except ImportError:
-            logger.error('could not attempt syslogging via pysyslogclient; '
-                         'do `pip install rfc5424-logging-handler`.')
-            return
-        rfc5424Handler = Rfc5424SysLogHandler(address=('localhost', 1514),
-                                              socktype=socket.SOCK_STREAM)
-        rfc5424Handler.setLevel(logging.DEBUG)
-        logger.addHandler(rfc5424Handler)
-        logger.warning(SYSLOG_LOG_MSG)
+        except ImportError as e:
+            # we'd normally do this by baking the requirement in the
+            # workload image but here we don't really care. we just want the
+            # import to succeed
+            os.system('pip install rfc5424-logging-handler')
+            try:
+                return _log_to_syslog()
+            except ImportError:
+                # something went wrong;
+                # package not installed?
+                raise e
+
+        syslogger = logging.getLogger("promtail")
+        handler = Rfc5424SysLogHandler(address=('localhost', 1514),
+                                       socktype=socket.SOCK_STREAM)
+        handler.setLevel(logging.DEBUG)
+        syslogger.addHandler(handler)
+        syslogger.warning(SYSLOG_LOG_MSG, extra={"msgid": 1})
+
+        logger.info('logged to syslog via rfc5424handler.')
 
     else:
         syslog.syslog(SYSLOG_LOG_MSG)
@@ -69,8 +81,9 @@ def _log_to_loki(loki_address):
     except Exception as e:
         try:
             if resp.getcode() == 503:
-                raise RuntimeError(f"loki gives Service Unavailable at {loki_base_url}")
-        except:
+                raise RuntimeError(
+                    f"loki gives Service Unavailable at {loki_base_url}")
+        except:  # noqa
             pass
         raise RuntimeError(
             f"Could not contact loki api at {loki_base_url!r}; gotten {e!r};"
@@ -97,7 +110,8 @@ def _log_to_loki(loki_address):
     try:
         resp = request.urlopen(req, enc)
     except Exception as e:
-        raise RuntimeError(f"Could not contact loki api at {loki_address}; gotten {e}")
+        raise RuntimeError(
+            f"Could not contact loki api at {loki_address}; gotten {e}")
 
     if resp.getcode() != 204:
         raise RuntimeError(
@@ -121,7 +135,8 @@ def _log(mode, loki_address: str, fname: str):
         _log_to_syslog()
     elif mode == "loki":
         if not loki_address:
-            raise RuntimeError("loki_address needs to be provided when in `loki` mode")
+            raise RuntimeError(
+                "loki_address needs to be provided when in `loki` mode")
         _log_to_loki(loki_address)
     elif mode == "file":
         if not fname:
@@ -131,7 +146,8 @@ def _log(mode, loki_address: str, fname: str):
         raise ValueError(f"unknown logging mode: {fname!r}")
 
 
-def main(modes: str, loki_address: Optional[str] = None, fname: Optional[str] = None):
+def main(modes: str, loki_address: Optional[str] = None,
+         fname: Optional[str] = None):
     if modes == "ALL":
         log_modes = ["syslog", "loki", "file"]
     elif modes:
@@ -152,7 +168,9 @@ def main(modes: str, loki_address: Optional[str] = None, fname: Optional[str] = 
             except Exception as e:
                 if DEBUG:
                     raise e
-                logger.error(f"failed to _log({mode!r}, {loki_address!r}, {fname!r}); " f"got {e}")
+                logger.error(
+                    f"failed to _log({mode!r}, {loki_address!r}, {fname!r}); "
+                    f"got {e}")
         if LONG:
             sleep(WAIT)
 
