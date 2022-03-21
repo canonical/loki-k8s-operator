@@ -4,9 +4,8 @@
 import shutil
 
 import pytest_asyncio
+from helpers import oci_image
 from pytest_operator.plugin import OpsTest
-
-from tests.integration.helpers import oci_image
 
 
 @pytest_asyncio.fixture(scope="module", autouse=True)

@@ -7,19 +7,17 @@ import json
 
 import pytest
 import requests
-from pytest_operator.plugin import OpsTest
-
-from lib.charms.loki_k8s.v0.loki_push_api import (
+from charms.loki_k8s.v0.loki_push_api import (
     BINARY_FILE_NAME,
     WORKLOAD_BINARY_DIR,
     WORKLOAD_CONFIG_DIR,
     WORKLOAD_CONFIG_FILE_NAME,
     WORKLOAD_CONFIG_PATH,
 )
+from helpers import all_combinations
+from pytest_operator.plugin import OpsTest
 
 # copied over from log.py to avoid circular imports
-from tests.integration.helpers import all_combinations
-
 TEST_JOB_NAME = "test-job"
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"

@@ -6,6 +6,7 @@ import json
 import logging
 import urllib.request
 from pathlib import Path
+from typing import List, Union
 
 import yaml
 from pytest_operator.plugin import OpsTest
@@ -29,7 +30,7 @@ async def is_loki_up(ops_test, app_name) -> bool:
     return response.code == 200 and "version" in json.loads(response.read())
 
 
-def oci_image(metadata_file: str, image_name: str) -> str:
+def oci_image(metadata_file: Union[Path, str], image_name: str) -> str:
     """Find upstream source for a container image.
 
     Args:
@@ -103,7 +104,7 @@ class IPAddressWorkaround:
 
 
 def all_combinations(sequence):
-    combos = []
+    combos: List[str] = []
     for i in range(1, len(sequence) + 1):
         combos.extend(map(lambda subseq: ",".join(subseq), itertools.combinations(sequence, r=i)))
     return combos

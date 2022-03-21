@@ -128,7 +128,7 @@ def _log_to_file(fname: str):
     logger.info(f"logged to file at {fname}")
 
 
-def _log(mode, loki_address: str, fname: str):
+def _log(mode, loki_address: Optional[str], fname: Optional[str]):
     if mode == "NOOP":
         return
     if mode == "syslog":
