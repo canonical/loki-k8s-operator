@@ -79,6 +79,6 @@ def test_log_script(modes, tmp_path):
         assert LOKI_LOG_MSG in result["data"]
 
     if "file" in modes:
-        assert logfile.exists(), (proc.stdout.read(), proc.stderr.read())
+        assert logfile.exists()
         with open(logfile, "r") as f:
             assert FILE_LOG_MSG in f.read()
