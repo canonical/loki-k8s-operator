@@ -62,7 +62,8 @@ def test_log_script(modes, tmp_path):
     if loki_address:
         args.append(loki_address)
 
-    Popen(args, stdout=PIPE, stderr=PIPE)
+    proc = Popen(args, stdout=PIPE, stderr=PIPE)
+    proc.wait()
 
     if "syslog" in modes:
         if XFAIL_SYSLOG_TEST:
@@ -78,5 +79,6 @@ def test_log_script(modes, tmp_path):
         assert LOKI_LOG_MSG in result["data"]
 
     if "file" in modes:
+        assert logfile.exists(), (proc.stdout.read(), proc.stderr.read())
         with open(logfile, "r") as f:
             assert FILE_LOG_MSG in f.read()

@@ -29,6 +29,7 @@ except PermissionError:
     CONTAINER = False
 logger.setLevel("INFO")
 
+SYSLOG_ADDRESS = ("localhost", 1514)
 LONG = False
 DEBUG = False
 TEST_JOB_NAME = "test-job"
@@ -57,7 +58,7 @@ def _log_to_syslog():
                 raise e
 
         syslogger = logging.getLogger("promtail")
-        handler = Rfc5424SysLogHandler(address=("localhost", 1514), socktype=socket.SOCK_STREAM)
+        handler = Rfc5424SysLogHandler(address=SYSLOG_ADDRESS, socktype=socket.SOCK_STREAM)
         handler.setLevel(logging.DEBUG)
         syslogger.addHandler(handler)
         syslogger.warning(SYSLOG_LOG_MSG, extra={"msgid": 1})
@@ -120,6 +121,7 @@ def _log_to_loki(loki_address):
 
 
 def _log_to_file(fname: str):
+    print(f"creating {fname}")
     with open(fname, "a+") as f:
         f.write(FILE_LOG_MSG + "\n")
     logger.info(f"logged to file at {fname}")
@@ -152,7 +154,7 @@ def main(modes: str, loki_address: Optional[str] = None, fname: Optional[str] = 
 
     # we do it a few more times so we have the time to inspect the running
     # process when debugging
-    rng = 200 if LONG else 10  # TODO try lowering to 1
+    rng = 200 if LONG else 10
     for _ in range(rng):
         if not log_modes:
             break
