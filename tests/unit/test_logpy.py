@@ -4,6 +4,7 @@
 
 import os
 import sys
+import typing
 from pathlib import Path
 from subprocess import PIPE, Popen
 from unittest.mock import patch
@@ -25,6 +26,7 @@ def get_logpy_path() -> Path:
 
 
 XFAIL_SYSLOG_TEST = True
+LOG_DEVICE_ADDRESS: typing.Optional[str]
 if sys.platform == "darwin":
     LOG_DEVICE_ADDRESS = "/var/run/syslog"
 elif "linux" in sys.platform:
@@ -43,23 +45,24 @@ def test_log_script(modes, tmp_path):
     if modes == "ALL":
         modes = "syslog,loki,file"
 
-    loki_address = "<not_an_address>"
+    loki_address: str = "<not_an_address>"
     if "loki" in modes:
-        loki_address = os.environ.get("LOKI_ADDRESS")
-        if not loki_address:
+        env_loki_address = os.environ.get("LOKI_ADDRESS")
+        if not env_loki_address:
+            # todo find a way to unittest this with a running loki instance
             pytest.xfail(
                 "set envvar LOKI_ADDRESS to a reachable Loki "
                 "node address for the `loki`-mode test to work"
             )
+        else:
+            loki_address = env_loki_address
 
     logfile = tmp_path / "logpy.log"
     args = ["python3", get_logpy_path(), modes, loki_address, str(logfile)]
     if loki_address:
         args.append(loki_address)
 
-    proc = Popen(args, stdout=PIPE, stderr=PIPE)
-    print(proc.stdout.read())
-    print(proc.stderr.read())
+    Popen(args, stdout=PIPE, stderr=PIPE)
 
     if "syslog" in modes:
         if XFAIL_SYSLOG_TEST:
