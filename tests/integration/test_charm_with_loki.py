@@ -18,6 +18,8 @@ from lib.charms.loki_k8s.v0.loki_push_api import (
 )
 
 # copied over from log.py to avoid circular imports
+from tests.integration.helpers import all_combinations
+
 TEST_JOB_NAME = "test-job"
 SYSLOG_LOG_MSG = "LOG SYSLOG"
 LOKI_LOG_MSG = "LOG LOKI"
@@ -97,17 +99,7 @@ async def test_loki_ready(ops_test: OpsTest, loki_tester_deployment):
         assert resp.text.strip() == "ready"
 
 
-@pytest.mark.parametrize(
-    "modes",
-    ["file", "syslog"]
-    # all_combinations(
-    #     (
-    #         # "loki",
-    #         # "file",
-    #         'syslog'
-    #     )
-    # )
-)
+@pytest.mark.parametrize("modes", all_combinations(("loki", "file", "syslog")))
 @pytest.mark.abort_on_fail
 async def test_loki_scraping_with_promtail(modes: str, ops_test: OpsTest, loki_tester_deployment):
     """Test the core loki functionality + promtail on several log output cases.
