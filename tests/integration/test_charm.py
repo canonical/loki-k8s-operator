@@ -22,7 +22,7 @@ async def test_build_and_deploy(ops_test, loki_charm):
     Assert on the unit status before any relations/configurations take place.
     """
     # build and deploy charm from local source folder
-    await ops_test.model.deploy("loki", loki_charm, resources=resources, application_name=app_name)
+    await ops_test.model.deploy(loki_charm, resources=resources, application_name=app_name)
 
     async with IPAddressWorkaround(ops_test):
         await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)

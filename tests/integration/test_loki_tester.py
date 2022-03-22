@@ -22,11 +22,12 @@ async def test_build_and_deploy_loki_tester(ops_test, loki_tester_charm):
     await ops_test.model.deploy(
         loki_tester_charm, resources=tester_resources, application_name=app_name
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active")
+    await ops_test.model.wait_for_idle(apps=[app_name], status="waiting")
     await ops_test.model.block_until(lambda: len(ops_test.model.applications[app_name].units) > 0)
 
-    unit = ops_test.model.applications[app_name].units
-    assert unit[0].workload_status == "active"
+    unit = ops_test.model.applications[app_name].units[0]
+    assert unit.workload_status == "waiting"
+    # todo find a way to assert unit.status_message == "Waiting for loki (config-changed)."
 
     await ops_test.model.applications[app_name].remove()
     await ops_test.model.block_until(lambda: app_name not in ops_test.model.applications)

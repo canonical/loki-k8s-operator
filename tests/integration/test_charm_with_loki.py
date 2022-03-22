@@ -4,6 +4,7 @@
 
 import asyncio
 import json
+import time
 
 import pytest
 import requests
@@ -74,7 +75,9 @@ async def get_loki_address(ops_test, loki_app_name):
         )
 
 
-async def test_log_proxy_relation_data(ops_test: OpsTest):
+# We need to add dependency to loki_tester_deployment to ensure that if setup
+# aborts then this test is skipped too. Else it will fail with a weird message.
+async def test_log_proxy_relation_data(ops_test: OpsTest, loki_tester_deployment):  # noqa
     """Verify that loki:log-proxy has set some 'endpoints' application data."""
     retcode, stdout, stderr = await ops_test.juju("show-unit", "loki-tester/0", "--format=json")
 
@@ -89,12 +92,27 @@ async def test_log_proxy_relation_data(ops_test: OpsTest):
     assert json.loads(endpoints)[0].get("url")
 
 
+LOKI_READY_TIMEOUT = 60  # it typically takes around 15s on my machine
+LOKI_READY_RETRY_SLEEP = 1
+
+
+@pytest.mark.abort_on_fail
 async def test_loki_ready(ops_test: OpsTest, loki_tester_deployment):
-    loki_app_name, loki_tester_app_name = loki_tester_deployment
-    loki_address = await get_loki_address(ops_test, loki_app_name)
-    resp = requests.get(f"http://{loki_address}:3100/ready")
-    if resp.status_code <= 200:
-        assert resp.text.strip() == "ready"
+    waited = 0
+
+    while waited <= LOKI_READY_TIMEOUT:
+        loki_app_name, loki_tester_app_name = loki_tester_deployment
+        loki_address = await get_loki_address(ops_test, loki_app_name)
+        resp = requests.get(f"http://{loki_address}:3100/ready")
+        if resp.status_code == 200 and resp.text.strip() == "ready":
+            print(f"loki ready in {waited}")
+            return  # success
+
+        waited += LOKI_READY_RETRY_SLEEP
+        time.sleep(LOKI_READY_RETRY_SLEEP)
+        print(f"waiting for loki to come up... {waited}")
+
+    raise TimeoutError("timed out waiting for loki to come up")
 
 
 @pytest.mark.parametrize("modes", all_combinations(("loki", "file", "syslog")))
@@ -140,8 +158,11 @@ async def assert_logs_in_loki(mode: str, loki_app_name: str, ops_test: OpsTest, 
         # certain to capture something
         query_url = f"{url}/loki/api/v1/query_range"
         jsn = requests.get(query_url, params=params).json()
-        results = jsn["data"]["result"][0]
-        return results
+        results = jsn["data"]["result"]
+        if not results:
+            raise ValueError(f"{query_url} returned an empty result set.")
+        result = results[0]
+        return result
 
     if mode == "loki":
         res = await query_job(TEST_JOB_NAME)
