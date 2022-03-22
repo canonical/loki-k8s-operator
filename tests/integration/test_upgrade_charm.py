@@ -28,6 +28,10 @@ app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
 
 
+async def test_setup_env(ops_test: OpsTest):
+    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
+
+
 @pytest.mark.abort_on_fail
 async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""

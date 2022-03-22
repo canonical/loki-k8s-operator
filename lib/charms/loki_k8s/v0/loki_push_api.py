@@ -1670,7 +1670,7 @@ class LogProxyConsumer(ConsumerBase):
 
     Args:
         charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
-            Typically this is `self` in the instantiating class.
+            Typically, this is `self` in the instantiating class.
         log_files: a list of log files to monitor with Promtail.
         relation_name: the string name of the relation interface to look up.
             If `charm` has exactly one relation with this interface, the relation's
@@ -1678,13 +1678,13 @@ class LogProxyConsumer(ConsumerBase):
             are found, this method will raise either an exception of type
             NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
             respectively.
-        enable_syslog: Whether or not to enable syslog integration.
+        enable_syslog: Whether to enable syslog integration.
         syslog_port: The port syslog is attached to.
         alert_rules_path: an optional path for the location of alert rules
             files. Defaults to "./src/loki_alert_rules",
             resolved from the directory hosting the charm entry file.
             The alert rules are automatically updated on charm upgrade.
-        recursive: Whether or not to scan for rule files recursively.
+        recursive: Whether to scan for rule files recursively.
         container_name: An optional container name to inject the payload into.
 
     Raises:
@@ -2006,7 +2006,9 @@ class LogProxyConsumer(ConsumerBase):
         """
         clients = []  # type: list
         for relation in self._charm.model.relations.get(self._relation_name, []):
-            clients = clients + json.loads(relation.data[relation.app]["endpoints"])
+            endpoints = json.loads(relation.data[relation.app].get("endpoints", ""))
+            if endpoints:
+                clients += endpoints
         return clients
 
     def _server_config(self) -> dict:

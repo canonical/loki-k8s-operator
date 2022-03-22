@@ -86,9 +86,10 @@ jobs:
     - name: Setup operator environment
       uses: charmed-kubernetes/actions-operator@main
       with:
-        juju-channel: latest/candidate # FIXME: Once 2.9.23 hits stable
+        juju-channel: latest/stable
         provider: microk8s
     - name: Run integration tests
-      run: tox -vve integration
+      run: tox -vve integration -- --keep-models
     - name: Dump logs
-      run: juju debug-log --replay --no-tail
+      if: failure()
+      run: for m in $(juju models --format=json | jq -r '.models[]."short-name"'); do juju debug-log --model $m --replay --no-tail --level DEBUG; done
