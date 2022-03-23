@@ -17,7 +17,10 @@ async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
 
 
 async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
-    addresses = [await get_unit_address(ops_test, app_name, i) for i in range(num_units)]
+    # Sometimes get_unit_address returns a None, no clue why, so looping until it's not
+    addresses = [""] * num_units
+    while not all(addresses):
+        addresses = [await get_unit_address(ops_test, app_name, i) for i in range(num_units)]
     logger.info("Loki addresses: %s", addresses)
 
     def get(url) -> bool:
@@ -65,3 +68,22 @@ class IPAddressWorkaround:
     async def __aexit__(self, exc_type, exc_value, exc_traceback):
         """On exit, the update status interval is reverted to its original value."""
         await self.ops_test.model.set_config({"update-status-hook-interval": self.revert_to})
+
+
+class ModelConfigChange:
+    """Context manager for temporarily changing a model config option."""
+
+    def __init__(self, ops_test: OpsTest, config: dict):
+        self.ops_test = ops_test
+        self.change_to = config
+
+    async def __aenter__(self):
+        """On entry, the config is set to the user provided custom values."""
+        config = await self.ops_test.model.get_config()
+        self.revert_to = {k: config[k] for k in self.change_to.keys()}
+        await self.ops_test.model.set_config(self.change_to)
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_traceback):
+        """On exit, the modified config options are reverted to their original values."""
+        await self.ops_test.model.set_config(self.revert_to)

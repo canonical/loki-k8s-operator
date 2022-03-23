@@ -232,7 +232,7 @@ Adopting this object in a Charmed Operator consist of two steps:
    For example:
 
    ```python
-   from charms.loki_k8s.v0.log_proxy import LogProxyConsumer
+   from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 
    ...
 
@@ -243,13 +243,13 @@ Adopting this object in a Charmed Operator consist of two steps:
            )
 
            self.framework.observe(
-               self._loki_consumer.on.promtail_digest_error,
+               self._log_proxy.on.promtail_digest_error,
                self._promtail_error,
            )
 
-           def _promtail_error(self, event):
-               logger.error(msg)
-               self.unit.status = BlockedStatus(event.message)
+       def _promtail_error(self, event):
+           logger.error(event.message)
+           self.unit.status = BlockedStatus(event.message)
    ```
 
    Any time the relation between a provider charm and a LogProxy consumer charm is
@@ -297,10 +297,10 @@ Adopting this object in a Charmed Operator consist of two steps:
 
 2. Modify the `metadata.yaml` file to add:
 
-   - The `log_proxy` relation in the `requires` section:
+   - The `log-proxy` relation in the `requires` section:
      ```yaml
      requires:
-       log_proxy:
+       log-proxy:
          interface: loki_push_api
          optional: true
      ```
@@ -460,7 +460,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
-from ops.pebble import APIError, PathError, ProtocolError
+from ops.pebble import APIError, PathError, ProtocolError, ChangeError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
