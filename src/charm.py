@@ -37,6 +37,7 @@ from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 LOKI_CONFIG = "/etc/loki/local-config.yaml"
 LOKI_DIR = "/loki"
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
+PEER = "loki"
 
 logger = logging.getLogger(__name__)
 
@@ -46,24 +47,35 @@ class LokiOperatorCharm(CharmBase):
 
     _stored = StoredState()
     _port = 3100
-    _name = "loki"
+    _name = PEER
 
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
-        self.ingress_per_unit = IngressPerUnitRequirer(self, port=80)
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
             refresh_event=self.on.loki_pebble_ready,
-            source_type="loki",
+            source_type=PEER,
             source_port=str(self._port),
         )
         self._loki_server = LokiServer()
         self._provide_loki()
-        self.loki_provider = LokiPushApiProvider(self)
+
+        self.ingress_per_unit = IngressPerUnitRequirer(
+            self, endpoint="ingress-per-unit", port=self._port
+        )
+        external_url = urlparse(self._external_url)
+
+        self.loki_provider = LokiPushApiProvider(
+            self,
+            endpoint_address=external_url.hostname or "",
+            endpoint_port=external_url.port or self._port,
+            endpoint_schema=external_url.scheme,
+            endpoint_path=f"{external_url.path}/loki/api/v1/push",
+        )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -75,10 +87,8 @@ class LokiOperatorCharm(CharmBase):
             self.loki_provider.on.loki_push_api_alert_rules_changed,
             self._loki_push_api_alert_rules_changed,
         )
-        self.framework.observe(
-            self.ingress_per_unit.on.ingress_changed, self._handle_ingress_per_unit
-        )
-        self.loki_provider = None
+        self.framework.observe(self.ingress_per_unit.on.ingress_changed, self._on_ingress_changed)
+
         self._loki_server = LokiServer()
         self._provide_loki()
 
@@ -100,8 +110,9 @@ class LokiOperatorCharm(CharmBase):
     def _loki_push_api_alert_rules_changed(self, event):
         self._configure(event)
 
-    def _handle_ingress_per_unit(self, event):
-        logger.info("This unit's ingress URL: %s", self.ingress_per_unit.url)
+    def _on_ingress_changed(self, event):
+        self._configure(event)
+        self.loki_provider.update_endpoint()
 
     def _configure(self, event):
         """Configure Loki charm."""
@@ -247,6 +258,33 @@ class LokiOperatorCharm(CharmBase):
         """
         )
         return yaml.safe_load(config)
+
+    @property
+    def _pod_ip(self) -> str:
+        """Returns the pod ip of this unit."""
+        if bind_address := self.model.get_binding(PEER).network.bind_address:
+            return str(bind_address)
+        return ""
+
+    @property
+    def _external_url(self) -> str:
+        """Return the external hostname to be passed to ingress via the relation."""
+        self.framework.breakpoint()
+        if "web_external_url" in self.model.config:
+            if web_external_url := self.model.config["web_external_url"]:
+                return web_external_url
+
+        if ingress_url := self.ingress_per_unit.url:
+            logger.info("This unit's ingress URL: %s", ingress_url)
+            return ingress_url
+
+        # If we do not have an ingress, then use the pod ip as hostname.
+        # The reason to prefer this over the pod name (which is the actual
+        # hostname visible from the pod) or a K8s service, is that those
+        # are routable virtually exclusively inside the cluster (as they rely)
+        # on the cluster's DNS service, while the ip address is _sometimes_
+        # routable from the outside, e.g., when deploying on MicroK8s on Linux.
+        return f"http://{self._pod_ip}:{self._port}"
 
 
 if __name__ == "__main__":

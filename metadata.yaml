@@ -47,6 +47,10 @@ requires:
     interface: ingress_per_unit
     limit: 1
 
+peers:
+  loki:
+    interface: loki
+
 resources:
   loki-image:
     type: oci-image
