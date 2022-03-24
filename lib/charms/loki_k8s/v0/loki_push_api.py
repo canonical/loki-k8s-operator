@@ -443,7 +443,7 @@ from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from urllib import request
 from urllib.error import HTTPError, URLError
 from zipfile import ZipFile
@@ -1167,6 +1167,10 @@ class LokiPushApiProvider(RelationManagerBase):
         *,
         port: int = 3100,
         rules_dir="/loki/rules",
+        endpoint_schema: str = "http",
+        endpoint_address: str = "",
+        endpoint_port: Union[str, int] = 3100,
+        endpoint_path: str = "loki/api/v1/push",
     ):
         """A Loki service provider.
 
@@ -1199,6 +1203,10 @@ class LokiPushApiProvider(RelationManagerBase):
         self._relation_name = relation_name
         self.port = port
         self.container = self._charm._container
+        self._endpoint_schema = endpoint_schema
+        self._endpoint_address = endpoint_address
+        self._endpoint_port = int(endpoint_port)
+        self._endpoint_path = endpoint_path
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
@@ -1217,6 +1225,7 @@ class LokiPushApiProvider(RelationManagerBase):
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
+        
 
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
@@ -1229,11 +1238,53 @@ class LokiPushApiProvider(RelationManagerBase):
                 charm must update its relation data.
         """
         if isinstance(event, RelationEvent):
+            self._set_endpoint_on_relation(event.relation)
             self._process_logging_relation_changed(event.relation)
         else:
             # Upgrade event or other charm-level event
             for relation in self._charm.model.relations[self._relation_name]:
+                self._set_endpoint_on_relation(relation)
                 self._process_logging_relation_changed(relation)
+
+    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
+        """Removes alert rules files when consumer charms left the relation with Loki.
+
+        Args:
+            event: a `CharmEvent` in response to which the Loki
+                charm must update its relation data.
+        """
+        # self._set_endpoint_on_relation(event.relation)
+        self._process_logging_relation_changed(event.relation)
+
+    def update_endpoint(self, relation: Relation = None) -> None:
+        """Triggers programmatically the update of the relation data.
+
+        This method should be used when the charm relying on this library needs
+        to update the relation data in response to something occurring outside
+        of the `logging` relation lifecycle, e.g., in case of a
+        host address change because the charmed operator becomes connected to an
+        Ingress after the `logging` relation is established.
+
+        Args:
+            relation: An optional instance of `class:ops.model.Relation` to update.
+                If not provided, all instances of the `prometheus_remote_write`
+                relation are updated.
+        """
+        relations = [relation] if relation else self.model.relations[self._relation_name]
+
+        for relation in relations:
+            self._set_endpoint_on_relation(relation)
+
+        # relations = self.model.relations[relation_name]
+
+        # for relation in relations:
+        #     self._set_endpoint_on_relation(relation)
+
+        # logging_relations = self.model.relations[self._relation_name]
+
+        # for relation in logging_relations:
+        #     self._set_endpoint_on_relation(relation)
+        #     self._process_logging_relation_changed(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
@@ -1250,8 +1301,6 @@ class LokiPushApiProvider(RelationManagerBase):
         if self._charm.unit.is_leader():
             relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
-            relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
-            logger.debug("Saved endpoints in relation data")
 
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
@@ -1259,19 +1308,32 @@ class LokiPushApiProvider(RelationManagerBase):
             self._generate_alert_rules_files(self.container)
             self._check_alert_rules()
 
-    def _endpoints(self) -> List[dict]:
-        """Return a list of Loki Push Api endpoints."""
-        return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
+    def _set_endpoint_on_relation(self, relation: Relation) -> None:
+        """Set the the loki_push_api endpoint on relations.
 
-    def _url(self, unit_number) -> str:
-        """Get the url for a given unit."""
-        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
-            self._charm.app.name,
-            unit_number,
-            self._charm.app.name,
-            self._charm.model.name,
-            self.port,
+        Args:
+            relation: Only this relation will be updated.
+                Otherwise, all instances of the `prometheus_remote_write`
+                relation managed by this `PrometheusRemoteWriteProvider` will be
+                updated.
+        """
+        address = self._endpoint_address or self._get_relation_bind_address()
+        path = self._endpoint_path or ""
+
+        if path and not path.startswith("/"):
+            path = "/{}".format(path)
+
+        endpoint_url = "{}://{}:{}{}".format(
+            self._endpoint_schema, address, str(self._endpoint_port), path
         )
+        relation.data[self._charm.unit]["endpoint"] = json.dumps({"url": endpoint_url})
+        logger.debug(
+            "Saved endpoint %s in relation data. ", relation.data[self._charm.unit]["endpoint"]
+        )
+
+    def _get_relation_bind_address(self):
+        network_binding = self._charm.model.get_binding(self._relation_name)
+        return network_binding.network.bind_address
 
     def _check_alert_rules(self) -> bool:
         """Check alert rules using Loki API.
@@ -1323,15 +1385,6 @@ class LokiPushApiProvider(RelationManagerBase):
             return True
 
         return False
-
-    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
-        """Removes alert rules files when consumer charms left the relation with Loki.
-
-        Args:
-            event: a `CharmEvent` in response to which the Loki
-                charm must update its relation data.
-        """
-        self._process_logging_relation_changed(event.relation)
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -1601,9 +1654,20 @@ class LokiPushApiConsumer(ConsumerBase):
         Returns:
             A list with Loki Push API endpoints.
         """
+        self.framework.breakpoint()
         endpoints = []  # type: list
+
         for relation in self._charm.model.relations[self._relation_name]:
-            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            for unit in relation.units:
+                if unit.app is self._charm.app:
+                    # This is a peer unit
+                    continue
+
+                endpoint = relation.data[unit].get("endpoint")
+                if endpoint:
+                    deserialized_endpoint = json.loads(endpoint)
+                    endpoints.append(deserialized_endpoint)
+
         return endpoints
 
 
