@@ -84,7 +84,13 @@ class FakeLokiCharm(CharmBase):
             },
         )
         with patch("ops.testing._TestingPebbleClient.make_dir"):
-            self.loki_provider = LokiPushApiProvider(self, "logging")
+            self.loki_provider = LokiPushApiProvider(
+                self,
+                endpoint_address="10.0.0.1",
+                endpoint_port=3100,
+                endpoint_schema="http",
+                endpoint_path="/loki/api/v1/push",
+            )
 
     @property
     def _loki_push_api(self) -> str:
