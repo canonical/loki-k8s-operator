@@ -470,7 +470,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 10
 
 logger = logging.getLogger(__name__)
 
@@ -647,6 +647,10 @@ class JujuTopology:
             application: an application name as a string
             unit: a unit name as a string
             charm_name: name of charm as a string
+
+        Note:
+            `JujuTopology` should not be constructed directly by charm code. Please
+            use `ProviderTopology` or `AggregatorTopology`.
         """
         self.model = model
         self.model_uuid = model_uuid
@@ -655,7 +659,7 @@ class JujuTopology:
         self.unit = unit
 
     @classmethod
-    def from_charm(cls, charm) -> "JujuTopology":
+    def from_charm(cls, charm):
         """Factory method for creating `JujuTopology` children from a given charm.
 
         Args:
@@ -673,7 +677,7 @@ class JujuTopology:
         )
 
     @classmethod
-    def from_relation_data(cls, data: dict) -> "JujuTopology":
+    def from_relation_data(cls, data: dict):
         """Factory method for creating `JujuTopology` children from a dictionary.
 
         Args:
@@ -683,6 +687,7 @@ class JujuTopology:
                 - "application"
                 - "unit"
                 - "charm_name"
+
                 `unit` and `charm_name` may be empty, but will result in more limited
                 labels. However, this allows us to support payload-only charms.
 
@@ -701,16 +706,15 @@ class JujuTopology:
     def identifier(self) -> str:
         """Format the topology information into a terse string."""
         # This is odd, but may have `None` as a model key
-        return "_".join([str(val) for val in self.as_dict().values()]).replace("/", "_")
+        return "_".join([str(val) for val in self.as_promql_label_dict().values()]).replace(
+            "/", "_"
+        )
 
     @property
     def promql_labels(self) -> str:
         """Format the topology information into a verbose string."""
         return ", ".join(
-            [
-                'juju_{}="{}"'.format(key, value)
-                for key, value in self.as_dict(rename_keys={"charm_name": "charm"}).items()
-            ]
+            ['{}="{}"'.format(key, value) for key, value in self.as_promql_label_dict().items()]
         )
 
     def as_dict(self, rename_keys: Optional[Dict[str, str]] = None) -> OrderedDict:
@@ -744,16 +748,25 @@ class JujuTopology:
 
         return ret
 
-    def as_promql_label_dict(self) -> dict:
+    def as_label_dict(self):
         """Format the topology information into a dict with keys having 'juju_' as prefix."""
         vals = {
             "juju_{}".format(key): val
             for key, val in self.as_dict(rename_keys={"charm_name": "charm"}).items()
         }
+        return vals
+
+    def as_promql_label_dict(self):
+        """Format the topology information into a dict with keys having 'juju_' as prefix."""
+        vals = self.as_label_dict()
+        # The leader is the only unit that sets alert rules, if "juju_unit" is present,
+        # then the rules will only be evaluated for that unit
+        if "juju_unit" in vals:
+            vals.pop("juju_unit")
 
         return vals
 
-    def render(self, template: str) -> str:
+    def render(self, template: str):
         """Render a juju-topology template string with topology info."""
         return template.replace(JujuTopology.STUB, self.promql_labels)
 
@@ -782,15 +795,6 @@ class AggregatorTopology(JujuTopology):
             application=application,
             unit=unit,
         )
-
-    def as_promql_label_dict(self) -> dict:
-        """Format the topology information into a dict with keys having 'juju_' as prefix."""
-        vals = {"juju_{}".format(key): val for key, val in self.as_dict().items()}
-
-        # FIXME: Why is this different? I have no idea. The uuid length should be the same
-        vals["juju_model_uuid"] = vals["juju_model_uuid"][:7]
-
-        return vals
 
 
 class ProviderTopology(JujuTopology):
@@ -2033,7 +2037,7 @@ class LogProxyConsumer(ConsumerBase):
             A dict representing the `scrape_configs` section.
         """
         job_name = "juju_{}".format(self.topology.identifier)
-        common_labels = self.topology.as_promql_label_dict()
+        common_labels = self.topology.as_label_dict()
         scrape_configs = []
 
         # Files config
