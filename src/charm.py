@@ -15,6 +15,7 @@ develop a new k8s charm using the Operator Framework:
 import logging
 import os
 import textwrap
+from urllib.parse import urlparse
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
