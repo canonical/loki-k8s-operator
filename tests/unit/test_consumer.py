@@ -292,6 +292,7 @@ class TestAlertRuleFormat(unittest.TestCase):
         class ConsumerCharm(CharmBase):
             metadata_yaml = textwrap.dedent(
                 """
+                name: loki-consumer-k8s
                 requires:
                   logging:
                     interface: loki_push_api
@@ -358,3 +359,89 @@ class TestAlertRuleFormat(unittest.TestCase):
         logger_output = "\n".join(logger.output)
         self.assertIn("tab.rule", logger_output)
         self.assertIn("multicolon.rule", logger_output)
+
+    def test_rules_have_correct_labels(self):
+        unlabeled_rule = {
+            "groups": [
+                {
+                    "name": "alert_on_error",
+                    "rules": [
+                        {
+                            "alert": "alert_on_error",
+                            "expr": 'rate({%%juju_topology%%}|="ERROR"[5m]) > 0',
+                            "for": "1m",
+                            "labels": {
+                                "severity": "critical",
+                            },
+                            "annotations": {"summary": "Logs found at ERROR level"},
+                        }
+                    ],
+                }
+            ]
+        }
+        self.sandbox.writetext("error.rules", yaml.dump(unlabeled_rule))
+        self.harness.begin_with_initial_hooks()
+        relation = self.harness.charm.model.get_relation("logging")
+        rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules"))
+        import pprint
+
+        pprint.pprint(rules)
+        expr = rules["groups"][0]["rules"][0]["expr"]
+        self.assertTrue(
+            "juju_model" in expr
+            and "juju_model_uuid" in expr
+            and "juju_application" in expr
+            and "juju_charm" in expr
+            and "juju_unit" not in expr
+        )
+        self.assertEqual(
+            set(rules["groups"][0]["rules"][0]["labels"]),
+            {"juju_application", "juju_charm", "juju_model", "juju_model_uuid", "severity"},
+        )
+
+    def test_rules_have_correct_labels_when_unit_is_set(self):
+        unlabeled_rule = {
+            "groups": [
+                {
+                    "name": "alert_on_error",
+                    "rules": [
+                        {
+                            "alert": "alert_on_error",
+                            "expr": 'rate({%%juju_topology%%, juju_unit="app/0"}|="ERROR"[5m]) > 0',
+                            "for": "1m",
+                            "labels": {
+                                "severity": "critical",
+                                "juju_unit": "app/0",
+                            },
+                            "annotations": {"summary": "Logs found at ERROR level"},
+                        }
+                    ],
+                }
+            ]
+        }
+        self.sandbox.writetext("error.rules", yaml.dump(unlabeled_rule))
+        self.harness.begin_with_initial_hooks()
+        relation = self.harness.charm.model.get_relation("logging")
+        rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules"))
+        import pprint
+
+        pprint.pprint(rules)
+        expr = rules["groups"][0]["rules"][0]["expr"]
+        self.assertTrue(
+            "juju_model" in expr
+            and "juju_model_uuid" in expr
+            and "juju_application" in expr
+            and "juju_charm" in expr
+            and "juju_unit" in expr
+        )
+        self.assertEqual(
+            set(rules["groups"][0]["rules"][0]["labels"]),
+            {
+                "juju_application",
+                "juju_charm",
+                "juju_model",
+                "juju_model_uuid",
+                "severity",
+                "juju_unit",
+            },
+        )
