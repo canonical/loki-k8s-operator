@@ -1225,7 +1225,6 @@ class LokiPushApiProvider(RelationManagerBase):
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
-        
 
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
