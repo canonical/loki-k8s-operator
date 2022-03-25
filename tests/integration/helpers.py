@@ -6,7 +6,7 @@ import json
 import logging
 import urllib.request
 from pathlib import Path
-from typing import List, Union
+from typing import List, Sequence, Union
 
 import yaml
 from pytest_operator.plugin import OpsTest
@@ -103,8 +103,12 @@ class IPAddressWorkaround:
         await self.ops_test.model.set_config({"update-status-hook-interval": self.revert_to})
 
 
-def all_combinations(sequence):
-    combos: List[str] = []
+def all_combinations(sequence: Sequence[str]) -> List[Sequence[str]]:
+    """Generates all combinations of a sequence of strings.
+
+    For
+    """
+    combos: List[Sequence[str]] = []
     for i in range(1, len(sequence) + 1):
-        combos.extend(map(lambda subseq: ",".join(subseq), itertools.combinations(sequence, r=i)))
+        combos.extend(itertools.combinations(sequence, r=i))
     return combos

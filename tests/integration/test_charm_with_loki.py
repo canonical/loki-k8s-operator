@@ -4,7 +4,7 @@
 
 import asyncio
 import json
-import time
+from typing import Sequence
 
 import pytest
 import requests
@@ -17,6 +17,7 @@ from charms.loki_k8s.v0.loki_push_api import (
 )
 from helpers import all_combinations
 from pytest_operator.plugin import OpsTest
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # copied over from log.py to avoid circular imports
 TEST_JOB_NAME = "test-job"
@@ -84,9 +85,6 @@ async def test_log_proxy_relation_data(ops_test: OpsTest, loki_tester_deployment
     data = json.loads(stdout)
     lp_relation_info = data["loki-tester/0"]["relation-info"][0]
 
-    assert lp_relation_info["endpoint"] == "log-proxy"
-    assert lp_relation_info["related-endpoint"] == "logging"
-
     endpoints = lp_relation_info["application-data"].get("endpoints")
     assert endpoints
     assert json.loads(endpoints)[0].get("url")
@@ -95,29 +93,25 @@ async def test_log_proxy_relation_data(ops_test: OpsTest, loki_tester_deployment
 LOKI_READY_TIMEOUT = 60  # it typically takes around 15s on my machine
 LOKI_READY_RETRY_SLEEP = 1
 
+tenacious = retry(wait=wait_exponential(multiplier=1, min=10, max=60), stop=stop_after_attempt(7))
+
 
 @pytest.mark.abort_on_fail
+@tenacious
 async def test_loki_ready(ops_test: OpsTest, loki_tester_deployment):
-    waited = 0
+    loki_app_name, loki_tester_app_name = loki_tester_deployment
+    loki_address = await get_loki_address(ops_test, loki_app_name)
+    resp = requests.get(f"http://{loki_address}:3100/ready")
 
-    while waited <= LOKI_READY_TIMEOUT:
-        loki_app_name, loki_tester_app_name = loki_tester_deployment
-        loki_address = await get_loki_address(ops_test, loki_app_name)
-        resp = requests.get(f"http://{loki_address}:3100/ready")
-        if resp.status_code == 200 and resp.text.strip() == "ready":
-            print(f"loki ready in {waited}")
-            return  # success
-
-        waited += LOKI_READY_RETRY_SLEEP
-        time.sleep(LOKI_READY_RETRY_SLEEP)
-        print(f"waiting for loki to come up... {waited}")
-
-    raise TimeoutError("timed out waiting for loki to come up")
+    assert resp.status_code == 200
+    assert resp.text.strip() == "ready"
 
 
 @pytest.mark.parametrize("modes", all_combinations(("loki", "file", "syslog")))
 @pytest.mark.abort_on_fail
-async def test_loki_scraping_with_promtail(modes: str, ops_test: OpsTest, loki_tester_deployment):
+async def test_loki_scraping_with_promtail(
+    modes: Sequence[str], ops_test: OpsTest, loki_tester_deployment
+):
     """Test the core loki functionality + promtail on several log output cases.
 
     Will run on all combinations of loki/file/syslog routes.
@@ -129,13 +123,10 @@ async def test_loki_scraping_with_promtail(modes: str, ops_test: OpsTest, loki_t
     loki_address = await get_loki_address(ops_test, loki_app_name)
 
     # at this point the workload should run and fire the logs to the configured targets
-    await ops_test.juju("config", loki_tester_app_name, f"log-to={modes}")
+    await ops_test.juju("config", loki_tester_app_name, f"log-to={','.join(modes)}")
     await ops_test.model.wait_for_idle(apps=[loki_tester_app_name], status="active")
     await asyncio.gather(
-        *(
-            assert_logs_in_loki(mode, loki_app_name, ops_test, loki_address)
-            for mode in modes.split(",")
-        )
+        *(assert_logs_in_loki(mode, loki_app_name, ops_test, loki_address) for mode in modes)
     )
 
 

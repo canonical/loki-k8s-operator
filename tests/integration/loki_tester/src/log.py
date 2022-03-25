@@ -16,6 +16,7 @@ from urllib import request
 # python3 ./log.py syslog,file,loki \
 #    http://loki-k8s-0.loki-k8s-endpoints.test-0.svc.cluster.local:3100/loki/api/v1/push \  # noqa
 #    /loki_tester_msgs.txt
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 try:
@@ -74,7 +75,9 @@ def _log_to_syslog():
 def _log_to_loki(loki_address):
     # `loki_address` is the address of the push endpoint e.g.
     # 'http://loki-k8s-0.loki-k8s-endpoints.cos.svc.cluster.local:3100/loki/api/v1/push'
-    loki_base_url = loki_address[:-17]
+    # we remove the path to get the base url:
+    # 'http://loki-k8s-0.loki-k8s-endpoints.cos.svc.cluster.local:3100'
+    loki_base_url = urlparse(loki_address)._replace(path="").geturl()
 
     try:
         with request.urlopen(f"{loki_base_url}/ready") as resp:
