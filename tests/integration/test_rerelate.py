@@ -13,7 +13,6 @@
 
 import asyncio
 import logging
-from collections import namedtuple
 from pathlib import Path
 
 import pytest
@@ -27,30 +26,28 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
 
-RelatedApp = namedtuple("RelatedApp", ["name", "src", "relname", "config"])
+
+class RelatedApp:
+    def __init__(self, name: str, src: str, relname: str, config: dict):
+        self.name = name
+        self.src = src
+        self.relname = relname
+        self.config = config
+
+    async def deploy(self, ops_test: OpsTest):
+        await ops_test.model.deploy(
+            self.src, application_name=self.name, channel="edge", config=self.config
+        )
+
+
 related_apps = [
     RelatedApp("alertmanager", "ch:alertmanager-k8s", "alertmanager", {}),
     RelatedApp("cassandra", "ch:cassandra-k8s", "logging", {"heap_size": "1g"}),
 ]
 
 
-# class RelatedApp2:
-#     def __init__(self, name: str, src: str, relname: str, config: dict):
-#         self.name = name
-#         self.src = src
-#         self.relname = relname
-#         self.config = config
-#
-#     async def deploy(self, ops_test: OpsTest):
-#         await ops_test.model.deploy(
-#             self.src, application_name=self.name, channel="edge", config=self.config
-#         )
-#
-#
-# related_apps2 = [
-#     RelatedApp2("alertmanager", "ch:alertmanager-k8s", "alertmanager", {}),
-#     RelatedApp2("cassandra", "ch:cassandra-k8s", "loki_push_api", {}),
-# ]
+async def test_setup_env(ops_test: OpsTest):
+    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
 @pytest.mark.abort_on_fail
@@ -60,13 +57,7 @@ async def test_build_and_deploy(ops_test: OpsTest, loki_charm):
         ops_test.model.deploy(
             loki_charm, resources=resources, application_name=app_name, num_units=2
         ),
-        *[
-            ops_test.model.deploy(
-                app.src, application_name=app.name, channel="edge", config=app.config
-            )
-            for app in related_apps
-        ],
-        # *[app.deploy(ops_test) for app in related_apps2],
+        *[app.deploy(ops_test) for app in related_apps],
     )
 
     await asyncio.gather(
@@ -119,12 +110,7 @@ async def test_remove_related_app(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_rerelate_app(ops_test: OpsTest):
     await asyncio.gather(
-        *[
-            ops_test.model.deploy(
-                app.src, application_name=app.name, channel="edge", config=app.config
-            )
-            for app in related_apps
-        ],
+        *[app.deploy(ops_test) for app in related_apps],
     )
     await asyncio.gather(
         *[ops_test.model.add_relation(app_name, app.name) for app in related_apps],

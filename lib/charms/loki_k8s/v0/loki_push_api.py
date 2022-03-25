@@ -460,7 +460,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
-from ops.pebble import APIError, PathError, ProtocolError, ChangeError
+from ops.pebble import APIError, ChangeError, PathError, ProtocolError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -2104,8 +2104,12 @@ class LogProxyConsumer(ConsumerBase):
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
         if self._current_config["clients"]:
-            self._container.restart(WORKLOAD_SERVICE_NAME)
-            self.on.log_proxy_endpoint_joined.emit()
+            try:
+                self._container.restart(WORKLOAD_SERVICE_NAME)
+            except ChangeError as e:
+                self.on.promtail_digest_error.emit(str(e))
+            else:
+                self.on.log_proxy_endpoint_joined.emit()
 
     def _is_promtail_installed(self) -> bool:
         """Determine if promtail has already been installed to the container."""
