@@ -384,13 +384,11 @@ class TestAlertRuleFormat(unittest.TestCase):
         relation = self.harness.charm.model.get_relation("logging")
         rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules"))
         expr = rules["groups"][0]["rules"][0]["expr"]
-        self.assertTrue(
-            "juju_model" in expr
-            and "juju_model_uuid" in expr
-            and "juju_application" in expr
-            and "juju_charm" in expr
-            and "juju_unit" not in expr
-        )
+        self.assertIn("juju_model", expr)
+        self.assertIn("juju_model_uuid", expr)
+        self.assertIn("juju_application", expr)
+        self.assertIn("juju_charm", expr)
+        self.assertNotIn("juju_unit", expr)
         self.assertEqual(
             set(rules["groups"][0]["rules"][0]["labels"]),
             {"juju_application", "juju_charm", "juju_model", "juju_model_uuid", "severity"},
@@ -421,13 +419,11 @@ class TestAlertRuleFormat(unittest.TestCase):
         relation = self.harness.charm.model.get_relation("logging")
         rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules"))
         expr = rules["groups"][0]["rules"][0]["expr"]
-        self.assertTrue(
-            "juju_model" in expr
-            and "juju_model_uuid" in expr
-            and "juju_application" in expr
-            and "juju_charm" in expr
-            and "juju_unit" in expr
-        )
+        self.assertIn("juju_model", expr)
+        self.assertIn("juju_model_uuid", expr)
+        self.assertIn("juju_application", expr)
+        self.assertIn("juju_charm", expr)
+        self.assertIn("juju_unit", expr)
         self.assertEqual(
             set(rules["groups"][0]["rules"][0]["labels"]),
             {
