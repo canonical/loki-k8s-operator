@@ -383,9 +383,6 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.harness.begin_with_initial_hooks()
         relation = self.harness.charm.model.get_relation("logging")
         rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules"))
-        import pprint
-
-        pprint.pprint(rules)
         expr = rules["groups"][0]["rules"][0]["expr"]
         self.assertTrue(
             "juju_model" in expr
@@ -423,9 +420,6 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.harness.begin_with_initial_hooks()
         relation = self.harness.charm.model.get_relation("logging")
         rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules"))
-        import pprint
-
-        pprint.pprint(rules)
         expr = rules["groups"][0]["rules"][0]["expr"]
         self.assertTrue(
             "juju_model" in expr
