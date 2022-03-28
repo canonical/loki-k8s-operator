@@ -73,8 +73,9 @@ table_manager:
 
 
 class TestCharm(unittest.TestCase):
+    @patch("ops.testing._TestingModelBackend.network_get")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def setUp(self):
+    def setUp(self, _):
         self.container_name: str = "loki"
         version_patcher = patch(
             "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"

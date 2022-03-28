@@ -111,13 +111,6 @@ class TestLokiPushApiProvider(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
-    def test_relation_data(self):
-        self.harness.charm.app.name = "loki"
-        expected_value = [
-            {"url": "http://loki-0.loki-endpoints.None.svc.cluster.local:3100/loki/api/v1/push"}
-        ]
-        self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoints())
-
     @patch(
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files",
         MagicMock(),
@@ -126,19 +119,18 @@ class TestLokiPushApiProvider(unittest.TestCase):
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
         MagicMock(),
     )
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
-    )
-    def test__on_logging_relation_changed(self, mock_unit_ip):
+    def test__on_logging_relation_changed(self):
         with self.assertLogs(level="DEBUG") as logger:
-            mock_unit_ip.return_value = "10.1.2.3"
             rel_id = self.harness.add_relation("logging", "promtail")
             self.harness.add_relation_unit(rel_id, "promtail/0")
-
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
             self.assertEqual(
                 sorted(logger.output)[0],
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
+            )
+            self.assertEqual(
+                sorted(logger.output)[1],
+                'DEBUG:charms.loki_k8s.v0.loki_push_api:Saved endpoint {"url": "http://10.0.0.1:3100/loki/api/v1/push"} in relation data. ',
             )
 
     @patch("os.makedirs", MagicMock())
@@ -170,21 +162,24 @@ class TestLokiPushApiProvider(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test__check_alert_rules_httperror_404_ok(self, mock_urlopen):
         with patch("http.client.HTTPResponse") as mock_http_response:
-            mock_http_response.read.side_effect = HTTPError(URL, 404, "no rule groups found", {}, io.BytesIO())  # type: ignore
-            mock_urlopen.return_value = mock_http_response
+            msg = "no rule groups found"
+            mock_urlopen.side_effect = HTTPError(URL, 404, msg, {}, io.BytesIO(msg.encode()))  # type: ignore
+            mock_http_response.read.return_value = mock_urlopen.side_effect
             self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
 
     @patch("urllib.request.urlopen")
     def test__check_alert_rules_httperror_404_error(self, mock_urlopen):
         with patch("http.client.HTTPResponse") as mock_http_response:
-            mock_urlopen.side_effect = HTTPError(URL, 404, "404 page not found", {}, io.BytesIO())  # type: ignore
+            msg = "404 page not found"
+            mock_urlopen.side_effect = HTTPError(URL, 404, msg, {}, io.BytesIO(msg.encode()))  # type: ignore
             mock_http_response.read.return_value = mock_urlopen.side_effect
             self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
 
     @patch("urllib.request.urlopen")
     def test__check_alert_rules_httperror_400(self, mock_urlopen):
         with patch("http.client.HTTPResponse") as mock_http_response:
-            mock_urlopen.side_effect = HTTPError(URL, 400, "Bad Request", {}, io.BytesIO())  # type: ignore
+            msg = "Bad Request"
+            mock_urlopen.side_effect = HTTPError(URL, 400, msg, {}, io.BytesIO(msg.encode()))  # type: ignore
             mock_http_response.read.return_value = mock_urlopen.side_effect
             self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
 
