@@ -1274,17 +1274,6 @@ class LokiPushApiProvider(RelationManagerBase):
         for relation in relations:
             self._set_endpoint_on_relation(relation)
 
-        # relations = self.model.relations[relation_name]
-
-        # for relation in relations:
-        #     self._set_endpoint_on_relation(relation)
-
-        # logging_relations = self.model.relations[self._relation_name]
-
-        # for relation in logging_relations:
-        #     self._set_endpoint_on_relation(relation)
-        #     self._process_logging_relation_changed(relation)
-
     def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
 
@@ -1653,7 +1642,6 @@ class LokiPushApiConsumer(ConsumerBase):
         Returns:
             A list with Loki Push API endpoints.
         """
-        self.framework.breakpoint()
         endpoints = []  # type: list
 
         for relation in self._charm.model.relations[self._relation_name]:
