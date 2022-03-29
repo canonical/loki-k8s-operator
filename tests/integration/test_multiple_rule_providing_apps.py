@@ -109,7 +109,7 @@ async def test_second_relation_second_alert_rule(ops_test):
 
 
 @pytest.mark.abort_on_fail
-async def test_remove_app_one_alert_rules_is_reteined(ops_test):
+async def test_remove_app_one_alert_rules_is_retained(ops_test):
     await ops_test.model.applications[rules_app2].remove()
     await ops_test.model.block_until(lambda: rules_app2 not in ops_test.model.applications)
     global rules_after_relation
