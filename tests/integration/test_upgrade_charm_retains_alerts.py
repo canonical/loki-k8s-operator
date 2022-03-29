@@ -3,7 +3,6 @@
 # See LICENSE file for licensing details.
 
 
-import asyncio
 import logging
 from pathlib import Path
 
@@ -17,7 +16,6 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
 rules_app = "cos-config"
-
 
 
 @pytest.mark.abort_on_fail
