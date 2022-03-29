@@ -74,7 +74,7 @@ class LokiOperatorCharm(CharmBase):
             self,
             endpoint_address=external_url.hostname or "",
             endpoint_port=external_url.port or self._port,
-            endpoint_schema=external_url.scheme,
+            endpoint_scheme=external_url.scheme,
             endpoint_path=f"{external_url.path}/loki/api/v1/push",
         )
 

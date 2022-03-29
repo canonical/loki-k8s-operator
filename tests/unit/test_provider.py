@@ -88,7 +88,7 @@ class FakeLokiCharm(CharmBase):
                 self,
                 endpoint_address="10.0.0.1",
                 endpoint_port=3100,
-                endpoint_schema="http",
+                endpoint_scheme="http",
                 endpoint_path="/loki/api/v1/push",
             )
 
