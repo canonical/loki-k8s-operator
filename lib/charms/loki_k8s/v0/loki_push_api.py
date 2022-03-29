@@ -1203,7 +1203,7 @@ class LokiPushApiProvider(RelationManagerBase):
         self._relation_name = relation_name
         self.port = port
         self.container = self._charm._container
-        self._endpoint_schema = endpoint_schema
+        self._endpoint_scheme = endpoint_scheme
         self._endpoint_address = endpoint_address
         self._endpoint_port = int(endpoint_port)
         self._endpoint_path = endpoint_path
