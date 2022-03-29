@@ -1312,7 +1312,7 @@ class LokiPushApiProvider(RelationManagerBase):
             path = "/{}".format(path)
 
         endpoint_url = "{}://{}:{}{}".format(
-            self._endpoint_schema, address, str(self._endpoint_port), path
+            self._endpoint_scheme, address, str(self._endpoint_port), path
         )
         relation.data[self._charm.unit]["endpoint"] = json.dumps({"url": endpoint_url})
         logger.debug(
