@@ -81,17 +81,15 @@ async def test_first_relation_one_alert_rule(ops_test):
 
 @pytest.mark.abort_on_fail
 async def test_second_relation_second_alert_rule(ops_test):
-    await asyncio.gather(
-        ops_test.model.deploy(
-            "ch:cos-configuration-k8s",
-            application_name=rules_app2,
-            channel="edge",
-            config={
-                "git_repo": "https://github.com/canonical/loki-k8s-operator",
-                "git_branch": "main",
-                "loki_alert_rules_path": "tests/sample_rule_files/free-standing",
-            },
-        ),
+    await ops_test.model.deploy(
+        "ch:cos-configuration-k8s",
+        application_name=rules_app2,
+        channel="edge",
+        config={
+            "git_repo": "https://github.com/canonical/loki-k8s-operator",
+            "git_branch": "main",
+            "loki_alert_rules_path": "tests/sample_rule_files/free-standing",
+        },
     )
 
     # force an update, just in case the files showed up on disk after the last hook fired
