@@ -276,7 +276,7 @@ class LokiOperatorCharm(CharmBase):
                 return web_external_url
 
         if ingress_url := self.ingress_per_unit.url:
-            logger.info("This unit's ingress URL: %s", ingress_url)
+            logger.debug("This unit's ingress URL: %s", ingress_url)
             return ingress_url
 
         # If we do not have an ingress, then use the pod ip as hostname.
