@@ -1167,7 +1167,7 @@ class LokiPushApiProvider(RelationManagerBase):
         *,
         port: int = 3100,
         rules_dir="/loki/rules",
-        endpoint_schema: str = "http",
+        endpoint_scheme: str = "http",
         endpoint_address: str = "",
         endpoint_port: Union[str, int] = 3100,
         endpoint_path: str = "loki/api/v1/push",
