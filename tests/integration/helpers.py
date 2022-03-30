@@ -148,7 +148,7 @@ def loki_api_query_range(job_name: str, loki_address: str):
     params = {"query": '{job="%s"}' % job_name}
     # loki_api_query_range goes from now to up to 1h ago, more
     # certain to capture something
-    query_url = f"http://{loki_address}:3100/loki/api/v1/loki_api_query_range"
+    query_url = f"http://{loki_address}:3100/loki/api/v1/query_range"
     jsn = requests.get(query_url, params=params).json()
     return jsn["data"]["result"]
 
