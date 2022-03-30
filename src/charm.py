@@ -270,11 +270,6 @@ class LokiOperatorCharm(CharmBase):
     @property
     def _external_url(self) -> str:
         """Return the external hostname to be passed to ingress via the relation."""
-        self.framework.breakpoint()
-        if "web_external_url" in self.model.config:
-            if web_external_url := self.model.config["web_external_url"]:
-                return web_external_url
-
         if ingress_url := self.ingress_per_unit.url:
             logger.debug("This unit's ingress URL: %s", ingress_url)
             return ingress_url
