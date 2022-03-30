@@ -16,8 +16,8 @@ The build-and-release process for statically-linked `promtail` binaries is as fo
 1. Every 4 hours, the cron-like [`check-promtail-releases`](.github/workflows/check-promtail-releases.yaml) GitHub workflow compares the latest upstream release of Loki with specific `promtail-*` tags in this repository.
 For example, the upstream `v2.4.2` tag pointed at by the upstream release, means that the `check-promtail-releases` workflow checks for a `promtail-v2.4.2` tag in this repository.
 2. If an upstream release is found that has no matching `promtail-*` tag, the [`build-promtail-release.yaml`](.github/workflows/build-promtail-release.yaml) is triggered, which:
-  1. Statically compile `promtail` for different architectures
-  2. Try the binary by building [containers with different base images](promtail-build/static/test) and run then with a `docker run` command
-  3. Create a shallow tag of the original Loki codebase (without history) and create the `promtail-*` tag from it.
-  4. Create a GitHub release with the promtail binaries, pointing at the `promtail-*` tag
+   1. Statically compile `promtail` for different architectures
+   2. Try the binary by building [containers with different base images](promtail-build/static/test) and run then with a `docker run` command
+   3. Create a shallow tag of the original Loki codebase (without history) and create the `promtail-*` tag from it.
+   4. Create a GitHub release with the promtail binaries, pointing at the `promtail-*` tag
   
