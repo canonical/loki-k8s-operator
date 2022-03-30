@@ -232,7 +232,7 @@ Adopting this object in a Charmed Operator consist of two steps:
    For example:
 
    ```python
-   from charms.loki_k8s.v0.log_proxy import LogProxyConsumer
+   from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 
    ...
 
@@ -243,13 +243,13 @@ Adopting this object in a Charmed Operator consist of two steps:
            )
 
            self.framework.observe(
-               self._loki_consumer.on.promtail_digest_error,
+               self._log_proxy.on.promtail_digest_error,
                self._promtail_error,
            )
 
-           def _promtail_error(self, event):
-               logger.error(msg)
-               self.unit.status = BlockedStatus(event.message)
+       def _promtail_error(self, event):
+           logger.error(event.message)
+           self.unit.status = BlockedStatus(event.message)
    ```
 
    Any time the relation between a provider charm and a LogProxy consumer charm is
@@ -297,10 +297,10 @@ Adopting this object in a Charmed Operator consist of two steps:
 
 2. Modify the `metadata.yaml` file to add:
 
-   - The `log_proxy` relation in the `requires` section:
+   - The `log-proxy` relation in the `requires` section:
      ```yaml
      requires:
-       log_proxy:
+       log-proxy:
          interface: loki_push_api
          optional: true
      ```
@@ -460,7 +460,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
-from ops.pebble import APIError, PathError, ProtocolError
+from ops.pebble import APIError, ChangeError, PathError, ProtocolError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -1670,7 +1670,7 @@ class LogProxyConsumer(ConsumerBase):
 
     Args:
         charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
-            Typically this is `self` in the instantiating class.
+            Typically, this is `self` in the instantiating class.
         log_files: a list of log files to monitor with Promtail.
         relation_name: the string name of the relation interface to look up.
             If `charm` has exactly one relation with this interface, the relation's
@@ -1678,13 +1678,13 @@ class LogProxyConsumer(ConsumerBase):
             are found, this method will raise either an exception of type
             NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
             respectively.
-        enable_syslog: Whether or not to enable syslog integration.
+        enable_syslog: Whether to enable syslog integration.
         syslog_port: The port syslog is attached to.
         alert_rules_path: an optional path for the location of alert rules
             files. Defaults to "./src/loki_alert_rules",
             resolved from the directory hosting the charm entry file.
             The alert rules are automatically updated on charm upgrade.
-        recursive: Whether or not to scan for rule files recursively.
+        recursive: Whether to scan for rule files recursively.
         container_name: An optional container name to inject the payload into.
 
     Raises:
@@ -2006,7 +2006,9 @@ class LogProxyConsumer(ConsumerBase):
         """
         clients = []  # type: list
         for relation in self._charm.model.relations.get(self._relation_name, []):
-            clients = clients + json.loads(relation.data[relation.app]["endpoints"])
+            endpoints = json.loads(relation.data[relation.app].get("endpoints", ""))
+            if endpoints:
+                clients += endpoints
         return clients
 
     def _server_config(self) -> dict:
@@ -2102,8 +2104,12 @@ class LogProxyConsumer(ConsumerBase):
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
         if self._current_config["clients"]:
-            self._container.restart(WORKLOAD_SERVICE_NAME)
-            self.on.log_proxy_endpoint_joined.emit()
+            try:
+                self._container.restart(WORKLOAD_SERVICE_NAME)
+            except ChangeError as e:
+                self.on.promtail_digest_error.emit(str(e))
+            else:
+                self.on.log_proxy_endpoint_joined.emit()
 
     def _is_promtail_installed(self) -> bool:
         """Determine if promtail has already been installed to the container."""

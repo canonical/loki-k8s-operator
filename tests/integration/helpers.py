@@ -16,15 +16,18 @@ async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
     return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
 
 
-async def is_loki_up(ops_test, app_name) -> bool:
-    address = await get_unit_address(ops_test, app_name, 0)
-    url = f"http://{address}:3100"
-    logger.info("Loki public address: %s", url)
+async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
+    # Sometimes get_unit_address returns a None, no clue why, so looping until it's not
+    addresses = [""] * num_units
+    while not all(addresses):
+        addresses = [await get_unit_address(ops_test, app_name, i) for i in range(num_units)]
+    logger.info("Loki addresses: %s", addresses)
 
-    response = urllib.request.urlopen(
-        f"{url}/loki/api/v1/status/buildinfo", data=None, timeout=2.0
-    )
-    return response.code == 200 and "version" in json.loads(response.read())
+    def get(url) -> bool:
+        response = urllib.request.urlopen(url, data=None, timeout=2.0)
+        return response.code == 200 and "version" in json.loads(response.read())
+
+    return all(get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses)
 
 
 async def loki_rules(ops_test, app_name) -> dict:
@@ -65,3 +68,22 @@ class IPAddressWorkaround:
     async def __aexit__(self, exc_type, exc_value, exc_traceback):
         """On exit, the update status interval is reverted to its original value."""
         await self.ops_test.model.set_config({"update-status-hook-interval": self.revert_to})
+
+
+class ModelConfigChange:
+    """Context manager for temporarily changing a model config option."""
+
+    def __init__(self, ops_test: OpsTest, config: dict):
+        self.ops_test = ops_test
+        self.change_to = config
+
+    async def __aenter__(self):
+        """On entry, the config is set to the user provided custom values."""
+        config = await self.ops_test.model.get_config()
+        self.revert_to = {k: config[k] for k in self.change_to.keys()}
+        await self.ops_test.model.set_config(self.change_to)
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_traceback):
+        """On exit, the modified config options are reverted to their original values."""
+        await self.ops_test.model.set_config(self.revert_to)
