@@ -48,14 +48,19 @@ STREAM_TEMPLATE = {
     "juju_unit": "loki-tester/0",
 }
 
-
-async def test_logpy_is_in_workload_container(ops_test: OpsTest, loki_tester_deployment):
+# We need to add dependency to loki_tester_deployment to ensure that if setup
+# aborts then this test is skipped too. Else it may fail with an odd message.
+async def test_logpy_is_in_workload_container(ops_test: OpsTest, loki_tester_deployment):  # noqa
     """Verify that log.py is in the container."""
     # this could be done in a smarter way I guess
     assert await check_file_exists_in_loki_tester_unit(ops_test, "/", "log.py")
 
 
-async def test_promtail_files_are_in_workload_container(ops_test: OpsTest, loki_tester_deployment):
+# We need to add dependency to loki_tester_deployment to ensure that if setup
+# aborts then this test is skipped too. Else it may fail with an odd message.
+async def test_promtail_files_are_in_workload_container(
+    ops_test: OpsTest, loki_tester_deployment
+):  # noqa
     """Verify that the promload binary and the config are where they should."""
     assert await check_file_exists_in_loki_tester_unit(
         ops_test, WORKLOAD_BINARY_DIR + "/", BINARY_FILE_NAME
@@ -65,8 +70,10 @@ async def test_promtail_files_are_in_workload_container(ops_test: OpsTest, loki_
     )
 
 
+# We need to add dependency to loki_tester_deployment to ensure that if setup
+# aborts then this test is skipped too. Else it may fail with an odd message.
 async def test_promtail_is_running_in_workload_container(
-    ops_test: OpsTest, loki_tester_deployment
+    ops_test: OpsTest, loki_tester_deployment  # noqa
 ):
     """Verify that the promtail process is running."""
     await run_in_loki_tester(ops_test, "apt update -y && apt install procps -y")
@@ -76,7 +83,7 @@ async def test_promtail_is_running_in_workload_container(
 
 
 # We need to add dependency to loki_tester_deployment to ensure that if setup
-# aborts then this test is skipped too. Else it will fail with a weird message.
+# aborts then this test is skipped too. Else it may fail with an odd message.
 async def test_log_proxy_relation_data(ops_test: OpsTest, loki_tester_deployment):  # noqa
     """Verify that loki:log-proxy has set some 'endpoints' application data."""
     return_code, stdout, stderr = await ops_test.juju(
@@ -91,11 +98,8 @@ async def test_log_proxy_relation_data(ops_test: OpsTest, loki_tester_deployment
     assert json.loads(endpoints)[0].get("url")
 
 
-tenacious = retry(wait=wait_exponential(multiplier=1, min=10, max=60), stop=stop_after_attempt(7))
-
-
 @pytest.mark.abort_on_fail
-@tenacious
+@retry(wait=wait_exponential(multiplier=1, min=10, max=60), stop=stop_after_attempt(7))
 async def test_loki_ready(ops_test: OpsTest, loki_tester_deployment):
     loki_app_name, loki_tester_app_name = loki_tester_deployment
     loki_address = await get_loki_address(ops_test, loki_app_name)
@@ -120,7 +124,8 @@ async def test_loki_scraping_with_promtail(
     # app will fire into the void and give errors
     loki_address = await get_loki_address(ops_test, loki_app_name)
 
-    # at this point the workload should run and fire the logs to the configured targets
+    # at this point the workload should run and fire the logs to
+    # the configured targets
     await ops_test.juju("config", loki_tester_app_name, f"log-to={','.join(modes)}")
     await ops_test.model.wait_for_idle(apps=[loki_tester_app_name], status="active")
 
@@ -134,53 +139,52 @@ async def test_loki_scraping_with_promtail(
     )
     assert jobs, "no jobs present: nothing was logged yet."
 
-    checks = []
-
     if "loki" in modes:
         assert TEST_JOB_NAME in jobs
-        checks.append(assert_job_logged(TEST_JOB_NAME, LOKI_LOG_MSG, loki_address))
+        assert await _check_job_logged(TEST_JOB_NAME, LOKI_LOG_MSG, loki_address)
         stream = {"job": TEST_JOB_NAME}
-        checks.append(assert_all_streams_equal(TEST_JOB_NAME, loki_address, stream))
+        assert await _check_all_streams_equal(TEST_JOB_NAME, loki_address, stream)
 
     if "file" in modes:
         job = next(filter(lambda x: x.endswith("loki-tester"), jobs))
-        checks.append(assert_job_logged(job, FILE_LOG_MSG, loki_address))
+        assert await _check_job_logged(job, FILE_LOG_MSG, loki_address)
 
         extra_stream = {"filename": "/loki_tester_msgs.txt"}
-        checks.append(
-            assert_stream_matches_template(
-                job, loki_address, STREAM_TEMPLATE, extra_stream=extra_stream
-            )
-        )
+        assert await _check_stream_matches_template(job, loki_address, extra_stream=extra_stream)
+
     if "syslog" in modes:
         job = next(filter(lambda x: x.endswith("loki-tester_syslog"), jobs))
-        checks.append(assert_job_logged(job, SYSLOG_LOG_MSG, loki_address))
-        checks.append(assert_stream_matches_template(job, loki_address, STREAM_TEMPLATE))
-
-    await asyncio.gather(*checks)
+        assert await _check_job_logged(job, SYSLOG_LOG_MSG, loki_address)
+        assert await _check_stream_matches_template(job, loki_address)
 
 
-async def assert_job_logged(job_name: str, msg: str, loki_address: str):
+async def _check_job_logged(job_name: str, msg: str, loki_address: str):
     results = loki_api_query_range(job_name, loki_address)
-    assert results, f"{loki_address} returned an empty result set."
-    result = results[0]
-    assert result["values"][0][1] == msg
+    try:
+        return results and results[0]["values"][0][1] == msg
+    except KeyError:
+        return False
 
 
-async def assert_stream_matches_template(job_name, loki_address, template, extra_stream=None):
+async def _check_stream_matches_template(job_name, loki_address, extra_stream=None):
     results = loki_api_query_range(job_name, loki_address)
     # we fill in the stream template with model uuid and model name, which vary.
     # any result will do for this, as they should be all the same.
-    expected_stream = populate_template(template, results[0])
+    expected_stream = populate_template(STREAM_TEMPLATE, results[0])
 
     if extra_stream:
         expected_stream.update(extra_stream)
-
-    for result in results:
-        assert result["stream"] == expected_stream
+    return _check_all_equal(results, expected_stream)
 
 
-async def assert_all_streams_equal(job_name, loki_address, stream):
+async def _check_all_streams_equal(job_name, loki_address, stream):
     results = loki_api_query_range(job_name, loki_address)
-    for result in results:
-        assert result["stream"] == stream
+    return _check_all_equal(results, stream)
+
+
+def _check_all_equal(values, expected_stream):
+    # returns True iff each value's ['stream'] is equal to expected_stream
+    for value in values:
+        if value["stream"] != expected_stream:
+            return False
+    return True
