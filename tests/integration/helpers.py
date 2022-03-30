@@ -12,10 +12,8 @@ import requests
 import yaml
 from pytest_operator.plugin import OpsTest
 
-from tests.integration.test_charm_with_loki import (
-    JUJU_MODEL_UUID_KEY,
-    PROMTAIL_JOB_TEMPLATE,
-)
+JUJU_MODEL_UUID_KEY = "juju_model_uuid"
+PROMTAIL_JOB_TEMPLATE = "juju_{model_name}_{uuid}_loki-tester_loki-tester_loki-tester"
 
 logger = logging.getLogger(__name__)
 

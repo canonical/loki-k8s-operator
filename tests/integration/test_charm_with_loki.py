@@ -14,18 +14,19 @@ from charms.loki_k8s.v0.loki_push_api import (
     WORKLOAD_CONFIG_FILE_NAME,
     WORKLOAD_CONFIG_PATH,
 )
-from helpers import all_combinations
-from pytest_operator.plugin import OpsTest
-from tenacity import retry, stop_after_attempt, wait_exponential
-
-# copied over from log.py to avoid circular imports
-from tests.integration.helpers import (
+from helpers import (
+    JUJU_MODEL_UUID_KEY,
+    all_combinations,
     check_file_exists_in_loki_tester_unit,
     get_loki_address,
     loki_api_query_range,
     populate_template,
     run_in_loki_tester,
 )
+from pytest_operator.plugin import OpsTest
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+# copied over from log.py to avoid circular imports
 
 TEST_JOB_NAME = "test-job"
 # for some reason the syslog log message gets decoded with
@@ -37,8 +38,6 @@ FILE_LOG_MSG = "LOG FILE"
 LOKI_READY_TIMEOUT = 60  # it typically takes around 15s on my machine
 LOKI_READY_RETRY_SLEEP = 1
 
-JUJU_MODEL_UUID_KEY = "juju_model_uuid"
-PROMTAIL_JOB_TEMPLATE = "juju_{model_name}_{uuid}_loki-tester_loki-tester_loki-tester"
 STREAM_TEMPLATE = {
     "juju_application": "loki-tester",
     "juju_charm": "loki-tester",
