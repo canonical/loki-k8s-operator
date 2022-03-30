@@ -8,8 +8,14 @@ import urllib.request
 from pathlib import Path
 from typing import List, Sequence, Union
 
+import requests
 import yaml
 from pytest_operator.plugin import OpsTest
+
+from tests.integration.test_charm_with_loki import (
+    JUJU_MODEL_UUID_KEY,
+    PROMTAIL_JOB_TEMPLATE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,3 +118,49 @@ def all_combinations(sequence: Sequence[str]) -> List[Sequence[str]]:
     for i in range(1, len(sequence) + 1):
         combos.extend(itertools.combinations(sequence, r=i))
     return combos
+
+
+async def run_in_loki_tester(ops_test: OpsTest, cmd):
+    cmd_line = f"juju ssh --container loki-tester loki-tester/0 {cmd}"
+    return await ops_test.run(*cmd_line.split(" "))
+
+
+async def check_file_exists_in_loki_tester_unit(ops_test, file_path, file_name):
+    return_code, stdout, stderr = await run_in_loki_tester(
+        ops_test, f"ls -l {file_path}{file_name}| grep {file_name}"
+    )
+    return stdout and not stderr and return_code == 0
+
+
+async def get_loki_address(ops_test, loki_app_name):
+    # obtain the loki cluster IP to make direct api calls
+    return_code, stdout, stderr = await ops_test.juju("status", "--format=json")
+    try:
+        jsn = json.loads(stdout)
+        return jsn["applications"][loki_app_name]["units"][f"{loki_app_name}/0"]["address"]
+    except Exception as e:
+        raise RuntimeError(
+            f"failed to fetch loki address; j status returned {return_code!r}"
+            f"with {stdout!r}, {stderr!r}"
+            f"Embedded error: {e}"
+        )
+
+
+def loki_api_query_range(job_name: str, loki_address: str):
+    params = {"query": '{job="%s"}' % job_name}
+    # loki_api_query_range goes from now to up to 1h ago, more
+    # certain to capture something
+    query_url = f"http://{loki_address}:3100/loki/api/v1/loki_api_query_range"
+    jsn = requests.get(query_url, params=params).json()
+    return jsn["data"]["result"]
+
+
+def populate_template(template, result):
+    juju_model_uuid = result["stream"][JUJU_MODEL_UUID_KEY]
+    expected_stream = template.copy()
+    expected_stream["juju_model"] = juju_model_name = result["stream"]["juju_model"]
+    expected_stream[JUJU_MODEL_UUID_KEY] = juju_model_uuid
+    expected_stream["job"] = PROMTAIL_JOB_TEMPLATE.format(
+        uuid=juju_model_uuid, model_name=juju_model_name
+    )
+    return expected_stream
