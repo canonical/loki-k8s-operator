@@ -1,0 +1,5 @@
+FROM alpine:latest
+
+ADD --chmod=0755 ./dist/loki_linux_amd64/promtail /app/promtail
+
+ENTRYPOINT ["/app/promtail", "--version"]

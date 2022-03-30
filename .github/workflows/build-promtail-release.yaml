@@ -1,0 +1,174 @@
+name: Build Promtail releases
+on:
+  # Manual trigger
+  workflow_call:
+    inputs:
+      release:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+
+  build:
+    name: Build statically-linked Promtail
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64] # [amd64, arm64] # GitHub workflows do not support YAML anchors :-(
+    steps:
+      - name: Checkout grafana/loki, tag ${{inputs.release}}
+        uses: actions/checkout@v2
+        with:
+          repository: grafana/loki
+          ref: ${{inputs.release}}
+          fetch-depth: 1
+          path: ./loki-upstream
+      - name: Checkout ${{github.repository}}
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          path: ./loki-k8s-operator
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17.8
+      - name: Build Promtail
+        # We run the make-based build with CGO_ENABLED=0
+        # because we want statically-linked binaries and
+        # cross-build for the specified architecture
+        run: |
+          cd ./loki-upstream
+
+          CGO_ENABLED=0 GOHOSTOS=linux GOARCH=${{matrix.arch}} make clients/cmd/promtail/promtail
+
+          mkdir -p ./dist/loki_linux_${{matrix.arch}}
+          mv clients/cmd/promtail/promtail ./dist/loki_linux_${{matrix.arch}}/
+      - name: Attach promtail-${{matrix.arch}} artifact to run
+        uses: actions/upload-artifact@v3
+        with:
+          name: promtail-${{matrix.arch}}
+          path: ./loki-upstream/dist/loki_linux_${{matrix.arch}}/promtail
+
+  test:
+    name: Test Promtail
+    runs-on: ubuntu-latest
+    needs: build
+    # TODO: Also run tests on arm64
+    strategy:
+      matrix:
+        arch: [amd64] # [amd64, arm64]
+        base: [alpine, debian, rh-ubi8, scratch, ubuntu]
+    steps:
+      - name: Checkout ${{github.repository}}
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Download the promtail-${{matrix.arch}} artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: promtail-${{matrix.arch}}
+          path: ./dist/loki_linux_${{matrix.arch}}/
+      - name: Check the linkage of the Promtail binary
+        run: |
+          file ./dist/loki_linux_${{matrix.arch}}/promtail
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Build and test ${{matrix.base}} image
+        # If promtail is borked on this base, the `docker run` invocation will fail
+        run: |
+          DOCKER_BUILDKIT=1 docker build . -f promtail-build/static/test/Dockerfile.${{matrix.base}} -t promtail-${{matrix.base}}
+          docker run promtail-${{matrix.base}}
+
+  tag:
+    name: Publish Promtail release to ${{github.repository}}
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      RELEASE: promtail-${{inputs.release}}
+    steps:
+      - name: Checkout grafana/loki, tag ${{inputs.release}}
+        uses: actions/checkout@v2
+        with:
+          repository: grafana/loki
+          ref: ${{inputs.release}}
+          fetch-depth: 1
+          path: ./loki-upstream
+      - name: Checkout ${{github.repository}}, ${{github.ref}}
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          path: ./loki-k8s-operator
+      - name: Create shallow tag
+        # We rebase the commit from the release tag from the upstream loki
+        # repository on the initial commit of canonical/loki-k8s-operator,
+        # because GitHub does not allow us to push a shallow tag (tag to a
+        # commit with no parent), so we "reconcile" the history of the
+        # two repositories to have the initial commit of canonical/loki-k8s-operator
+        # as common history.
+        #
+        # We also remove the build automation from the tag, as that is not something
+        # we use, and if we left the .github folder, the pushing of the tag
+        # to canonical/loki-k8s-operator would fail with:
+        #
+        #  refusing to allow a GitHub App to create or update workflow \
+        #    `.github/workflows/backport.yml` without `workflows` permission
+        run: |
+          initial_operator_commit=$(cd ./loki-k8s-operator && git log main --oneline | tail -1 | awk '{ print $1 }')
+          cd ./loki-upstream
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git remote add charm ../loki-k8s-operator
+          git fetch charm
+          git rebase "${initial_operator_commit}" --strategy-option ours
+
+          echo "Removing build automation from the commit"
+
+          git rm -rf .github || true
+          git rm -rf .circleci || true
+          git rm -rf .drone || true
+          git rm .golangci.yml || true
+
+          echo "Creating the new commit"
+
+          git commit --amend --no-edit
+
+          echo "Creating the new tag"
+
+          git tag "${RELEASE}"
+
+          echo "Pushing the tag to the local ${{github.repository}} clone"
+
+          git push charm "${RELEASE}"
+
+          echo "Pushing the tag to the upstream ${{github.repository}} repository"
+
+          cd ../loki-k8s-operator
+          git push origin "${RELEASE}"
+
+  release:
+    runs-on: ubuntu-latest
+    needs: tag
+    steps:
+      - name: Download the artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - name: List artifacts
+        run: |
+          find .
+      - name: Prepare artifacts for release
+        run: |
+          mkdir release
+          for f in artifacts/promtail-*; do cp "${f}/promtail" "release/$(basename ${f})"; done
+      - name: Create GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          name: "Promtail ${{inputs.release}}"
+          body: |
+            Statically-linked builds for Promtail, based on the [upstream '${{inputs.release}}'](https://github.com/grafana/loki/releases/tag/${{inputs.release}}) release of the `grafana/loki` project.
+          artifacts: release/*
+          tag: promtail-${{inputs.release}}
+          token: ${{ secrets.GITHUB_TOKEN }}
