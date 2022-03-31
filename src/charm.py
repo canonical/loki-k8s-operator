@@ -62,9 +62,6 @@ class LokiOperatorCharm(CharmBase):
             source_type=PEER,
             source_port=str(self._port),
         )
-        self._loki_server = LokiServer()
-        self._provide_loki()
-
         self.ingress_per_unit = IngressPerUnitRequirer(
             self, endpoint="ingress-per-unit", port=self._port
         )
@@ -223,6 +220,8 @@ class LokiOperatorCharm(CharmBase):
         Returns:
             Dictionary representation of the Loki YAML config
         """
+        external_url = urlparse(self._external_url)
+        no_path = "''"
         config = textwrap.dedent(
             f"""
             target: all
@@ -231,7 +230,7 @@ class LokiOperatorCharm(CharmBase):
             server:
               http_listen_port: {self._port}
               http_listen_address: 0.0.0.0
-
+              http_path_prefix: {external_url.path if external_url.path else no_path}
             common:
               path_prefix: {LOKI_DIR}
               storage:
