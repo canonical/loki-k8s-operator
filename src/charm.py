@@ -72,10 +72,10 @@ class LokiOperatorCharm(CharmBase):
 
         self.loki_provider = LokiPushApiProvider(
             self,
-            endpoint_address=external_url.hostname or "",
-            endpoint_port=external_url.port or self._port,
-            endpoint_scheme=external_url.scheme,
-            endpoint_path=f"{external_url.path}/loki/api/v1/push",
+            address=external_url.hostname or "",
+            port=external_url.port or self._port,
+            scheme=external_url.scheme,
+            path=f"{external_url.path}/loki/api/v1/push",
         )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)

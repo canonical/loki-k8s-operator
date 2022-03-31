@@ -1165,12 +1165,11 @@ class LokiPushApiProvider(RelationManagerBase):
         charm,
         relation_name: str = DEFAULT_RELATION_NAME,
         *,
-        port: int = 3100,
+        port: Union[str, int] = 3100,
         rules_dir="/loki/rules",
-        endpoint_scheme: str = "http",
-        endpoint_address: str = "",
-        endpoint_port: Union[str, int] = 3100,
-        endpoint_path: str = "loki/api/v1/push",
+        scheme: str = "http",
+        address: str = "",
+        path: str = "loki/api/v1/push",
     ):
         """A Loki service provider.
 
@@ -1182,8 +1181,11 @@ class LokiPushApiProvider(RelationManagerBase):
                 It is strongly advised not to change the default, so that people
                 deploying your charm will have a consistent experience with all
                 other charms that consume metrics endpoints.
-
+            port: the port on which Loki is running.
             rules_dir: path in workload container where rule files are to be stored.
+            scheme: whether Loki is running in http or https.
+            address: Loki server address.
+            path: Loki push API path.
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1201,12 +1203,11 @@ class LokiPushApiProvider(RelationManagerBase):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self.port = port
+        self.port = int(port)
         self.container = self._charm._container
-        self._endpoint_scheme = endpoint_scheme
-        self._endpoint_address = endpoint_address
-        self._endpoint_port = int(endpoint_port)
-        self._endpoint_path = endpoint_path
+        self.scheme = scheme
+        self.address = address
+        self.path = path
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
@@ -1305,15 +1306,13 @@ class LokiPushApiProvider(RelationManagerBase):
                 relation managed by this `PrometheusRemoteWriteProvider` will be
                 updated.
         """
-        address = self._endpoint_address or self._get_relation_bind_address()
-        path = self._endpoint_path or ""
+        address = self.address or self._get_relation_bind_address()
+        path = self.path or ""
 
         if path and not path.startswith("/"):
             path = "/{}".format(path)
 
-        endpoint_url = "{}://{}:{}{}".format(
-            self._endpoint_scheme, address, str(self._endpoint_port), path
-        )
+        endpoint_url = "{}://{}:{}{}".format(self.scheme, address, str(self.port), path)
         relation.data[self._charm.unit]["endpoint"] = json.dumps({"url": endpoint_url})
         logger.debug(
             "Saved endpoint %s in relation data. ", relation.data[self._charm.unit]["endpoint"]
