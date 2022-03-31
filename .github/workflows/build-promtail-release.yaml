@@ -221,7 +221,7 @@ jobs:
       - name: Prepare artifacts for release
         run: |
           mkdir release
-          for f in artifacts/promtail-*; do cp "${f}/promtail" "release/$(basename ${f})";  done
+          for f in artifacts/promtail-*; do cp "${f}/promtail" "release/$(basename ${f})"; done
           cd release
           for f in *; do gzip ${f}; done
       - name: Create GitHub release
@@ -229,7 +229,7 @@ jobs:
         with:
           name: "Promtail ${{inputs.release}}"
           body: |
-            Statically-linked builds for Promtail, based on the [upstream '${{inputs.release}}'](https://github.com/grafana/loki/releases/tag/${{inputs.release}}) release of the `grafana/loki` project.
+            Dynamically- and statically-linked builds for Promtail, based on the [upstream '${{inputs.release}}'](https://github.com/grafana/loki/releases/tag/${{inputs.release}}) release of the `grafana/loki` project.
           artifacts: release/*
           tag: promtail-${{inputs.release}}
           token: ${{ secrets.GITHUB_TOKEN }}
