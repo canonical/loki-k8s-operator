@@ -470,7 +470,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 logger = logging.getLogger(__name__)
 
@@ -1373,15 +1373,6 @@ class LokiPushApiProvider(RelationManagerBase):
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
         return {"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL}
-
-    @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        bind_address = self._charm.model.get_binding(self._relation_name).network.bind_address
-
-        if bind_address:
-            return str(bind_address)
-        return ""
 
     def _remove_alert_rules_files(self, container: Container) -> None:
         """Remove alert rules files from workload container.

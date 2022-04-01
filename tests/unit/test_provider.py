@@ -5,7 +5,7 @@ import io
 import json
 import textwrap
 import unittest
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
 
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
@@ -94,14 +94,19 @@ class FakeLokiCharm(CharmBase):
 
     @property
     def _loki_push_api(self) -> str:
-        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
+        loki_push_api = f"http://{self.hostname}:{self.charm._port}/loki/api/v1/push"
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
     @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        return "10.1.2.3"
+    def hostname(self) -> str:
+        """Unit's hostname."""
+        return "{}-{}.{}-endpoints.{}.svc.cluster.local".format(
+            self.app.name,
+            self.unit.name.split("/")[-1],
+            self.app.name,
+            self.model.name,
+        )
 
 
 class TestLokiPushApiProvider(unittest.TestCase):
@@ -139,11 +144,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
             )
 
     @patch("os.makedirs", MagicMock())
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
-    )
-    def test_alerts(self, mock_unit_ip):
-        mock_unit_ip.return_value = "10.1.2.3"
+    def test_alerts(self):
         rel_id = self.harness.add_relation("logging", "consumer")
         self.harness.update_relation_data(
             rel_id,
