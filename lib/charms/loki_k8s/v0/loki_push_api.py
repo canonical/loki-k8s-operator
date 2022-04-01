@@ -1326,7 +1326,7 @@ class LokiPushApiProvider(RelationManagerBase):
         Emits:
             loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
         """
-        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
+        url = "http://{}:{}/loki/api/v1/rules".format(self._charm.hostname, self.port)
         req = request.Request(url)
         try:
             request.urlopen(req)
