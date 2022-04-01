@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-# Copyright 2022 Balbir Thomas
+# Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-#
-# Learn more at: https://juju.is/docs/sdk
 
 """A Integration tester charm for Loki Operator."""
 
 import logging
-import logging_loki
 
+import logging_loki  # type: ignore
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, ProviderTopology
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
-
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, ProviderTopology
 
 
 class LokiTesterCharm(CharmBase):
@@ -79,15 +76,13 @@ class LokiTesterCharm(CharmBase):
             logging_loki.emitter.LokiEmitter.level_tag = "level"
             # TODO (multi-logger): create logggers for each endpoint
             self.log_handler = logging_loki.LokiHandler(
-                url=log_endpoints[0]["url"],
-                version="1",
-                tags=dict(tags)
+                url=log_endpoints[0]["url"], version="1", tags=dict(tags)
             )
             # TODO (multi-logger): each logger will need a different name
             self.logger = logging.getLogger("Loki-Tester")
             self.logger.addHandler(self.log_handler)
 
-            self.log("debug", "Successfuly set Loki Logger")
+            self.log("debug", "Successfully set Loki Logger")
 
     def log(self, level, msg):
         try:

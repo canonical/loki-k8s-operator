@@ -1,8 +1,8 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
+import shutil
 
 import pytest
-import shutil
 from pytest_operator.plugin import OpsTest
 
 
@@ -11,6 +11,7 @@ async def loki_charm(ops_test: OpsTest):
     """Loki charm used for integration testing."""
     charm = await ops_test.build_charm(".")
     return charm
+
 
 @pytest.fixture(scope="module", autouse=True)
 def copy_loki_library_into_tester_charm(ops_test):
