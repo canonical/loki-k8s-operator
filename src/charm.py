@@ -261,11 +261,14 @@ class LokiOperatorCharm(CharmBase):
         return yaml.safe_load(config)
 
     @property
-    def _pod_ip(self) -> str:
-        """Returns the pod ip of this unit."""
-        if bind_address := self.model.get_binding(PEER).network.bind_address:
-            return str(bind_address)
-        return ""
+    def _hostname(self) -> str:
+        """Unit's hostname."""
+        return "{}-{}.{}-endpoints.{}.svc.cluster.local".format(
+            self.app.name,
+            self.unit.name.split("/")[-1],
+            self.app.name,
+            self.model.name,
+        )
 
     @property
     def _external_url(self) -> str:
@@ -280,7 +283,7 @@ class LokiOperatorCharm(CharmBase):
         # are routable virtually exclusively inside the cluster (as they rely)
         # on the cluster's DNS service, while the ip address is _sometimes_
         # routable from the outside, e.g., when deploying on MicroK8s on Linux.
-        return f"http://{self._pod_ip}:{self._port}"
+        return f"http://{self._hostname}:{self._port}"
 
 
 if __name__ == "__main__":
