@@ -2051,7 +2051,7 @@ class LogProxyConsumer(ConsumerBase):
         """
         clients = []  # type: list
         for relation in self._charm.model.relations.get(self._relation_name, []):
-            clients = clients + json.loads(relation.data[relation.app]["endpoints"])
+            clients = clients + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return clients
 
     def _server_config(self) -> dict:
