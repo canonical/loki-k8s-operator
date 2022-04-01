@@ -32,7 +32,7 @@ Query the alert rules sent by the Loki tester to Loki
 curl -G -s http://$(lokiaddr):3100/prometheus/api/v1/rules
 ```
 
-Make Loki tester send and error log
+Make Loki tester send an error log
 ```
 juju run-action loki-tester/0 log-error message="some error message"
 ```
