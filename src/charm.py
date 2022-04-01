@@ -56,16 +56,16 @@ class LokiOperatorCharm(CharmBase):
         self._stored.set_default(k8s_service_patched=False, config="")
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
-        self.grafana_source_provider = GrafanaSourceProvider(
-            charm=self,
-            refresh_event=self.on.loki_pebble_ready,
-            source_type=PEER,
-            source_port=str(self._port),
-        )
         self.ingress_per_unit = IngressPerUnitRequirer(
             self, endpoint="ingress-per-unit", port=self._port
         )
         external_url = urlparse(self._external_url)
+        self.grafana_source_provider = GrafanaSourceProvider(
+            charm=self,
+            refresh_event=self.on.loki_pebble_ready,
+            source_type=PEER,
+            source_url=self._external_url,
+        )
 
         self.loki_provider = LokiPushApiProvider(
             self,
