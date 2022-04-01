@@ -124,6 +124,11 @@ class TestLokiPushApiProvider(unittest.TestCase):
             rel_id = self.harness.add_relation("logging", "promtail")
             self.harness.add_relation_unit(rel_id, "promtail/0")
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
+            relation = self.harness.charm.model.get_relation("logging")
+            expected_data = '{"url": "http://10.0.0.1:3100/loki/api/v1/push"}'
+
+            self.assertTrue("endpoint" in relation.data[self.harness._charm.unit])
+            self.assertEqual(relation.data[self.harness._charm.unit]["endpoint"], expected_data)
             self.assertEqual(
                 sorted(logger.output)[0],
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
