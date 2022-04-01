@@ -261,7 +261,7 @@ class LokiOperatorCharm(CharmBase):
         return yaml.safe_load(config)
 
     @property
-    def _hostname(self) -> str:
+    def hostname(self) -> str:
         """Unit's hostname."""
         return "{}-{}.{}-endpoints.{}.svc.cluster.local".format(
             self.app.name,
@@ -283,7 +283,7 @@ class LokiOperatorCharm(CharmBase):
         # are routable virtually exclusively inside the cluster (as they rely)
         # on the cluster's DNS service, while the ip address is _sometimes_
         # routable from the outside, e.g., when deploying on MicroK8s on Linux.
-        return f"http://{self._hostname}:{self._port}"
+        return f"http://{self.hostname}:{self._port}"
 
 
 if __name__ == "__main__":
