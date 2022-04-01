@@ -43,7 +43,7 @@ async def loki_rules(ops_test, app_name) -> dict:
 
 
 async def loki_alerts(ops_test: str, app_name: str, unit_num: int = 0, retries: int = 3) -> dict:
-    """Get a list of alerts from a Prometheus-compatible endpoint.
+    r"""Get a list of alerts from a Prometheus-compatible endpoint.
 
     Results look like:
         {
