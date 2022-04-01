@@ -240,7 +240,7 @@ class LokiOperatorCharm(CharmBase):
                   rules_directory: {RULES_DIR}
               replication_factor: 1
               ring:
-                instance_addr: {self.loki_provider.unit_ip if self.loki_provider else ""}
+                instance_addr: {self._pod_ip}
                 kvstore:
                   store: inmemory
 
@@ -259,6 +259,13 @@ class LokiOperatorCharm(CharmBase):
         """
         )
         return yaml.safe_load(config)
+
+    @property
+    def _pod_ip(self) -> str:
+        """Returns the pod ip of this unit."""
+        if bind_address := self.model.get_binding(PEER).network.bind_address:
+            return str(bind_address)
+        return ""
 
     @property
     def hostname(self) -> str:
