@@ -232,7 +232,7 @@ Adopting this object in a Charmed Operator consist of two steps:
    For example:
 
    ```python
-   from charms.loki_k8s.v0.log_proxy import LogProxyConsumer
+   from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 
    ...
 
@@ -243,13 +243,13 @@ Adopting this object in a Charmed Operator consist of two steps:
            )
 
            self.framework.observe(
-               self._loki_consumer.on.promtail_digest_error,
+               self._log_proxy.on.promtail_digest_error,
                self._promtail_error,
            )
 
-           def _promtail_error(self, event):
-               logger.error(msg)
-               self.unit.status = BlockedStatus(event.message)
+       def _promtail_error(self, event):
+           logger.error(event.message)
+           self.unit.status = BlockedStatus(event.message)
    ```
 
    Any time the relation between a provider charm and a LogProxy consumer charm is
@@ -297,10 +297,10 @@ Adopting this object in a Charmed Operator consist of two steps:
 
 2. Modify the `metadata.yaml` file to add:
 
-   - The `log_proxy` relation in the `requires` section:
+   - The `log-proxy` relation in the `requires` section:
      ```yaml
      requires:
-       log_proxy:
+       log-proxy:
          interface: loki_push_api
          optional: true
      ```
@@ -460,7 +460,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
-from ops.pebble import APIError, PathError, ProtocolError
+from ops.pebble import APIError, ChangeError, PathError, ProtocolError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -647,6 +647,10 @@ class JujuTopology:
             application: an application name as a string
             unit: a unit name as a string
             charm_name: name of charm as a string
+
+        Note:
+            `JujuTopology` should not be constructed directly by charm code. Please
+            use `ProviderTopology` or `AggregatorTopology`.
         """
         self.model = model
         self.model_uuid = model_uuid
@@ -655,7 +659,7 @@ class JujuTopology:
         self.unit = unit
 
     @classmethod
-    def from_charm(cls, charm) -> "JujuTopology":
+    def from_charm(cls, charm):
         """Factory method for creating `JujuTopology` children from a given charm.
 
         Args:
@@ -673,7 +677,7 @@ class JujuTopology:
         )
 
     @classmethod
-    def from_relation_data(cls, data: dict) -> "JujuTopology":
+    def from_relation_data(cls, data: dict):
         """Factory method for creating `JujuTopology` children from a dictionary.
 
         Args:
@@ -683,6 +687,7 @@ class JujuTopology:
                 - "application"
                 - "unit"
                 - "charm_name"
+
                 `unit` and `charm_name` may be empty, but will result in more limited
                 labels. However, this allows us to support payload-only charms.
 
@@ -701,16 +706,15 @@ class JujuTopology:
     def identifier(self) -> str:
         """Format the topology information into a terse string."""
         # This is odd, but may have `None` as a model key
-        return "_".join([str(val) for val in self.as_dict().values()]).replace("/", "_")
+        return "_".join([str(val) for val in self.as_promql_label_dict().values()]).replace(
+            "/", "_"
+        )
 
     @property
     def promql_labels(self) -> str:
         """Format the topology information into a verbose string."""
         return ", ".join(
-            [
-                'juju_{}="{}"'.format(key, value)
-                for key, value in self.as_dict(rename_keys={"charm_name": "charm"}).items()
-            ]
+            ['{}="{}"'.format(key, value) for key, value in self.as_promql_label_dict().items()]
         )
 
     def as_dict(self, rename_keys: Optional[Dict[str, str]] = None) -> OrderedDict:
@@ -744,16 +748,25 @@ class JujuTopology:
 
         return ret
 
-    def as_promql_label_dict(self) -> dict:
+    def as_label_dict(self):
         """Format the topology information into a dict with keys having 'juju_' as prefix."""
         vals = {
             "juju_{}".format(key): val
             for key, val in self.as_dict(rename_keys={"charm_name": "charm"}).items()
         }
+        return vals
+
+    def as_promql_label_dict(self):
+        """Format the topology information into a dict with keys having 'juju_' as prefix."""
+        vals = self.as_label_dict()
+        # The leader is the only unit that sets alert rules, if "juju_unit" is present,
+        # then the rules will only be evaluated for that unit
+        if "juju_unit" in vals:
+            vals.pop("juju_unit")
 
         return vals
 
-    def render(self, template: str) -> str:
+    def render(self, template: str):
         """Render a juju-topology template string with topology info."""
         return template.replace(JujuTopology.STUB, self.promql_labels)
 
@@ -782,15 +795,6 @@ class AggregatorTopology(JujuTopology):
             application=application,
             unit=unit,
         )
-
-    def as_promql_label_dict(self) -> dict:
-        """Format the topology information into a dict with keys having 'juju_' as prefix."""
-        vals = {"juju_{}".format(key): val for key, val in self.as_dict().items()}
-
-        # FIXME: Why is this different? I have no idea. The uuid length should be the same
-        vals["juju_model_uuid"] = vals["juju_model_uuid"][:7]
-
-        return vals
 
 
 class ProviderTopology(JujuTopology):
@@ -907,7 +911,7 @@ class AlertRules:
         with file_path.open() as rf:
             # Load a list of rules from file then add labels and filters
             try:
-                rule_file = yaml.safe_load(rf)
+                rule_file = yaml.safe_load(rf) or {}
 
             except Exception as e:
                 logger.error("Failed to read alert rules from %s: %s", file_path.name, e)
@@ -921,7 +925,8 @@ class AlertRules:
                 alert_groups = [{"name": file_path.stem, "rules": [rule_file]}]
             else:
                 # invalid/unsupported
-                logger.error("Invalid rules file: %s", file_path.name)
+                reason = "file is empty" if not rule_file else "unexpected file structure"
+                logger.error("Invalid rules file (%s): %s", reason, file_path.name)
                 return []
 
             # update rules with additional metadata
@@ -1702,7 +1707,7 @@ class LogProxyConsumer(ConsumerBase):
 
     Args:
         charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
-            Typically this is `self` in the instantiating class.
+            Typically, this is `self` in the instantiating class.
         log_files: a list of log files to monitor with Promtail.
         relation_name: the string name of the relation interface to look up.
             If `charm` has exactly one relation with this interface, the relation's
@@ -1710,13 +1715,13 @@ class LogProxyConsumer(ConsumerBase):
             are found, this method will raise either an exception of type
             NoRelationWithInterfaceFoundError or MultipleRelationsWithInterfaceFoundError,
             respectively.
-        enable_syslog: Whether or not to enable syslog integration.
+        enable_syslog: Whether to enable syslog integration.
         syslog_port: The port syslog is attached to.
         alert_rules_path: an optional path for the location of alert rules
             files. Defaults to "./src/loki_alert_rules",
             resolved from the directory hosting the charm entry file.
             The alert rules are automatically updated on charm upgrade.
-        recursive: Whether or not to scan for rule files recursively.
+        recursive: Whether to scan for rule files recursively.
         container_name: An optional container name to inject the payload into.
 
     Raises:
@@ -2038,7 +2043,10 @@ class LogProxyConsumer(ConsumerBase):
         """
         clients = []  # type: list
         for relation in self._charm.model.relations.get(self._relation_name, []):
-            clients = clients + json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            endpoints = json.loads(relation.data[relation.app].get("endpoints", ""))
+            if endpoints:
+                clients += endpoints
+
         return clients
 
     def _server_config(self) -> dict:
@@ -2069,7 +2077,7 @@ class LogProxyConsumer(ConsumerBase):
             A dict representing the `scrape_configs` section.
         """
         job_name = "juju_{}".format(self.topology.identifier)
-        common_labels = self.topology.as_promql_label_dict()
+        common_labels = self.topology.as_label_dict()
         scrape_configs = []
 
         # Files config
@@ -2134,8 +2142,12 @@ class LogProxyConsumer(ConsumerBase):
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
         if self._current_config["clients"]:
-            self._container.restart(WORKLOAD_SERVICE_NAME)
-            self.on.log_proxy_endpoint_joined.emit()
+            try:
+                self._container.restart(WORKLOAD_SERVICE_NAME)
+            except ChangeError as e:
+                self.on.promtail_digest_error.emit(str(e))
+            else:
+                self.on.log_proxy_endpoint_joined.emit()
 
     def _is_promtail_installed(self) -> bool:
         """Determine if promtail has already been installed to the container."""

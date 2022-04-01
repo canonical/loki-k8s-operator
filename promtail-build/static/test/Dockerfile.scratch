@@ -1,0 +1,5 @@
+FROM scratch
+
+ADD --chmod=0755 ./dist/promtail /app/promtail
+
+ENTRYPOINT ["/app/promtail", "--version"]

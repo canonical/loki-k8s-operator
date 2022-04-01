@@ -1,0 +1,43 @@
+name: Check for new Promtail releases
+on:
+  # Manual trigger
+  workflow_dispatch:
+  # Check regularly the upstream every four hours
+  schedule:
+    - cron:  '0 0,4,8,12,16,20 * * *'
+
+jobs:
+  check:
+    name: Detect new releases
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{steps.check.outputs.release}}
+    steps:
+      # Find out what is the latest release of grafana/loki
+      - id: loki-latest-release
+        uses: pozetroninc/github-action-get-latest-release@v0.5.0
+        with:
+          repository: grafana/loki
+          excludes: prerelease, draft
+      # Check out the tags of our repo to compare
+      - name: Checkout canonical/loki-k8s-operator
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - id: check
+        name: Check for new releases
+        run: |
+          release=$(git show-ref --tags promtail-${{steps.loki-latest-release.outputs.release}} --quiet }} && echo -n '' || echo '${{ steps.loki-latest-release.outputs.release }}' )
+          if [ -n "${release}" ]; then
+            echo "::set-output name=release::${release}"
+            echo "New upstream release ${{steps.loki-latest-release.outputs.release}} found"
+          else
+            echo "No new upstream release found"
+          fi
+
+  trigger-build:
+    uses: ./.github/workflows/build-promtail-release.yaml
+    needs: check
+    if: ${{ needs.check.outputs.release != '' }}
+    with:
+      release: ${{needs.check.outputs.release}}
