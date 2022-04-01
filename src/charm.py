@@ -148,6 +148,7 @@ class LokiOperatorCharm(CharmBase):
             self._container.restart(self._name)
             logger.info("Loki (re)started")
 
+        self.grafana_source_provider.update_source(self._external_url)
         self.unit.status = ActiveStatus()
 
     @property
