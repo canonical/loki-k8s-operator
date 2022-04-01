@@ -28,17 +28,19 @@ class LokiServerNotReadyError(Exception):
 class LokiServer:
     """Class to manage Loki server."""
 
-    def __init__(self, host="localhost", port=3100, timeout=2.0):
+    def __init__(self, host="localhost", port=3100, timeout=2.0, base_path=""):
         """Utility to manage a Loki application.
 
         Args:
             host: host address of Loki application.
             port: port on which Loki service is exposed.
             timeout: timeout for the http request
+            base_path: path generally provided by Ingress
         """
         self.host = host
         self.port = port
-        self.base_url = f"http://{self.host}:{self.port}"
+        self.base_path = base_path
+        self.base_url = f"http://{self.host}:{self.port}{self.base_path}"
         self.timeout = timeout
 
     def _build_info(self):
@@ -88,7 +90,7 @@ class LokiServer:
         Returns:
           Rule Groups list or empty list
         """
-        url = f"{self.base_url}/loki/api/v1/rules{'/' + namespace if namespace else ''}"
+        url = f"{self.base_url}{self.base_path}/loki/api/v1/rules{'/' + namespace if namespace else ''}"
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 result = await response.text()

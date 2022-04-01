@@ -87,7 +87,7 @@ class LokiOperatorCharm(CharmBase):
         )
         self.framework.observe(self.ingress_per_unit.on.ingress_changed, self._on_ingress_changed)
 
-        self._loki_server = LokiServer(host=self.hostname)
+        self._loki_server = LokiServer(base_path=external_url.path)
         self._provide_loki()
 
     ##############################################
