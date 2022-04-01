@@ -1306,7 +1306,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 relation managed by this `PrometheusRemoteWriteProvider` will be
                 updated.
         """
-        address = self.address or self._get_relation_bind_address()
+        address = self.address or self._charm.hostname
         path = self.path or ""
 
         if path and not path.startswith("/"):
@@ -1317,10 +1317,6 @@ class LokiPushApiProvider(RelationManagerBase):
         logger.debug(
             "Saved endpoint %s in relation data. ", relation.data[self._charm.unit]["endpoint"]
         )
-
-    def _get_relation_bind_address(self):
-        network_binding = self._charm.model.get_binding(self._relation_name)
-        return network_binding.network.bind_address
 
     def _check_alert_rules(self) -> bool:
         """Check alert rules using Loki API.
