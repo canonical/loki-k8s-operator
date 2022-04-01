@@ -64,7 +64,7 @@ async def test_alert_rules_do_raise_fire(ops_test, loki_charm, loki_tester_charm
     )
     alerts = await get_alertmanager_alerts(ops_test, "alertmanager", 0, retries=100)
     assert all(
-        key in alert["labels"].kieys()
+        key in alert["labels"].keys()
         for key in ["juju_application", "juju_model", "juju_model_uuid"]
         for alert in alerts
     )
