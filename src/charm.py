@@ -39,6 +39,7 @@ LOKI_CONFIG = "/etc/loki/local-config.yaml"
 LOKI_DIR = "/loki"
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
 PEER = "loki"
+LOKI_PEERS = "loki-peers"
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +264,7 @@ class LokiOperatorCharm(CharmBase):
     @property
     def _pod_ip(self) -> str:
         """Returns the pod ip of this unit."""
-        if bind_address := self.model.get_binding(PEER).network.bind_address:
+        if bind_address := self.model.get_binding(LOKI_PEERS).network.bind_address:
             return str(bind_address)
         return ""
 

@@ -48,8 +48,8 @@ requires:
     limit: 1
 
 peers:
-  loki:
-    interface: loki
+  loki-peers:
+    interface: loki_peers
 
 resources:
   loki-image:
