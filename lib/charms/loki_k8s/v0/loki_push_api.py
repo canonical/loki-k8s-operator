@@ -1239,6 +1239,9 @@ class LokiPushApiProvider(RelationManagerBase):
                 charm must update its relation data.
         """
         if not self.container.can_connect():
+            # We do not defer the event because, if it is a relation created/changed, we will
+            # process the relation again on pebble_ready, and the nature of the event is not
+            # taken into account in the following logic.
             return
 
         if isinstance(event, RelationEvent):
