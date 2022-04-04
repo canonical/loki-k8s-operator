@@ -1223,6 +1223,11 @@ class LokiPushApiProvider(RelationManagerBase):
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
+        for container_name in self._charm.unit.containers:
+            self.framework.observe(
+                self._charm.on[container_name].pebble_ready, self._on_logging_relation_changed
+            )
+
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
 

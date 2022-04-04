@@ -132,6 +132,31 @@ class TestLokiPushApiProvider(unittest.TestCase):
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
             )
 
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files",
+        MagicMock(),
+    )
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
+        MagicMock(),
+    )
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
+    )
+    def test_consumers_are_updated_on_pebble_ready_after_relation_changed(self, mock_unit_ip):
+        with self.assertLogs(level="DEBUG") as logger:
+            mock_unit_ip.return_value = "10.1.2.3"
+            self.harness.set_can_connect(self.harness.charm._name, False)
+            rel_id = self.harness.add_relation("logging", "promtail")
+            self.harness.add_relation_unit(rel_id, "promtail/0")
+
+            self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
+            self.harness.container_pebble_ready(self.harness.charm._name)
+            self.assertEqual(
+                sorted(logger.output)[0],
+                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
+            )
+
     @patch("os.makedirs", MagicMock())
     @patch(
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
