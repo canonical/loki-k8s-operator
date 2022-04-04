@@ -1258,7 +1258,6 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        # self._set_endpoint_on_relation(event.relation)
         self._process_logging_relation_changed(event.relation)
 
     def update_endpoint(self, relation: Relation = None) -> None:
