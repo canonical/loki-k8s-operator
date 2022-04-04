@@ -1233,6 +1233,9 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
+        if not self.container.can_connect():
+            return
+
         if isinstance(event, RelationEvent):
             self._process_logging_relation_changed(event.relation)
         else:

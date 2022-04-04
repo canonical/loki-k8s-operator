@@ -118,6 +118,7 @@ class TestCharm(unittest.TestCase):
     @patch("charm.LokiOperatorCharm._loki_config")
     def test__on_config_can_connect(self, mock_loki_config):
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
+        self.harness.set_can_connect(self.container_name, True)
         self.harness.set_leader(True)
 
         # Since harness was not started with begin_with_initial_hooks(), this must

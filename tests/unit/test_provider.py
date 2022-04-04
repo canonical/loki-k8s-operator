@@ -8,10 +8,13 @@ import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 
+import ops.testing
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
+
+ops.testing.SIMULATE_CAN_CONNECT = True
 
 METADATA = {
     "model": "consumer-model",
@@ -73,16 +76,9 @@ class FakeLokiCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
-        self._container = type(
-            "FakeContainer",
-            (object,),
-            {
-                "make_dir": lambda *a, **kw: None,
-                "remove_path": lambda *a, **kw: None,
-                "can_connect": lambda *a, **kw: True,
-                "list_files": lambda *a, **kw: [],
-            },
-        )
+        self._name = "loki"
+        self._container = self.unit.get_container(self._name)
+
         with patch("ops.testing._TestingPebbleClient.make_dir"):
             self.loki_provider = LokiPushApiProvider(self, "logging")
 
@@ -126,6 +122,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
     def test__on_logging_relation_changed(self, mock_unit_ip):
         with self.assertLogs(level="DEBUG") as logger:
             mock_unit_ip.return_value = "10.1.2.3"
+            self.harness.set_can_connect(self.harness.charm._name, True)
             rel_id = self.harness.add_relation("logging", "promtail")
             self.harness.add_relation_unit(rel_id, "promtail/0")
 
