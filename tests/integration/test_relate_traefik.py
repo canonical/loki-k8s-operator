@@ -10,8 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, is_loki_up
-from pytest_operator.plugin import OpsTest
+from helpers import is_loki_up
 
 logger = logging.getLogger(__name__)
 
