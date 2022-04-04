@@ -42,7 +42,7 @@ class RelatedApp:
 
 related_apps = [
     RelatedApp("alertmanager", "ch:alertmanager-k8s", "alertmanager", {}),
-    RelatedApp("cassandra", "ch:cassandra-k8s", "logging", {"heap_size": "1g"}),
+    RelatedApp("grafana-agent", "ch:grafana-agent-k8s", "logging", {}),
 ]
 
 
