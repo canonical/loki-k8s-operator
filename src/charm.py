@@ -60,12 +60,12 @@ class LokiOperatorCharm(CharmBase):
         self.ingress_per_unit = IngressPerUnitRequirer(
             self, endpoint="ingress-per-unit", port=self._port
         )
-        external_url = urlparse(self._external_url)
+        external_url = urlparse(self.external_url)
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
             refresh_event=self.on.loki_pebble_ready,
             source_type=PEER,
-            source_url=self._external_url,
+            source_url=self.external_url,
         )
 
         self.loki_provider = LokiPushApiProvider(
@@ -149,7 +149,7 @@ class LokiOperatorCharm(CharmBase):
             self._container.restart(self._name)
             logger.info("Loki (re)started")
 
-        self.grafana_source_provider.update_source(self._external_url)
+        self.grafana_source_provider.update_source(self.external_url)
         self.unit.status = ActiveStatus()
 
     @property
@@ -222,7 +222,7 @@ class LokiOperatorCharm(CharmBase):
         Returns:
             Dictionary representation of the Loki YAML config
         """
-        external_url = urlparse(self._external_url)
+        external_url = urlparse(self.external_url)
         no_path = "''"
         config = textwrap.dedent(
             f"""
@@ -279,7 +279,7 @@ class LokiOperatorCharm(CharmBase):
         )
 
     @property
-    def _external_url(self) -> str:
+    def external_url(self) -> str:
         """Return the external hostname to be passed to ingress via the relation."""
         if ingress_url := self.ingress_per_unit.url:
             logger.debug("This unit's ingress URL: %s", ingress_url)
