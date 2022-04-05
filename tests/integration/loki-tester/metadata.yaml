@@ -1,0 +1,17 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# For a complete list of supported options, see:
+# https://juju.is/docs/sdk/metadata-reference
+name: loki-tester
+display-name: loki-tester
+description: |
+  An integration tester for the Loki Operator.
+summary: |
+  This charm exercises the functionality offerred by the Loki Operator
+  in order to integration test it.
+platforms:
+  - kubernetes
+requires:
+  logging:
+    interface: loki_push_api
