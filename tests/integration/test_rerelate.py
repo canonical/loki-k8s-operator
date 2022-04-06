@@ -52,11 +52,14 @@ async def test_build_and_deploy(ops_test: OpsTest, loki_charm, loki_tester_charm
             loki_charm, resources=resources, application_name=app_name, num_units=2
         ),
         ops_test.model.deploy(
-            loki_tester_charm, application_name="loki-tester",
+            loki_tester_charm,
+            application_name="loki-tester",
         ),
         ops_test.model.deploy(
-            "ch:alertmanager-k8s", application_name="alertmanager", channel="edge",
-        )
+            "ch:alertmanager-k8s",
+            application_name="alertmanager",
+            channel="edge",
+        ),
     )
 
     await asyncio.gather(
@@ -90,8 +93,21 @@ async def test_rerelate(ops_test: OpsTest):
 
 @pytest.mark.abort_on_fail
 async def test_remove_related_app(ops_test: OpsTest):
+
+    cmd = [
+        "juju",
+        "remove-application",
+        "--destroy-storage",
+        "--force",
+        "--no-wait",
+        "loki-tester",
+    ]
+
+    # retcode, stdout, stderr = await ops_test.run(*cmd)
+
     await asyncio.gather(
-        ops_test.model.applications["loki-tester"].remove(),
+        # ops_test.model.applications["loki-tester"].remove(),  # this hangs, for some reason
+        ops_test.run(*cmd),
         ops_test.model.applications["alertmanager"].remove(),
         # Block until it is really gone. Added after an itest failed when tried to redeploy:
         # juju.errors.JujuError: ['cannot add application "...": application already exists']
@@ -107,11 +123,14 @@ async def test_remove_related_app(ops_test: OpsTest):
 async def test_rerelate_app(ops_test: OpsTest, loki_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(
-            loki_tester_charm, application_name="loki-tester",
+            loki_tester_charm,
+            application_name="loki-tester",
         ),
         ops_test.model.deploy(
-            "ch:alertmanager-k8s", application_name="alertmanager", channel="edge",
-        )
+            "ch:alertmanager-k8s",
+            application_name="alertmanager",
+            channel="edge",
+        ),
     )
 
     await asyncio.gather(
