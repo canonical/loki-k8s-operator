@@ -6,12 +6,15 @@
 import unittest
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
+import ops.testing
 import yaml
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
 from charm import LokiOperatorCharm
 from loki_server import LokiServerError, LokiServerNotReadyError
+
+ops.testing.SIMULATE_CAN_CONNECT = True
 
 LOKI_CONFIG = """
 auth_enabled: false
@@ -120,7 +123,7 @@ class TestCharm(unittest.TestCase):
     def test__on_config_can_connect(self, mock_loki_config):
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
         self.harness.set_leader(True)
-
+        self.harness.set_can_connect(self.harness.charm._name, True)
         # Since harness was not started with begin_with_initial_hooks(), this must
         # be emitted by hand to actually trigger _configure()
         self.harness.charm.on.config_changed.emit()

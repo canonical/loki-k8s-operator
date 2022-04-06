@@ -5,7 +5,7 @@ import json
 import os
 import textwrap
 import unittest
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
@@ -103,21 +103,28 @@ class TestLokiPushApiConsumer(unittest.TestCase):
 
     @patch("charms.loki_k8s.v0.loki_push_api.AlertRules.add_path")
     @patch("charms.loki_k8s.v0.loki_push_api.AlertRules.as_dict", new=lambda *a, **kw: {})
-    def test__on_logging_relation_changed(self, mock_as_dict):
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiConsumer.loki_endpoints",
+        new_callable=PropertyMock,
+    )
+    def test__on_logging_relation_changed(self, mock_endpoints, mock_as_dict):
+        expected_data = [
+            {"url": "http://10.1.2.3:3100/loki/api/v1/push"},
+        ]
+        mock_endpoints.return_value = expected_data
         mock_as_dict.return_value = (LABELED_ALERT_RULES, {})
-        loki_push_api = "http://10.1.2.3:3100/loki/api/v1/push"
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
         self.harness.update_relation_data(
             rel_id,
-            "promtail/0",
-            {"endpoint": json.dumps({"url": "http://10.1.2.3:3100/loki/api/v1/push"})},
+            "promtail",
+            {"endpoints": json.dumps({"url": "http://10.1.2.3:3100/loki/api/v1/push"})},
         )
 
         self.assertEqual(
             self.harness.charm.loki_consumer.loki_endpoints[0]["url"],
-            loki_push_api,
+            expected_data[0]["url"],
         )
 
     @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiEvents.loki_push_api_endpoint_joined")

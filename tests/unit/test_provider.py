@@ -67,6 +67,9 @@ class FakeLokiCharm(CharmBase):
         requires:
           alertmanager:
             interface: alertmanager_dispatch
+        peers:
+          loki-peers:
+            interface: loki_peers
         """
     )
 
@@ -83,6 +86,14 @@ class FakeLokiCharm(CharmBase):
                 "list_files": lambda *a, **kw: [],
             },
         )
+        self.ingress_per_unit = type(
+            "IngressPerUnitRequirer",
+            (object,),
+            {
+                "urls": None,
+            },
+        )
+
         with patch("ops.testing._TestingPebbleClient.make_dir"):
             self.loki_provider = LokiPushApiProvider(
                 self,
@@ -108,6 +119,11 @@ class FakeLokiCharm(CharmBase):
             self.model.name,
         )
 
+    @property
+    def external_url(self) -> str:
+        """Return the external hostname to be passed to ingress via the relation."""
+        return f"http://{self.hostname}:{self._port}"
+
 
 class TestLokiPushApiProvider(unittest.TestCase):
     def setUp(self):
@@ -124,27 +140,41 @@ class TestLokiPushApiProvider(unittest.TestCase):
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
         MagicMock(),
     )
-    def test__on_logging_relation_changed(self):
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoints")
+    def test__on_logging_relation_changed(self, mock_endpoints):
         with self.assertLogs(level="DEBUG") as logger:
+            expected_data = [
+                {"url": "http://loki0.endpoint/loki/api/v1/push"},
+                {"url": "http://loki1.endpoint/loki/api/v1/push"},
+            ]
+
+            mock_endpoints.return_value = expected_data
             rel_id = self.harness.add_relation("logging", "promtail")
             self.harness.add_relation_unit(rel_id, "promtail/0")
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
-            relation = self.harness.charm.model.get_relation("logging")
-            expected_data = '{"url": "http://10.0.0.1:3100/loki/api/v1/push"}'
+            data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
 
-            self.assertTrue("endpoint" in relation.data[self.harness._charm.unit])
-            self.assertEqual(relation.data[self.harness._charm.unit]["endpoint"], expected_data)
+            self.assertTrue("endpoints" in data)
+            self.assertTrue(json.dumps(expected_data[0]) in data["endpoints"])
+            self.assertTrue(json.dumps(expected_data[1]) in data["endpoints"])
             self.assertEqual(
                 sorted(logger.output)[0],
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
             )
             self.assertEqual(
                 sorted(logger.output)[1],
-                'DEBUG:charms.loki_k8s.v0.loki_push_api:Saved endpoint {"url": "http://10.0.0.1:3100/loki/api/v1/push"} in relation data. ',
+                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved endpoints in relation data",
             )
 
     @patch("os.makedirs", MagicMock())
-    def test_alerts(self):
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoints")
+    def test_alerts(self, mock_endpoints):
+        expected_data = [
+            {"url": "http://loki0.endpoint/loki/api/v1/push"},
+            {"url": "http://loki1.endpoint/loki/api/v1/push"},
+        ]
+
+        mock_endpoints.return_value = expected_data
         rel_id = self.harness.add_relation("logging", "consumer")
         self.harness.update_relation_data(
             rel_id,
