@@ -2008,7 +2008,7 @@ class LogProxyConsumer(ConsumerBase):
         """
         clients = []  # type: list
         for relation in self._charm.model.relations.get(self._relation_name, []):
-            endpoints = json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            endpoints = json.loads(relation.data[relation.app].get("endpoints", ""))
             if endpoints:
                 clients += endpoints
         return clients
