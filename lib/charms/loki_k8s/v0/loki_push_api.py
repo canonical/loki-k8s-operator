@@ -1243,12 +1243,10 @@ class LokiPushApiProvider(RelationManagerBase):
                 charm must update its relation data.
         """
         if isinstance(event, RelationEvent):
-            self._set_endpoint_on_relation(event.relation)
             self._process_logging_relation_changed(event.relation)
         else:
             # Upgrade event or other charm-level event
             for relation in self._charm.model.relations[self._relation_name]:
-                self._set_endpoint_on_relation(relation)
                 self._process_logging_relation_changed(relation)
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
@@ -1274,10 +1272,17 @@ class LokiPushApiProvider(RelationManagerBase):
                 If not provided, all instances of the `prometheus_remote_write`
                 relation are updated.
         """
-        relations = [relation] if relation else self.model.relations[self._relation_name]
+        if not self._charm.unit.is_leader():
+            return
 
-        for relation in relations:
-            self._set_endpoint_on_relation(relation)
+        if not relation:
+            if not self._charm.model.get_relation(self._relation_name):
+                return
+
+            relation = self._charm.model.get_relation(self._relation_name)
+
+        relation.data[self._charm.app].update({"endpoints": json.dumps(self._endpoints())})
+        logger.debug("Saved endpoints in relation data")
 
     def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
@@ -1294,6 +1299,7 @@ class LokiPushApiProvider(RelationManagerBase):
         if self._charm.unit.is_leader():
             relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
+            self.update_endpoint(relation)
 
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
@@ -1301,25 +1307,32 @@ class LokiPushApiProvider(RelationManagerBase):
             self._generate_alert_rules_files(self.container)
             self._check_alert_rules()
 
-    def _set_endpoint_on_relation(self, relation: Relation) -> None:
-        """Set the the loki_push_api endpoint on relations.
+    def _endpoints(self) -> List[dict]:
+        """Return a list of Loki Push Api endpoints."""
+        endpoints = []
+        path = "/loki/api/v1/push"
 
-        Args:
-            relation: Only this relation will be updated.
-                Otherwise, all instances of the `prometheus_remote_write`
-                relation managed by this `PrometheusRemoteWriteProvider` will be
-                updated.
-        """
-        address = self.address or self._charm.hostname
-        path = self.path or ""
+        if self._charm.ingress_per_unit.urls:
+            return [{"url": url + path} for url in self._charm.ingress_per_unit.urls.values()]
 
-        if path and not path.startswith("/"):
-            path = "/{}".format(path)
+        peers = [*self._charm.meta.peers.keys()][0]
+        units = self._charm.model.get_relation(peers).units
+        units.add(self._charm.unit)
 
-        endpoint_url = "{}://{}:{}{}".format(self.scheme, address, str(self.port), path)
-        relation.data[self._charm.unit]["endpoint"] = json.dumps({"url": endpoint_url})
-        logger.debug(
-            "Saved endpoint %s in relation data. ", relation.data[self._charm.unit]["endpoint"]
+        for unit in units:
+            unit_number = unit.name.split("/")[-1]
+            endpoints.append({"url": self._url(unit_number)})
+
+        return endpoints
+
+    def _url(self, unit_number) -> str:
+        """Get the url for a given unit."""
+        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
+            self._charm.app.name,
+            unit_number,
+            self._charm.app.name,
+            self._charm.model.name,
+            self.port,
         )
 
     def _check_alert_rules(self) -> bool:
@@ -1330,7 +1343,7 @@ class LokiPushApiProvider(RelationManagerBase):
         Emits:
             loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
         """
-        url = "http://{}:{}/loki/api/v1/rules".format(self._charm.hostname, self.port)
+        url = "{}/loki/api/v1/rules".format(self._charm.external_url)
         req = request.Request(url)
         try:
             request.urlopen(req)
@@ -1635,16 +1648,7 @@ class LokiPushApiConsumer(ConsumerBase):
         endpoints = []  # type: list
 
         for relation in self._charm.model.relations[self._relation_name]:
-            for unit in relation.units:
-                if unit.app is self._charm.app:
-                    # This is a peer unit
-                    continue
-
-                endpoint = relation.data[unit].get("endpoint")
-                if endpoint:
-                    deserialized_endpoint = json.loads(endpoint)
-                    endpoints.append(deserialized_endpoint)
-
+            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
 
 
