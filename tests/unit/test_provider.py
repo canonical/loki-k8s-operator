@@ -140,8 +140,10 @@ class TestLokiPushApiProvider(unittest.TestCase):
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
         MagicMock(),
     )
+    @patch("urllib.request.urlopen")
     @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoints")
-    def test__on_logging_relation_changed(self, mock_endpoints):
+    def test__on_logging_relation_changed(self, mock_endpoints, mock_urlopen):
+        mock_urlopen.return_value = True
         with self.assertLogs(level="DEBUG") as logger:
             expected_data = [
                 {"url": "http://loki0.endpoint/loki/api/v1/push"},
@@ -158,17 +160,22 @@ class TestLokiPushApiProvider(unittest.TestCase):
             self.assertTrue(json.dumps(expected_data[0]) in data["endpoints"])
             self.assertTrue(json.dumps(expected_data[1]) in data["endpoints"])
             self.assertEqual(
-                sorted(logger.output)[0],
+                logger.output[1],
+                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved endpoints in relation data",
+            )
+            self.assertEqual(
+                logger.output[2],
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
             )
             self.assertEqual(
-                sorted(logger.output)[1],
-                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved endpoints in relation data",
+                logger.output[3], "DEBUG:charms.loki_k8s.v0.loki_push_api:Checking alert rules: Ok"
             )
 
     @patch("os.makedirs", MagicMock())
+    @patch("urllib.request.urlopen")
     @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoints")
-    def test_alerts(self, mock_endpoints):
+    def test_alerts(self, mock_endpoints, mock_urlopen):
+        mock_urlopen.return_value = True
         expected_data = [
             {"url": "http://loki0.endpoint/loki/api/v1/push"},
             {"url": "http://loki1.endpoint/loki/api/v1/push"},
@@ -222,4 +229,5 @@ class TestLokiPushApiProvider(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test__check_alert_rules_urlerror(self, mock_urlopen):
         mock_urlopen.side_effect = URLError("Unknown host")
+        # mock_http_response.read.return_value = mock_urlopen.side_effect
         self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
