@@ -1343,8 +1343,10 @@ class LokiPushApiProvider(RelationManagerBase):
         Emits:
             loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
         """
-        url = "{}/loki/api/v1/rules".format(self._charm.external_url)
+        path = self.path.replace("/loki/api/v1/push", "")
+        url = "{}://{}:{}{}/loki/api/v1/rules".format(self.scheme, self.address, self.port, path)
         req = request.Request(url)
+
         try:
             request.urlopen(req)
         except HTTPError as e:
