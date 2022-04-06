@@ -60,18 +60,19 @@ class LokiOperatorCharm(CharmBase):
             source_port=str(self._port),
         )
         self._loki_server = LokiServer()
-        self._provide_loki()
-        self.loki_provider = LokiPushApiProvider(self)
+
+        if self._loki_is_active():
+            self.loki_provider = LokiPushApiProvider(self)
+            self.framework.observe(
+                self.loki_provider.on.loki_push_api_alert_rules_changed,
+                self._loki_push_api_alert_rules_changed,
+            )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
         self.framework.observe(
             self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
-        )
-        self.framework.observe(
-            self.loki_provider.on.loki_push_api_alert_rules_changed,
-            self._loki_push_api_alert_rules_changed,
         )
 
     ##############################################
@@ -165,15 +166,19 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #             UTILITY METHODS                #
     ##############################################
-    def _provide_loki(self):
+    def _loki_is_active(self):
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
         try:
             version = self._loki_server.version
             logger.debug("Loki Provider is available. Loki version: %s", version)
         except LokiServerNotReadyError as e:
             self.unit.status = WaitingStatus(str(e))
+            return False
         except LokiServerError as e:
             self.unit.status = BlockedStatus(str(e))
+            return False
+
+        return True
 
     def _alerting_config(self) -> str:
         """Construct Loki altering configuration.
@@ -200,6 +205,11 @@ class LokiOperatorCharm(CharmBase):
         Returns:
             Dictionary representation of the Loki YAML config
         """
+        try:
+            unit_ip = self.loki_provider.unit_ip
+        except AttributeError:
+            unit_ip = ""
+
         config = textwrap.dedent(
             f"""
             target: all
@@ -217,7 +227,7 @@ class LokiOperatorCharm(CharmBase):
                   rules_directory: {RULES_DIR}
               replication_factor: 1
               ring:
-                instance_addr: {self.loki_provider.unit_ip if self.loki_provider else ""}
+                instance_addr: {unit_ip}
                 kvstore:
                   store: inmemory
 
