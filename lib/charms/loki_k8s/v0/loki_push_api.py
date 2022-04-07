@@ -1725,8 +1725,10 @@ class LogProxyConsumer(ConsumerBase):
         self.framework.observe(events.relation_created, self._on_relation_created)
         self.framework.observe(events.relation_changed, self._on_relation_changed)
         self.framework.observe(events.relation_departed, self._on_relation_departed)
+        # turn the container name to a valid Python identifier
+        snake_case_container_name = self._container_name.replace("-", "_")
         self.framework.observe(
-            getattr(self._charm.on, "{}_pebble_ready".format(self._container_name)),
+            getattr(self._charm.on, "{}_pebble_ready".format(snake_case_container_name)),
             self._on_pebble_ready,
         )
 
