@@ -452,6 +452,7 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
+    RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
@@ -470,7 +471,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 logger = logging.getLogger(__name__)
 
@@ -1564,9 +1565,14 @@ class LokiPushApiConsumer(ConsumerBase):
         )
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         events = self._charm.on[relation_name]
+
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
-        self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
+
+        # This will keep track of broken relations so that we can ignore the endpoints
+        # we find in their application data bags
+        self._ignored_relations = []  # type: list
+        self.framework.observe(events.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
@@ -1599,13 +1605,15 @@ class LokiPushApiConsumer(ConsumerBase):
         self._handle_alert_rules(relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _on_logging_relation_departed(self, _: RelationEvent):
-        """Handle departures in related providers.
+    def _on_logging_relation_broken(self, event: RelationBrokenEvent):
+        """Handle breaking of the relation.
 
         Anytime there are departures in relations between the consumer charm and Loki
         the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event.
         The consumer charm can then choose to update its configuration.
         """
+        self._ignored_relations.append(event.relation)
+
         # Provide default to avoid throwing, as in some complicated scenarios with
         # upgrades and hook failures we might not have data in the storage
         self.on.loki_push_api_endpoint_departed.emit()
@@ -1619,7 +1627,10 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         endpoints = []  # type: list
         for relation in self._charm.model.relations[self._relation_name]:
-            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            if relation not in self._ignored_relations:
+                endpoints = endpoints + json.loads(
+                    relation.data[relation.app].get("endpoints", "[]")
+                )
         return endpoints
 
 
