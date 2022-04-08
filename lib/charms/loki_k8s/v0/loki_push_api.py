@@ -1251,9 +1251,12 @@ class LokiPushApiProvider(RelationManagerBase):
 
         Args:
             relation: the `Relation` instance to update.
+            event: an optional event, the type of which is checked. If it is a
+                RelationDepartedEvent no updates are sent to the relation data bag
+
         """
-        # We don't need to set a bunch of data if a relation is going away
         if self._charm.unit.is_leader() and event and type(event) != RelationDepartedEvent:
+            # We don't need to set a bunch of data if a relation is going away
             relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
