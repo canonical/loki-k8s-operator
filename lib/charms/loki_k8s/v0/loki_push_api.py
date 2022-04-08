@@ -434,7 +434,6 @@ Loki Push API and alert rules.
 Units of consumer charm send their alert rules over app relation data using the `alert_rules`
 key.
 """
-import contextlib
 import json
 import logging
 import os
