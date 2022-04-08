@@ -1143,11 +1143,11 @@ class LokiPushApiAlertRulesChanged(EventBase):
         self.error = error
 
     def snapshot(self) -> Dict:
-        """Save grafana source information."""
+        """Save Loki information."""
         return {"error": self.error, "message": self.message}
 
     def restore(self, snapshot):
-        """Restore grafana source information."""
+        """Restore Loki information."""
         self.message = snapshot["message"]
         self.error = snapshot["error"]
 
