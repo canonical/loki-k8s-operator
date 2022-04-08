@@ -103,8 +103,19 @@ async def test_remove_related_app(ops_test: OpsTest):
     await ops_test.model.block_until(
         lambda: "loki-tester" not in ops_test.model.applications,
         lambda: "alertmanager" not in ops_test.model.applications,
-        timeout=300,
+        timeout=20,
     )
+
+    cmd = [
+        "juju",
+        "remove-application",
+        "--destroy-storage",
+        "--force",
+        "--no-wait",
+        "loki-tester",
+    ]
+
+    await ops_test.run(*cmd)
 
     await ops_test.model.wait_for_idle(wait_for_active=True, timeout=300)
     assert await is_loki_up(ops_test, app_name)

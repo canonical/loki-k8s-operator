@@ -37,7 +37,6 @@ class LokiTesterCharm(CharmBase):
 
         self.topology = ProviderTopology.from_charm(self)
 
-        self.logger = self._setup_logging()
         self.log_handler = None
         self.log_endpoints = []
         self.set_logger()
