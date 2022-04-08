@@ -60,7 +60,7 @@ def copy_loki_library_into_tester_charm(ops_test):
 @pytest.fixture(scope="module", autouse=True)
 def copy_sample_alerts_into_tester_charm(ops_test):
     """Ensure that the tester charm uses the current Prometheus library."""
-    rules_path = "tests/sample_rule_files/free-standing"
+    rules_path = "tests/sample_rule_files/free-standing/alerting"
     install_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing"
     shutil.copytree(rules_path, install_path, dirs_exist_ok=True)
 
