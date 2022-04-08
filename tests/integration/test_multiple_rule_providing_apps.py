@@ -126,7 +126,7 @@ async def test_wrong_alert_rule(ops_test):
         config={
             "git_repo": "https://github.com/canonical/loki-k8s-operator",
             "git_branch": "error_alerts",
-            "loki_alert_rules_path": "tests/sample_rule_files/free-standing/error",
+            "loki_alert_rules_path": "tests/sample_rule_files/error",
         },
     )
 
