@@ -1221,13 +1221,7 @@ class LokiPushApiProvider(RelationManagerBase):
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
-        self.framework.observe(events.relation_created, self._on_logging_relation_created)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
-
-    def _on_logging_relation_created(self, event: RelationCreatedEvent):
-        if self._charm.unit.is_leader():
-            event.relation.data[self._charm.app].update(self._promtail_binary_url)
-            logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
 
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
@@ -1246,13 +1240,6 @@ class LokiPushApiProvider(RelationManagerBase):
             for relation in self._charm.model.relations[self._relation_name]:
                 self._process_logging_relation_changed(relation)
 
-    def regenerate_rule_files(self):
-        """Regenerate rule files within container from relation data."""
-        logger.debug("Saved alerts rules to disk")
-        self._remove_alert_rules_files(self.container)
-        self._generate_alert_rules_files(self.container)
-        self._check_alert_rules()
-
     def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
 
@@ -1266,11 +1253,17 @@ class LokiPushApiProvider(RelationManagerBase):
             relation: the `Relation` instance to update.
         """
         if self._charm.unit.is_leader():
+            relation.data[self._charm.app].update(self._promtail_binary_url)
+            logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
             logger.debug("Saved endpoints in relation data")
 
         if relation.data.get(relation.app).get("alert_rules"):
-            self.regenerate_rule_files()
+            """Regenerate rule files within container from relation data."""
+            logger.debug("Saved alerts rules to disk")
+            self._remove_alert_rules_files(self.container)
+            self._generate_alert_rules_files(self.container)
+            self._check_alert_rules()
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1344,34 +1337,7 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        if self.model.unit == event.departing_unit:
-            # This unit is the departing unit, so any changes it makes to relation data won't get
-            # propagated anyway, so nothing to do in this case.
-            return
-        elif self.model.unit.app == event.departing_unit.app:
-            # A peer unit is leaving. Need to update list of endpoints.
-            # This is buggy because if the leader unit is the departed unit and no other unit was
-            # elected as leader yet then the following would be skipped and the same logic should
-            # probably go into leader-elected as well.
-            if not self._charm.unit.is_leader():
-                return
-
-            for relation in self._charm.model.relations[self._relation_name]:
-                # TODO: make sure _endpoints does not include the departing unit
-                relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
-            logger.debug("Saved endpoints in relation data")
-        else:
-            # A regular relation's unit is departing. Need to regenerate rule files.
-            # However, in relation-departed, the departing relation data may still be visible,
-            # so this is not the right place for it.
-            # However, can't regenerate rules in relation-broken, because relation-broken is seen
-            # only by the departed unit.
-            # HOWEVER non-leader units for some reason get "ERROR permission denied" when trying to
-            # relation-get, so need a leader guard anyway.
-            if not self._charm.unit.is_leader():
-                return
-
-            self.regenerate_rule_files()
+        self._process_logging_relation_changed(event.relation)
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -1643,13 +1609,7 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         endpoints = []  # type: list
         for relation in self._charm.model.relations[self._relation_name]:
-            with contextlib.suppress(ModelError):
-                # Suppressing ModelError, which may be raised if this method is called during
-                # departure, which would results in:
-                # ops.model.ModelError: b'ERROR permission denied\n'
-                endpoints = endpoints + json.loads(
-                    relation.data[relation.app].get("endpoints", "[]")
-                )
+            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
 
 
