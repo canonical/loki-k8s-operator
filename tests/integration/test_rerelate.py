@@ -103,14 +103,17 @@ async def test_remove_related_app(ops_test: OpsTest):
         ops_test.model.applications["loki-tester"].remove(),
         ops_test.model.applications["alertmanager"].remove(),
     )
-    logger.info("Applications removed. Blocking for 60 seconds then force removing...")
+    logger.debug("Applications removed. Blocking for 60 seconds then force removing...")
     # Block until it is really gone. Added after an itest failed when tried to redeploy:
     # juju.errors.JujuError: ['cannot add application "...": application already exists']
-    await ops_test.model.block_until(
-        lambda: "loki-tester" not in ops_test.model.applications,
-        lambda: "alertmanager" not in ops_test.model.applications,
-        timeout=60,
-    )
+    try:
+        await ops_test.model.block_until(
+            lambda: "loki-tester" not in ops_test.model.applications,
+            lambda: "alertmanager" not in ops_test.model.applications,
+            timeout=60,
+        )
+    except asyncio.exceptions.TimeoutError:
+        logger.warning("Timeout reached while blocking!")
 
     for app in filter(lambda x: x in ops_test.model.applications, ["loki-tester", "alertmanager"]):
         cmd = [
@@ -124,7 +127,6 @@ async def test_remove_related_app(ops_test: OpsTest):
         logger.info("Forcibly removing {}".format(app))
         await ops_test.run(*cmd)
 
-    logger.info("Waiting for idle")
     await ops_test.model.wait_for_idle(wait_for_active=True, timeout=300)
     assert await is_loki_up(ops_test, app_name)
 
