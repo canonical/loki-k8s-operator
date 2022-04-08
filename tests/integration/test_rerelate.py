@@ -52,18 +52,21 @@ async def test_build_and_deploy(ops_test: OpsTest, loki_charm, loki_tester_charm
             loki_charm, resources=resources, application_name=app_name, num_units=2
         ),
         ops_test.model.deploy(
-            loki_tester_charm, application_name="loki-tester",
+            loki_tester_charm,
+            application_name="loki-tester",
         ),
         ops_test.model.deploy(
-            "ch:alertmanager-k8s", application_name="alertmanager", channel="edge",
-        )
+            "ch:alertmanager-k8s",
+            application_name="alertmanager",
+            channel="edge",
+        ),
     )
 
     await asyncio.gather(
         ops_test.model.add_relation(app_name, "loki-tester"),
         ops_test.model.add_relation(app_name, "alertmanager"),
     )
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(status="active", timeout=300)
 
     assert await is_loki_up(ops_test, app_name)
 
@@ -74,7 +77,7 @@ async def test_remove_relation(ops_test: OpsTest):
         ops_test.model.applications[app_name].remove_relation("logging", "loki-tester"),
         ops_test.model.applications[app_name].remove_relation("alertmanager", "alertmanager"),
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=300)
     assert await is_loki_up(ops_test, app_name)
 
 
@@ -84,7 +87,7 @@ async def test_rerelate(ops_test: OpsTest):
         ops_test.model.add_relation(app_name, "loki-tester"),
         ops_test.model.add_relation(app_name, "alertmanager"),
     )
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(status="active", timeout=300)
     assert await is_loki_up(ops_test, app_name)
 
 
@@ -93,13 +96,17 @@ async def test_remove_related_app(ops_test: OpsTest):
     await asyncio.gather(
         ops_test.model.applications["loki-tester"].remove(),
         ops_test.model.applications["alertmanager"].remove(),
-        # Block until it is really gone. Added after an itest failed when tried to redeploy:
-        # juju.errors.JujuError: ['cannot add application "...": application already exists']
-        ops_test.model.block_until(lambda: "loki-tester" not in ops_test.model.applications),
-        ops_test.model.block_until(lambda: "alertmanager" not in ops_test.model.applications),
+    )
+    logger.info("Applications removed. Waiting on block_until...")
+    # Block until it is really gone. Added after an itest failed when tried to redeploy:
+    # juju.errors.JujuError: ['cannot add application "...": application already exists']
+    await ops_test.model.block_until(
+        lambda: "loki-tester" not in ops_test.model.applications,
+        lambda: "alertmanager" not in ops_test.model.applications,
+        timeout=300,
     )
 
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(wait_for_active=True, timeout=300)
     assert await is_loki_up(ops_test, app_name)
 
 
@@ -107,17 +114,20 @@ async def test_remove_related_app(ops_test: OpsTest):
 async def test_rerelate_app(ops_test: OpsTest, loki_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(
-            loki_tester_charm, application_name="loki-tester",
+            loki_tester_charm,
+            application_name="loki-tester",
         ),
         ops_test.model.deploy(
-            "ch:alertmanager-k8s", application_name="alertmanager", channel="edge",
-        )
+            "ch:alertmanager-k8s",
+            application_name="alertmanager",
+            channel="edge",
+        ),
     )
 
     await asyncio.gather(
         ops_test.model.add_relation(app_name, "loki-tester"),
         ops_test.model.add_relation(app_name, "alertmanager"),
     )
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(status="active", timeout=300)
 
     assert await is_loki_up(ops_test, app_name)

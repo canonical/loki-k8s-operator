@@ -1240,7 +1240,7 @@ class LokiPushApiProvider(RelationManagerBase):
             for relation in self._charm.model.relations[self._relation_name]:
                 self._process_logging_relation_changed(relation)
 
-    def _process_logging_relation_changed(self, relation: Relation):
+    def _process_logging_relation_changed(self, relation: Relation, event: RelationEvent = None):
         """Handle changes in related consumers.
 
         Anytime there are changes in relations between Loki
@@ -1252,7 +1252,8 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             relation: the `Relation` instance to update.
         """
-        if self._charm.unit.is_leader():
+        # We don't need to set a bunch of data if a relation is going away
+        if self._charm.unit.is_leader() and event and type(event) != RelationDepartedEvent:
             relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
@@ -1260,9 +1261,12 @@ class LokiPushApiProvider(RelationManagerBase):
 
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
-            self._remove_alert_rules_files(self.container)
-            self._generate_alert_rules_files(self.container)
-            self._check_alert_rules()
+            if self.container.can_connect():
+                self._remove_alert_rules_files(self.container)
+                self._generate_alert_rules_files(self.container)
+                self._check_alert_rules()
+            else:
+                logger.debug("Cannot connect to the workload container. Shutting down?")
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1336,7 +1340,7 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        self._process_logging_relation_changed(event.relation)
+        self._process_logging_relation_changed(event.relation, event)
 
     @property
     def _promtail_binary_url(self) -> dict:
