@@ -47,6 +47,7 @@ class LokiTesterCharm(CharmBase):
         """Ensure logging is configured correctly."""
         handler = handler or {}
         logger = logging.getLogger("Loki-Tester")
+        logger.setLevel(logging.INFO)
 
         handlers = {"console": logging.StreamHandler()}
         handlers.update(handler)
@@ -120,7 +121,6 @@ class LokiTesterCharm(CharmBase):
         log_endpoints = self._loki_consumer.loki_endpoints
 
         loki_handlers = {}
-
         if log_endpoints:
             logging_loki.emitter.LokiEmitter.level_tag = "level"
             # TODO (multi-logger): create logggers for each endpoint
