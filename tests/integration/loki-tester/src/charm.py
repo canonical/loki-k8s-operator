@@ -37,11 +37,7 @@ class LokiTesterCharm(CharmBase):
 
         self.topology = ProviderTopology.from_charm(self)
 
-        self.log_handler = None
         self.log_endpoints = []
-        self.set_logger()
-
-        self.log("debug", "Constructed loki tester")
 
     def _setup_logging(self, handler: dict = None) -> None:
         """Ensure logging is configured correctly."""
@@ -90,12 +86,12 @@ class LokiTesterCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _on_stop(self, _):
-        self.set_logger()
+        self.set_logger(local_only=True)
         self.log("debug", "Stopping...")
         self.unit.status = MaintenanceStatus("Stopping...")
 
     def _on_remove(self, _):
-        self.set_logger()
+        self.set_logger(local_only=True)
         self.log("debug", "Removing...")
         self.unit.status = MaintenanceStatus("Removing...")
 
@@ -105,7 +101,7 @@ class LokiTesterCharm(CharmBase):
 
     def _on_loki_push_api_endpoint_departed(self, _):
         # TODO (multi-logger): remove only the logger whoe's endpoint departed
-        self.set_logger()
+        self.set_logger(local_only=True)
         self.log("debug", "Loki push API endpoint departed")
 
     def _on_log_error_action(self, event):
@@ -116,7 +112,11 @@ class LokiTesterCharm(CharmBase):
         else:
             event.fail("Failed to log error message")
 
-    def set_logger(self):
+    def set_logger(self, local_only=False):
+        if local_only:
+            self._setup_logging({})
+            return
+
         tags = self.topology.as_promql_label_dict()
         log_endpoints = self._loki_consumer.loki_endpoints
 

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import is_loki_up
+from helpers import is_loki_up, oci_image
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
+tester_resources = {
+    "loki-tester-image": oci_image(
+        "./tests/integration/loki-tester/metadata.yaml", "loki-tester-image"
+    )
+}
 
 
 class RelatedApp:
@@ -53,6 +58,7 @@ async def test_build_and_deploy(ops_test: OpsTest, loki_charm, loki_tester_charm
         ),
         ops_test.model.deploy(
             loki_tester_charm,
+            resources=tester_resources,
             application_name="loki-tester",
         ),
         ops_test.model.deploy(
@@ -128,6 +134,7 @@ async def test_rerelate_app(ops_test: OpsTest, loki_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(
             loki_tester_charm,
+            resources=tester_resources,
             application_name="loki-tester",
         ),
         ops_test.model.deploy(

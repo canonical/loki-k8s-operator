@@ -4,14 +4,21 @@
 # For a complete list of supported options, see:
 # https://juju.is/docs/sdk/metadata-reference
 name: loki-tester
-display-name: loki-tester
+summary: loki-tester
 description: |
   An integration tester for the Loki Operator.
-summary: |
   This charm exercises the functionality offerred by the Loki Operator
   in order to integration test it.
 platforms:
   - kubernetes
+containers:
+  loki-tester:
+    resource: loki-tester-image
+resources:
+  loki-tester-image:
+    type: oci-image
+    description: pause
+    upstream-source: k8s.gcr.io/pause:3.1
 requires:
   logging:
     interface: loki_push_api

@@ -9,13 +9,18 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, is_loki_up, loki_rules
+from helpers import IPAddressWorkaround, is_loki_up, loki_rules, oci_image
 
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
+tester_resources = {
+    "loki-tester-image": oci_image(
+        "./tests/integration/loki-tester/metadata.yaml", "loki-tester-image"
+    )
+}
 rules_app = "loki-tester"
 rules_app2 = "loki-tester2"
 rules_app3 = "loki-tester3"
@@ -45,6 +50,7 @@ async def test_first_relation_one_alert_rule(ops_test, loki_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(
             loki_tester_charm,
+            resources=tester_resources,
             application_name=rules_app,
         ),
     )
@@ -66,6 +72,7 @@ async def test_second_relation_second_alert_rule(ops_test, loki_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(
             loki_tester_charm,
+            resources=tester_resources,
             application_name=rules_app2,
         ),
     )
@@ -96,6 +103,7 @@ async def test_wrong_alert_rule(ops_test, loki_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(
             loki_tester_charm,
+            resources=tester_resources,
             application_name=rules_app3,
         ),
     )

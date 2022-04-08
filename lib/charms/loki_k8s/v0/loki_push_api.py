@@ -1240,7 +1240,7 @@ class LokiPushApiProvider(RelationManagerBase):
             for relation in self._charm.model.relations[self._relation_name]:
                 self._process_logging_relation_changed(relation)
 
-    def _process_logging_relation_changed(self, relation: Relation, event: RelationEvent = None):
+    def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
 
         Anytime there are changes in relations between Loki
@@ -1255,7 +1255,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 RelationDepartedEvent no updates are sent to the relation data bag
 
         """
-        if self._charm.unit.is_leader() and event and type(event) != RelationDepartedEvent:
+        if self._charm.unit.is_leader():
             # We don't need to set a bunch of data if a relation is going away
             relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
@@ -1343,7 +1343,7 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        self._process_logging_relation_changed(event.relation, event)
+        self._process_logging_relation_changed(event.relation)
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -2015,7 +2015,7 @@ class LogProxyConsumer(ConsumerBase):
         """
         clients = []  # type: list
         for relation in self._charm.model.relations.get(self._relation_name, []):
-            endpoints = json.loads(relation.data[relation.app].get("endpoints", ""))
+            endpoints = json.loads(relation.data[relation.app].get("endpoints", []))
             if endpoints:
                 clients += endpoints
         return clients

@@ -8,12 +8,17 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import get_alertmanager_alerts, loki_alerts
+from helpers import get_alertmanager_alerts, loki_alerts, oci_image
 
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
+tester_resources = {
+    "loki-tester-image": oci_image(
+        "./tests/integration/loki-tester/metadata.yaml", "loki-tester-image"
+    )
+}
 
 
 @pytest.mark.abort_on_fail
@@ -31,6 +36,7 @@ async def test_alert_rules_do_fire(ops_test, loki_charm, loki_tester_charm):
         ),
         ops_test.model.deploy(
             loki_tester_charm,
+            resources=tester_resources,
             application_name=tester_app_name,
         ),
     )
@@ -79,6 +85,7 @@ async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki
         ),
         ops_test.model.deploy(
             loki_tester_charm,
+            resources=tester_resources,
             application_name=tester_app_name,
         ),
         ops_test.model.deploy(
