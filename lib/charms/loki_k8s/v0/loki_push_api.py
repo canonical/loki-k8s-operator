@@ -1588,6 +1588,8 @@ class LokiPushApiConsumer(ConsumerBase):
 
         # This will keep track of broken relations so that we can ignore the endpoints
         # we find in their application data bags
+        # will be reinitiated every time an external event
+        # (like relation broken) is emitted
         self._ignored_relations = []  # type: list
         self.framework.observe(events.relation_broken, self._on_logging_relation_broken)
 
