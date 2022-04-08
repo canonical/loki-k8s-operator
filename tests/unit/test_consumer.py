@@ -181,6 +181,18 @@ class TestReloadAlertRules(unittest.TestCase):
                     self, alert_rules_path=alert_rules_path, recursive=True
                 )
 
+                self.endpoints_in_last_hook = []
+
+                self.framework.observe(
+                    self.loki_consumer.on.loki_push_api_endpoint_joined, self.record_endpoints
+                )
+                self.framework.observe(
+                    self.loki_consumer.on.loki_push_api_endpoint_departed, self.record_endpoints
+                )
+
+            def record_endpoints(self, _):
+                self.endpoints_in_last_hook = self.loki_consumer.loki_endpoints
+
         self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
         # self.harness = Harness(FakeConsumerCharm, meta=FakeConsumerCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)
@@ -269,6 +281,38 @@ class TestReloadAlertRules(unittest.TestCase):
         # THEN relation data is empty again
         relation = self.harness.charm.model.get_relation("logging")
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+
+    def test_endpoints_disappear_during_relation_broken_hook(self):
+        """Scenario: The reload method is called after the alerts dir doesn't exist anymore."""
+        # GIVEN endpoint data in the logging relation
+        self.harness.add_relation_unit(self.rel_id, "loki/0")
+        self.harness.update_relation_data(
+            self.rel_id,
+            "loki",
+            {
+                "endpoints": json.dumps(
+                    [
+                        {
+                            "url": "http://loki-0.loki-endpoints.cos.svc.cluster.local:3100/loki/api/v1/push"
+                        }
+                    ]
+                )
+            },
+        )
+
+        # AND Those endpoints are returned by the Consumer object
+        self.assertEqual(
+            self.harness.charm.endpoints_in_last_hook,
+            [{"url": "http://loki-0.loki-endpoints.cos.svc.cluster.local:3100/loki/api/v1/push"}],
+        )
+
+        # WHEN the logging relation is broken
+        self.harness.remove_relation(self.rel_id)
+
+        # THEN the endpoints are not returned anymore
+        # Notice that, if we were just doing self.harness.charm.loki_consumer.loki_endpoints,
+        # it would NOT be a valid test, as the check would happen outside of the hook
+        self.assertEqual(self.harness.charm.endpoints_in_last_hook, [])
 
 
 class TestAlertRuleFormat(unittest.TestCase):
