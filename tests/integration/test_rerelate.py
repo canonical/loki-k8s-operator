@@ -104,10 +104,10 @@ async def test_remove_related_app(ops_test: OpsTest):
     ]
 
     # retcode, stdout, stderr = await ops_test.run(*cmd)
+    await ops_test.model.applications["loki-tester"].remove(),  # this hangs, for some reason
 
     await asyncio.gather(
-        # ops_test.model.applications["loki-tester"].remove(),  # this hangs, for some reason
-        ops_test.run(*cmd),
+        ops_test.run(*cmd),  # and now force remove
         ops_test.model.applications["alertmanager"].remove(),
         # Block until it is really gone. Added after an itest failed when tried to redeploy:
         # juju.errors.JujuError: ['cannot add application "...": application already exists']
