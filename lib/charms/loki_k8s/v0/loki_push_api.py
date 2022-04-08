@@ -1218,9 +1218,15 @@ class LokiPushApiProvider(RelationManagerBase):
                 logger.debug("Could not create loki directory.")
 
         events = self._charm.on[relation_name]
+        self.framework.observe(events.relation_created, self._on_logging_relation_created)
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
+
+    def _on_logging_relation_created(self, event: RelationCreatedEvent):
+        if self._charm.unit.is_leader():
+            event.relation.data[self._charm.app].update(self._promtail_binary_url)
+            logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
 
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
@@ -1252,17 +1258,18 @@ class LokiPushApiProvider(RelationManagerBase):
             relation: the `Relation` instance to update.
         """
         if self._charm.unit.is_leader():
-            relation.data[self._charm.app].update(self._promtail_binary_url)
-            logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
             logger.debug("Saved endpoints in relation data")
 
         if relation.data.get(relation.app).get("alert_rules"):
             """Regenerate rule files within container from relation data."""
             logger.debug("Saved alerts rules to disk")
-            self._remove_alert_rules_files(self.container)
-            self._generate_alert_rules_files(self.container)
-            self._check_alert_rules()
+            if self.container.can_connect():
+                self._remove_alert_rules_files(self.container)
+                self._generate_alert_rules_files(self.container)
+                self._check_alert_rules()
+            else:
+                logger.debug("Cannot connect to the workload container. Shutting down?")
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""

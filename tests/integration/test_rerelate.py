@@ -93,6 +93,11 @@ async def test_rerelate(ops_test: OpsTest):
 
 @pytest.mark.abort_on_fail
 async def test_remove_related_app(ops_test: OpsTest):
+    # TODO figure out why loki tester is not going away nicely
+    await ops_test.model.applications["loki-tester"].remove()  # this hangs, for some reason
+    await ops_test.model.applications["alertmanager"].remove()
+
+    await asyncio.sleep(60)
 
     cmd = [
         "juju",
@@ -102,18 +107,19 @@ async def test_remove_related_app(ops_test: OpsTest):
         "--no-wait",
         "loki-tester",
     ]
-
-    # TODO figure out why loki tester is not going away nicely
-    await ops_test.model.applications["loki-tester"].remove(),  # this hangs, for some reason
     await ops_test.run(*cmd),  # so now force remove, which helps it go away
 
-    await asyncio.gather(
-        ops_test.model.applications["alertmanager"].remove(),
-        # Block until it is really gone. Added after an itest failed when tried to redeploy:
-        # juju.errors.JujuError: ['cannot add application "...": application already exists']
-        ops_test.model.block_until(lambda: "loki-tester" not in ops_test.model.applications),
-        ops_test.model.block_until(lambda: "alertmanager" not in ops_test.model.applications),
-    )
+    # await asyncio.gather(
+    #     # ops_test.model.applications["alertmanager"].remove(),
+    #     # Block until it is really gone. Added after an itest failed when tried to redeploy:
+    #     # juju.errors.JujuError: ['cannot add application "...": application already exists']
+    #     ops_test.model.block_until(lambda: "loki-tester" not in ops_test.model.applications),
+    #     ops_test.model.block_until(lambda: "alertmanager" not in ops_test.model.applications),
+    # )
+    await ops_test.model.block_until(
+        lambda: "loki-tester" not in ops_test.model.applications,
+        lambda: "alertmanager" not in ops_test.model.applications,
+    ),
 
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
     assert await is_loki_up(ops_test, app_name)
