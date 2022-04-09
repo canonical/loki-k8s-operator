@@ -10,7 +10,7 @@ import logging_loki  # type: ignore
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, ProviderTopology
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, MaintenanceStatus
+from ops.model import ActiveStatus
 
 
 class LokiTesterCharm(CharmBase):
@@ -23,7 +23,7 @@ class LokiTesterCharm(CharmBase):
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
-        self.framework.observe(self.on.stop, self._on_stop)
+        self.framework.observe(self.on.loki_tester_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.log_error_action, self._on_log_error_action)
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
@@ -35,8 +35,6 @@ class LokiTesterCharm(CharmBase):
         )
 
         self.topology = ProviderTopology.from_charm(self)
-
-        self.log_endpoints = []
 
     def _setup_logging(self, handler: dict = None) -> None:
         """Ensure logging is configured correctly."""
@@ -75,35 +73,30 @@ class LokiTesterCharm(CharmBase):
             )
         )
 
+    def _on_pebble_ready(self, _) -> None:
+        """Set the unit to ready when Pebble is ready."""
+        self.unit.status = ActiveStatus()
+
     def _on_config_changed(self, _):
         """Handle changed configuration."""
+        self.set_logger()
         self.log("debug", "Handling configuration change")
-        self.unit.status = ActiveStatus()
 
     def _on_update_status(self, _):
+        self.set_logger()
         self.log("debug", "Updating status")
-        self.unit.status = ActiveStatus()
-
-    def _on_stop(self, _):
-        self.set_logger(local_only=True)
-        self.log("debug", "Stopping...")
-        self.unit.status = MaintenanceStatus("Stopping...")
-
-    def _on_remove(self, _):
-        self.set_logger(local_only=True)
-        self.log("debug", "Removing...")
-        self.unit.status = MaintenanceStatus("Removing...")
 
     def _on_loki_push_api_endpoint_joined(self, _):
-        self.log("debug", "Loki push API endpoint joined")
         self.set_logger()
+        self.log("debug", "Loki push API endpoint joined")
 
     def _on_loki_push_api_endpoint_departed(self, _):
-        # TODO (multi-logger): remove only the logger whoe's endpoint departed
+        # TODO (multi-logger): remove only the logger whose endpoint departed
         self.set_logger(local_only=True)
         self.log("debug", "Loki push API endpoint departed")
 
     def _on_log_error_action(self, event):
+        self.set_logger()
         message = event.params["message"]
         logged = self.log("error", message)
         if logged:
@@ -122,7 +115,7 @@ class LokiTesterCharm(CharmBase):
         loki_handlers = {}
         if log_endpoints:
             logging_loki.emitter.LokiEmitter.level_tag = "level"
-            # TODO (multi-logger): create logggers for each endpoint
+            # TODO (multi-logger): create loggers for each endpoint
 
             loki_handlers.update(
                 {

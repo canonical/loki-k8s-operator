@@ -137,18 +137,18 @@ async def test_rerelate_app(ops_test: OpsTest, loki_tester_charm):
         ops_test.model.deploy(
             loki_tester_charm,
             resources=tester_resources,
-            application_name="loki-tester",
+            application_name="loki-tester-new",
         ),
         ops_test.model.deploy(
             "ch:alertmanager-k8s",
-            application_name="alertmanager",
+            application_name="alertmanager-new",
             channel="edge",
         ),
     )
 
     await asyncio.gather(
-        ops_test.model.add_relation(app_name, "loki-tester"),
-        ops_test.model.add_relation(app_name, "alertmanager"),
+        ops_test.model.add_relation(app_name, "loki-tester-new"),
+        ops_test.model.add_relation(app_name, "alertmanager-new"),
     )
     await ops_test.model.wait_for_idle(status="active", timeout=600)
 

@@ -452,6 +452,7 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
+    RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
@@ -1234,20 +1235,21 @@ class LokiPushApiProvider(RelationManagerBase):
                 charm must update its relation data.
         """
         if isinstance(event, RelationEvent):
-            self._process_logging_relation_changed(event.relation)
+            self._process_logging_relation_changed(event.relation, event)
         else:
             # Upgrade event or other charm-level event
             for relation in self._charm.model.relations[self._relation_name]:
                 self._process_logging_relation_changed(relation)
 
-    def _process_logging_relation_changed(self, relation: Relation):
+    def _process_logging_relation_changed(self, relation: Relation, event: RelationEvent = None):
         """Handle changes in related consumers.
 
-        Anytime there are changes in relations between Loki
-        and its consumers charms, Loki set the `loki_push_api`
-        into the relation data.
-        Besides Loki generates alert rules files based what
-        consumer charms forwards,
+        When there are changes in relations between Loki and its consumers,
+        check whether any changes should be written to the relation data for
+        where to download promtail and/or possible endpoints.
+
+        Additionally, check whether any alert rules are present, and, if so,
+        write them into the Loki container.
 
         Args:
             relation: the `Relation` instance to update.
@@ -1255,14 +1257,28 @@ class LokiPushApiProvider(RelationManagerBase):
                 RelationDepartedEvent no updates are sent to the relation data bag
 
         """
-        if self._charm.unit.is_leader():
-            # We don't need to set a bunch of data if a relation is going away
-            relation.data[self._charm.app].update(self._promtail_binary_url)
+        if self._charm.unit.is_leader() and event not in [
+            RelationBrokenEvent,
+            RelationDepartedEvent,
+        ]:
+            # Condense the updates so we aren't setting keys to the same values
+            # every time, such as _promtail_binary_url
+            current_data = {}
+            updated_data = {
+                "endpoints": json.dumps(self._endpoints()),
+                **self._promtail_binary_url,
+            }
+
+            for k in updated_data.keys():
+                current_data[k] = relation.data[self._charm.app].get(k, "")
+
+            current_data.update(updated_data)
+            relation.data[self._charm.app].update(updated_data)
+
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
-            relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
             logger.debug("Saved endpoints in relation data")
 
-        if relation.data.get(relation.app).get("alert_rules"):
+        if relation.data.get(relation.app).get("alert_rules", ""):
             logger.debug("Saved alerts rules to disk")
             if self.container.can_connect():
                 self._remove_alert_rules_files(self.container)
