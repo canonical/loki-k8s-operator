@@ -75,8 +75,6 @@ async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki
     alertmanager_app_name = "alertmanager"
     app_names = [loki_app_name, tester_app_name, alertmanager_app_name]
 
-    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
-
     await asyncio.gather(
         ops_test.model.deploy(
             loki_charm,

@@ -72,7 +72,7 @@ async def test_build_and_deploy(ops_test: OpsTest, loki_charm, loki_tester_charm
         ops_test.model.add_relation(app_name, "loki-tester"),
         ops_test.model.add_relation(app_name, "alertmanager"),
     )
-    await ops_test.model.wait_for_idle(status="active", timeout=300)
+    await ops_test.model.wait_for_idle(status="active", timeout=600)
 
     assert await is_loki_up(ops_test, app_name)
 
@@ -83,7 +83,7 @@ async def test_remove_relation(ops_test: OpsTest):
         ops_test.model.applications[app_name].remove_relation("logging", "loki-tester"),
         ops_test.model.applications[app_name].remove_relation("alertmanager", "alertmanager"),
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=300)
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=600)
     assert await is_loki_up(ops_test, app_name)
 
 
@@ -93,7 +93,7 @@ async def test_rerelate(ops_test: OpsTest):
         ops_test.model.add_relation(app_name, "loki-tester"),
         ops_test.model.add_relation(app_name, "alertmanager"),
     )
-    await ops_test.model.wait_for_idle(status="active", timeout=300)
+    await ops_test.model.wait_for_idle(status="active", timeout=600)
     assert await is_loki_up(ops_test, app_name)
 
 
@@ -127,7 +127,7 @@ async def test_remove_related_app(ops_test: OpsTest):
         logger.info("Forcibly removing {}".format(app))
         await ops_test.run(*cmd)
 
-    await ops_test.model.wait_for_idle(wait_for_active=True, timeout=300)
+    await ops_test.model.wait_for_idle(apps=[app_name], timeout=600)
     assert await is_loki_up(ops_test, app_name)
 
 
@@ -150,6 +150,6 @@ async def test_rerelate_app(ops_test: OpsTest, loki_tester_charm):
         ops_test.model.add_relation(app_name, "loki-tester"),
         ops_test.model.add_relation(app_name, "alertmanager"),
     )
-    await ops_test.model.wait_for_idle(status="active", timeout=300)
+    await ops_test.model.wait_for_idle(status="active", timeout=600)
 
     assert await is_loki_up(ops_test, app_name)

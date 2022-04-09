@@ -7,3 +7,4 @@ build
 venv
 .tox
 tests/integration/loki-tester/lib/charms/
+tests/integration/loki-tester/src/loki_alert_rules/free-standing

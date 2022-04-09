@@ -25,7 +25,6 @@ class LokiTesterCharm(CharmBase):
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.stop, self._on_stop)
         self.framework.observe(self.on.log_error_action, self._on_log_error_action)
-        self.framework.observe(self.on.log_error_action, self._on_log_error_action)
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
             self._on_loki_push_api_endpoint_joined,
