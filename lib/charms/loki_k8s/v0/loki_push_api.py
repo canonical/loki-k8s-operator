@@ -1282,7 +1282,6 @@ class LokiPushApiProvider(RelationManagerBase):
             relation = self._charm.model.get_relation(self._relation_name)
 
         relation.data[self._charm.app].update({"endpoints": json.dumps(self._endpoints())})
-        logger.debug("Saved endpoints in relation data")
 
     def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.

@@ -159,16 +159,13 @@ class TestLokiPushApiProvider(unittest.TestCase):
             self.assertTrue("endpoints" in data)
             self.assertTrue(json.dumps(expected_data[0]) in data["endpoints"])
             self.assertTrue(json.dumps(expected_data[1]) in data["endpoints"])
+
             self.assertEqual(
                 logger.output[1],
-                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved endpoints in relation data",
-            )
-            self.assertEqual(
-                logger.output[2],
                 "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
             )
             self.assertEqual(
-                logger.output[3], "DEBUG:charms.loki_k8s.v0.loki_push_api:Checking alert rules: Ok"
+                logger.output[2], "DEBUG:charms.loki_k8s.v0.loki_push_api:Checking alert rules: Ok"
             )
 
     @patch("os.makedirs", MagicMock())
