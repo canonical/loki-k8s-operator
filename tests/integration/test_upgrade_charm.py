@@ -46,7 +46,7 @@ async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_char
 
 
 @pytest.mark.abort_on_fail
-async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm):
+async def test_refresh_with_relations(ops_test: OpsTest, loki_charm):
     # Deploy related apps
     await asyncio.gather(
         ops_test.model.deploy("ch:alertmanager-k8s", application_name="am", channel="edge"),
