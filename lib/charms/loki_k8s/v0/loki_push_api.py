@@ -1587,9 +1587,13 @@ class LokiPushApiConsumer(ConsumerBase):
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
 
         # This will keep track of broken relations so that we can ignore the endpoints
-        # we find in their application data bags
-        # will be reinitiated every time an external event
-        # (like relation broken) is emitted
+        # we find in their application data bags. Assuming that the LokiPushApiConsumer is
+        # instantiated in the charm constructor, this list of ignored relations is effectively
+        # reinitiated every time an external event (like relation broken) is emitted. Note that
+        # library-issued events, like those LokiPushApiEvents, do not cause the charm constructor
+        # to be run again: the call to emit an event like those of LokiPushApiEvents causes its
+        # handler declared in the charm to be executed within the same event hook as the one that
+        # caused the LokiPushApiEvents event to be emitted.
         self._ignored_relations = []  # type: list
         self.framework.observe(events.relation_broken, self._on_logging_relation_broken)
 
