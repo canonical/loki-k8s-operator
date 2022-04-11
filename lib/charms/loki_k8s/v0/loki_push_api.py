@@ -1285,8 +1285,10 @@ class LokiPushApiProvider(RelationManagerBase):
                 # Don't try to set updates on relations where there aren't any units left.
                 # It may confuse Juju and it's useless anyway
                 update_data = False if len(event.relation.units) == 0 else True
+                if not update_data:
+                    logger.error("No units in relation -- not updating")
 
-        if update_data:
+        if update_data and self._charm.unit.is_leader():
             # Condense the updates so we aren't setting keys to the same values
             # every time, such as _promtail_binary_url
             current_data = {}
@@ -1640,6 +1642,7 @@ class LokiPushApiConsumer(ConsumerBase):
 
     def _on_logging_relation_changed(self, event: RelationEvent):
         self._handle_alert_rules(event.relation)
+        self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.

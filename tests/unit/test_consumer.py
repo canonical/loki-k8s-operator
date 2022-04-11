@@ -131,7 +131,7 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             "promtail",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        mock_events.emit.assert_called_once()
+        self.assertEqual(mock_events.emit.call_count, 2)
 
     @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiEvents.loki_push_api_endpoint_joined")
     def test__on_upgrade_charm_endpoint_joined_event_fired_for_follower(self, mock_events):
@@ -144,7 +144,7 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             "promtail",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        mock_events.emit.assert_called_once()
+        self.assertEqual(mock_events.emit.call_count, 2)
 
 
 class TestReloadAlertRules(unittest.TestCase):
