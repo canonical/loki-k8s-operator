@@ -1379,14 +1379,15 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             container: Container which has alert rules files to be deleted
         """
-        files = container.list_files(self._rules_dir)
-        logger.debug("Previous Alert rules files deleted")
-        for f in files:
-            if container.can_connect():
-                logger.debug("Removing file... %s", f.path)
-                container.remove_path(f.path)
-            else:
-                logger.warning("Could not connect to container. Shutting down?")
+        if container.can_connect():
+            files = container.list_files(self._rules_dir)
+            logger.debug("Previous Alert rules files deleted")
+            for f in files:
+                if container.can_connect():
+                    logger.debug("Removing file... %s", f.path)
+                    container.remove_path(f.path)
+                else:
+                    logger.warning("Could not connect to container. Shutting down?")
 
     def _generate_alert_rules_files(self, container: Container) -> None:
         """Generate and upload alert rules files.

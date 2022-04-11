@@ -133,8 +133,9 @@ class TestLokiPushApiProvider(unittest.TestCase):
             self.assertTrue(
                 any(
                     [
-                        l == "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk"
-                        for l in logger.output
+                        log_msg
+                        == "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk"
+                        for log_msg in logger.output
                     ]
                 )
             )
