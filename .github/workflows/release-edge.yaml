@@ -90,7 +90,7 @@ jobs:
 
   integration-test:
     name: Integration tests (microk8s)
-    uses: .github/workflows/integration-tests.yml@${{github.ref}}
+    uses: ./.github/workflows/integration-tests.yml@${{github.ref}}
 
   release-to-charmhub:
     name: Release to CharmHub
