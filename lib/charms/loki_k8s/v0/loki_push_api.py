@@ -1282,12 +1282,9 @@ class LokiPushApiProvider(RelationManagerBase):
         update_data = True
         if self._charm.unit.is_leader():
             if event and type(event) in [RelationBrokenEvent, RelationDepartedEvent]:
-                logger.error(
-                    "There are {} units in the relation: {}".format(
-                        len(event.relation.units), event.relation.units
-                    )
-                )
-                update_data = False
+                # Don't try to set updates on relations where there aren't any units left.
+                # It may confuse Juju and it's useless anyway
+                update_data = False if len(event.relation.units) == 0 else True
 
         if update_data:
             # Condense the updates so we aren't setting keys to the same values
