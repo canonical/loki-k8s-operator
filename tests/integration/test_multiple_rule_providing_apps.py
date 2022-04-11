@@ -18,6 +18,8 @@ app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
 rules_app = "cos-config"
 rules_app2 = "cos-config2"
+rules_app3 = "cos-config3"
+rules_after_relation = None
 
 
 @pytest.mark.abort_on_fail
@@ -72,24 +74,22 @@ async def test_first_relation_one_alert_rule(ops_test):
         await ops_test.model.wait_for_idle(
             apps=[app_name, rules_app], status="active", timeout=1000
         )
-
+    global rules_after_relation
     rules_after_relation = await loki_rules(ops_test, app_name)
     assert len(rules_after_relation) == 1
 
 
 @pytest.mark.abort_on_fail
 async def test_second_relation_second_alert_rule(ops_test):
-    await asyncio.gather(
-        ops_test.model.deploy(
-            "ch:cos-configuration-k8s",
-            application_name=rules_app2,
-            channel="edge",
-            config={
-                "git_repo": "https://github.com/canonical/loki-k8s-operator",
-                "git_branch": "main",
-                "loki_alert_rules_path": "tests/sample_rule_files/free-standing",
-            },
-        ),
+    await ops_test.model.deploy(
+        "ch:cos-configuration-k8s",
+        application_name=rules_app2,
+        channel="edge",
+        config={
+            "git_repo": "https://github.com/canonical/loki-k8s-operator",
+            "git_branch": "main",
+            "loki_alert_rules_path": "tests/sample_rule_files/free-standing",
+        },
     )
 
     # force an update, just in case the files showed up on disk after the last hook fired
@@ -109,9 +109,33 @@ async def test_second_relation_second_alert_rule(ops_test):
 
 
 @pytest.mark.abort_on_fail
-async def test_remove_app_one_alert_rules_is_reteined(ops_test):
-    await ops_test.model.applications[rules_app].remove()
-    await ops_test.model.block_until(lambda: rules_app not in ops_test.model.applications)
-
+async def test_remove_app_one_alert_rules_is_retained(ops_test):
+    await ops_test.model.applications[rules_app2].remove()
+    await ops_test.model.block_until(lambda: rules_app2 not in ops_test.model.applications)
+    global rules_after_relation
     rules_after_delete_relation2 = await loki_rules(ops_test, app_name)
-    assert len(rules_after_delete_relation2) == 1
+    assert rules_after_delete_relation2 == rules_after_relation
+
+
+@pytest.mark.abort_on_fail
+async def test_wrong_alert_rule(ops_test):
+    await ops_test.model.deploy(
+        "ch:cos-configuration-k8s",
+        application_name=rules_app3,
+        channel="edge",
+        config={
+            "git_repo": "https://github.com/canonical/loki-k8s-operator",
+            "git_branch": "error_alerts",
+            "loki_alert_rules_path": "tests/sample_rule_files/free-standing/error",
+        },
+    )
+
+    # force an update, just in case the files showed up on disk after the last hook fired
+    action = await ops_test.model.applications[rules_app3].units[0].run_action("sync-now")
+    await action.wait()
+
+    # form a relation between loki and the app that provides rules
+    await ops_test.model.add_relation(app_name, rules_app3)
+
+    async with IPAddressWorkaround(ops_test):
+        await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
