@@ -117,6 +117,21 @@ class LokiTesterCharm(CharmBase):
             event.fail("Failed to log error message")
 
     def set_logger(self, local_only=False):
+        """Set self.log to a meaningful value.
+
+        Set the log attribute for this charm. There is a `local_only` param which
+        can be used on RelationBroken or RelationDeparted where leaving a "remote"
+        Loki logger may lead to attempts to send a request to a dying endpoint,
+        and `local_only` will ensure that it is only to the console of this charm
+        to isolate behavior.
+
+        If `local_only` is not set, try to fetch a list of Loki endpoints and set
+        the logger for this charm to match. If the endpoint list is empty, then
+        it will be console only.
+
+        Args:
+            local_only: a boolean to enable only local console logging
+        """
         if local_only:
             self._setup_logging({})
             return

@@ -1257,7 +1257,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 RelationDepartedEvent no updates are sent to the relation data bag
 
         """
-        if self._charm.unit.is_leader() and event not in [
+        if self._charm.unit.is_leader() and type(event) not in [
             RelationBrokenEvent,
             RelationDepartedEvent,
         ]:
@@ -1278,14 +1278,12 @@ class LokiPushApiProvider(RelationManagerBase):
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
             logger.debug("Saved endpoints in relation data")
 
-        if relation.data.get(relation.app).get("alert_rules", ""):
+        if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
-            if self.container.can_connect():
-                self._remove_alert_rules_files(self.container)
-                self._generate_alert_rules_files(self.container)
-                self._check_alert_rules()
-            else:
-                logger.debug("Cannot connect to the workload container. Shutting down?")
+            self._remove_alert_rules_files(self.container)
+            self._generate_alert_rules_files(self.container)
+            self._check_alert_rules()
+            logger.debug("Cannot connect to the workload container. Shutting down?")
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1384,8 +1382,11 @@ class LokiPushApiProvider(RelationManagerBase):
         files = container.list_files(self._rules_dir)
         logger.debug("Previous Alert rules files deleted")
         for f in files:
-            logger.debug("Removing file... %s", f.path)
-            container.remove_path(f.path)
+            if container.can_connect():
+                logger.debug("Removing file... %s", f.path)
+                container.remove_path(f.path)
+            else:
+                logger.warning("Could not connect to container. Shutting down?")
 
     def _generate_alert_rules_files(self, container: Container) -> None:
         """Generate and upload alert rules files.
@@ -1397,8 +1398,12 @@ class LokiPushApiProvider(RelationManagerBase):
             filename = "{}_alert.rules".format(identifier)
             path = os.path.join(self._rules_dir, filename)
             rules = yaml.dump({"groups": alert_rules["groups"]})
-            container.push(path, rules, make_dirs=True)
-            logger.debug("Updated alert rules file %s", filename)
+
+            if container.can_connect():
+                container.push(path, rules, make_dirs=True)
+                logger.debug("Updated alert rules file %s", filename)
+            else:
+                logger.warning("Could not connect to the container. Shutting down?")
 
     def alerts(self) -> dict:
         """Fetch alerts for all relations.

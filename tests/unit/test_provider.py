@@ -130,9 +130,13 @@ class TestLokiPushApiProvider(unittest.TestCase):
             self.harness.add_relation_unit(rel_id, "promtail/0")
 
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
-            self.assertEqual(
-                sorted(logger.output)[0],
-                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
+            self.assertTrue(
+                any(
+                    [
+                        l == "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk"
+                        for l in logger.output
+                    ]
+                )
             )
 
     @patch("os.makedirs", MagicMock())
