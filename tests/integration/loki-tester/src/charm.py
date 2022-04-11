@@ -23,7 +23,6 @@ class LokiTesterCharm(CharmBase):
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
-        self.framework.observe(self.on.loki_tester_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.log_error_action, self._on_log_error_action)
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
@@ -36,25 +35,39 @@ class LokiTesterCharm(CharmBase):
 
         self.topology = ProviderTopology.from_charm(self)
 
-    def _setup_logging(self, handler: dict = None) -> None:
-        """Ensure logging is configured correctly."""
-        handler = handler or {}
+    def _setup_logging(self, handlers: dict = None) -> None:
+        """Ensure logging is configured correctly.
+
+        A dict of "wanted" loggers is passed in, and the list of current loggers known to
+        `logging.getLogger()` is compared. If the "wanted" loggers are not part of that list,
+        or that list has loggers which are not "wanted", it is reconciled via `addHandler()` and
+        `removeHandler()`. Python's `logging` objects are actually global variables, and this
+        add/remove is a necessary step to ensure the state is "correct" rather than blindly
+        adding/removing them.
+
+        Args:
+            handlers: a dict of 'name' -> handler objects
+        """
+        handlers = handlers or {}
         logger = logging.getLogger("Loki-Tester")
         logger.setLevel(logging.INFO)
 
-        handlers = {"console": logging.StreamHandler()}
-        handlers.update(handler)
+        # Make sure we always have a local console logger
+        console_handler = {"console": logging.StreamHandler()}
+        handlers.update(console_handler)
 
         for k, v in handlers.items():
             # Give each handler a "name" property which matches so we can find it
             v.name = k
 
+        # Check against logger.Manager and exclude "useless" values like logging.Placeholder
         existing_handlers: dict[str, logging.Handler] = {v.name: v for v in logger.manager.loggerDict.values() if type(v) == logging.Handler}  # type: ignore
 
         if set(handlers.keys()) == set(existing_handlers.keys()):
             # Nothing to do
             return
 
+        # If we're here, we need to add or remove some loggers
         to_remove = [v for k, v in existing_handlers.items() if k not in handlers]
         to_add = [v for k, v in handlers.items() if k not in existing_handlers]
 
@@ -73,16 +86,15 @@ class LokiTesterCharm(CharmBase):
             )
         )
 
-    def _on_pebble_ready(self, _) -> None:
-        """Set the unit to ready when Pebble is ready."""
-        self.unit.status = ActiveStatus()
-
     def _on_config_changed(self, _):
         """Handle changed configuration."""
+        self.unit.status = ActiveStatus()
         self.set_logger()
         self.log("debug", "Handling configuration change")
 
     def _on_update_status(self, _):
+        """Handle status updates."""
+        self.unit.status = ActiveStatus()
         self.set_logger()
         self.log("debug", "Updating status")
 
