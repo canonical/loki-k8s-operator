@@ -58,7 +58,7 @@ class LokiOperatorCharm(CharmBase):
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.ingress_per_unit = IngressPerUnitRequirer(
-            self, endpoint="ingress-per-unit", port=self._port
+            self, relation_name="ingress", port=self._port
         )
         external_url = urlparse(self._external_url)
         self.grafana_source_provider = GrafanaSourceProvider(
