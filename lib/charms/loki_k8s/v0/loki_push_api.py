@@ -1312,7 +1312,10 @@ class LokiPushApiProvider(RelationManagerBase):
         path = "/loki/api/v1/push"
 
         if self._charm.ingress_per_unit.urls:
-            return [{"url": url + path} for url in self._charm.ingress_per_unit.urls.values()]
+            return [
+                {"url": url.rstrip("/") + path}
+                for url in self._charm.ingress_per_unit.urls.values()
+            ]
 
         peers = [*self._charm.meta.peers.keys()][0]
         units = self._charm.model.get_relation(peers).units
