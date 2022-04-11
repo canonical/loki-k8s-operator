@@ -45,7 +45,7 @@ async def test_ingress_traefik_k8s(ops_test, loki_charm):
     apps = [loki_name, traefik_name]
     await ops_test.model.wait_for_idle(apps=apps, status="active")
     assert await is_loki_up(ops_test, loki_name)
-    await ops_test.model.add_relation(traefik_name, f"{loki_name}:ingress-per-unit")
+    await ops_test.model.add_relation(traefik_name, f"{loki_name}:ingress")
 
     # Wait a little more than usual, there are various rounds of relation_changed
     # to be processed.

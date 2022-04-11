@@ -43,7 +43,7 @@ provides:
 requires:
   alertmanager:
     interface: alertmanager_dispatch
-  ingress-per-unit:
+  ingress:
     interface: ingress_per_unit
     limit: 1
 
