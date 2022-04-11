@@ -70,7 +70,7 @@ class LokiOperatorCharm(CharmBase):
 
         self.loki_provider = LokiPushApiProvider(
             self,
-            address=external_url.hostname or "",
+            address=external_url.hostname or self.hostname,
             port=external_url.port or self._port,
             scheme=external_url.scheme,
             path=f"{external_url.path}/loki/api/v1/push",

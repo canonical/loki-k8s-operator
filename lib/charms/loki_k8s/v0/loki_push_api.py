@@ -1173,7 +1173,7 @@ class LokiPushApiProvider(RelationManagerBase):
         port: Union[str, int] = 3100,
         rules_dir="/loki/rules",
         scheme: str = "http",
-        address: str = "",
+        address: str = "localhost",
         path: str = "loki/api/v1/push",
     ):
         """A Loki service provider.
