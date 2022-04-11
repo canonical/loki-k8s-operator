@@ -10,27 +10,33 @@ from typing import List
 
 import yaml
 from pytest_operator.plugin import OpsTest
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
 
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
     status = await ops_test.model.get_status()  # noqa: F821
-    return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
+    address = status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
+    if not address:
+        raise RuntimeError("Failed to get unit address")
+
+    return address
 
 
-async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
-    # Sometimes get_unit_address returns a None, no clue why, so looping until it's not
-    addresses = [""] * num_units
-    while not all(addresses):
-        addresses = [await get_unit_address(ops_test, app_name, i) for i in range(num_units)]
-    logger.info("Loki addresses: %s", addresses)
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
+async def is_loki_up(ops_test, app_name, unit_num=0) -> bool:
+    address = await get_unit_address(ops_test, app_name, unit_num)
+    logger.debug("Loki address: %s", address)
 
-    def get(url) -> bool:
-        response = urllib.request.urlopen(url, data=None, timeout=2.0)
-        return response.code == 200 and "version" in json.loads(response.read())
+    url = f"http://{address}:3100/loki/api/v1/status/buildinfo"
+    response = urllib.request.urlopen(url, data=None, timeout=2.0)
 
-    return all(get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses)
+    if response.code == 200 and "version" in json.loads(response.read()):
+        return True
+
+    return False
 
 
 async def loki_rules(ops_test, app_name) -> dict:
