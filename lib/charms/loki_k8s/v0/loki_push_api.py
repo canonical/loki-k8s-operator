@@ -1220,11 +1220,38 @@ class LokiPushApiProvider(RelationManagerBase):
                 logger.debug("Could not create loki directory.")
 
         events = self._charm.on[relation_name]
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
+        self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
-    def _on_logging_relation_changed(self, event: HookEvent):
+    def _on_lifecycle_event(self, _: HookEvent):
+        """Handle relation data on charm lifecycle events.
+
+        Anytime there are changes in the relation between Loki
+        and its consumers charms.
+
+        Args:
+            event: a `CharmEvent` in response to which the consumer
+                charm must update its relation data.
+        """
+        # Upgrade event or other charm-level event
+        for relation in self._charm.model.relations[self._relation_name]:
+            self._process_logging_relation_changed(relation)
+
+    def _on_logging_relation_joined(self, event: RelationEvent):
+        """Handle changes when a relation is joined.
+
+        Anytime there are changes in the relation between Loki
+        and its consumers charms.
+
+        Args:
+            event: a `CharmEvent` in response to which the consumer
+                charm must update its relation data.
+        """
+        self._process_logging_relation_changed(event.relation)
+
+    def _on_logging_relation_changed(self, event: RelationEvent):
         """Handle changes in related consumers.
 
         Anytime there are changes in the relation between Loki
@@ -1234,12 +1261,7 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-        if isinstance(event, RelationEvent):
-            self._process_logging_relation_changed(event.relation, event)
-        else:
-            # Upgrade event or other charm-level event
-            for relation in self._charm.model.relations[self._relation_name]:
-                self._process_logging_relation_changed(relation)
+        self._process_logging_relation_changed(event.relation, event)
 
     def _process_logging_relation_changed(self, relation: Relation, event: RelationEvent = None):
         """Handle changes in related consumers.
@@ -1257,10 +1279,17 @@ class LokiPushApiProvider(RelationManagerBase):
                 RelationDepartedEvent no updates are sent to the relation data bag
 
         """
-        if self._charm.unit.is_leader() and type(event) not in [
-            RelationBrokenEvent,
-            RelationDepartedEvent,
-        ]:
+        update_data = True
+        if self._charm.unit.is_leader():
+            if event and type(event) in [RelationBrokenEvent, RelationDepartedEvent]:
+                logger.error(
+                    "There are {} units in the relation: {}".format(
+                        len(event.relation.units), event.relation.units
+                    )
+                )
+                update_data = False
+
+        if update_data:
             # Condense the updates so we aren't setting keys to the same values
             # every time, such as _promtail_binary_url
             current_data = {}
@@ -1348,8 +1377,6 @@ class LokiPushApiProvider(RelationManagerBase):
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
             return True
 
-        return False
-
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
 
@@ -1357,7 +1384,7 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        self._process_logging_relation_changed(event.relation)
+        self._process_logging_relation_changed(event.relation, event)
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -1582,12 +1609,13 @@ class LokiPushApiConsumer(ConsumerBase):
         )
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         events = self._charm.on[relation_name]
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
+        self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
-    def _on_logging_relation_changed(self, event: HookEvent):
-        """Handle changes in related consumers.
+    def _on_lifecycle_event(self, _: HookEvent):
+        """Handle updating providers on charm lifecycle events.
 
         Anytime there are changes in the relation between Loki
         and its consumers charms.
@@ -1601,21 +1629,20 @@ class LokiPushApiConsumer(ConsumerBase):
             loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
                 file is encountered or if `alert_rules_path` is empty.
         """
-        if isinstance(event, RelationEvent):
-            self._process_logging_relation_changed(event.relation)
-        else:
-            # Upgrade event or other charm-level event
-            for relation in self._charm.model.relations[self._relation_name]:
-                self._process_logging_relation_changed(relation)
+        # Upgrade event or other charm-level event
+        self._reinitialize_alert_rules()
 
     def _reinitialize_alert_rules(self):
         """Reloads alert rules and updates all relations."""
         for relation in self._charm.model.relations[self._relation_name]:
             self._handle_alert_rules(relation)
 
-    def _process_logging_relation_changed(self, relation: Relation):
-        self._handle_alert_rules(relation)
+    def _on_logging_relation_joined(self, event: RelationEvent):
+        self._handle_alert_rules(event.relation)
         self.on.loki_push_api_endpoint_joined.emit()
+
+    def _on_logging_relation_changed(self, event: RelationEvent):
+        self._handle_alert_rules(event.relation)
 
     def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.

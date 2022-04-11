@@ -78,6 +78,7 @@ class FakeLokiCharm(CharmBase):
             (object,),
             {
                 "make_dir": lambda *a, **kw: None,
+                "push": lambda *a, **kw: None,
                 "remove_path": lambda *a, **kw: None,
                 "can_connect": lambda *a, **kw: True,
                 "list_files": lambda *a, **kw: [],
