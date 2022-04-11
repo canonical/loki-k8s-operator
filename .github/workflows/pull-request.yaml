@@ -90,4 +90,4 @@ jobs:
 
   integration-test:
     name: Integration tests (microk8s)
-    uses: .github/workflows/integration-tests.yml
+    uses: .github/workflows/integration-tests.yml@${{github.ref}}
