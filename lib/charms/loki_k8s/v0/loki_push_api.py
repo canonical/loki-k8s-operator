@@ -1286,7 +1286,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 # It may confuse Juju and it's useless anyway
                 update_data = False if len(event.relation.units) == 0 else True
                 if not update_data:
-                    logger.error("No units in relation -- not updating")
+                    logger.debug("No units in relation -- not updating")
 
         if update_data and self._charm.unit.is_leader():
             # Condense the updates so we aren't setting keys to the same values
@@ -1642,6 +1642,8 @@ class LokiPushApiConsumer(ConsumerBase):
 
     def _on_logging_relation_changed(self, event: RelationEvent):
         self._handle_alert_rules(event.relation)
+
+        # Tell the consumer charm that it may need to respond to changes
         self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _: RelationEvent):
@@ -1663,7 +1665,11 @@ class LokiPushApiConsumer(ConsumerBase):
             A list with Loki Push API endpoints.
         """
         endpoints = []  # type: list
-        for relation in self._charm.model.relations[self._relation_name]:
+
+        # Filter out relations with nothing meaningful on the other side
+        for relation in filter(
+            lambda r: len(r.units) > 0, self._charm.model.relations[self._relation_name]
+        ):
             endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
         return endpoints
 

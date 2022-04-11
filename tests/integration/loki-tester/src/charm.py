@@ -23,6 +23,7 @@ class LokiTesterCharm(CharmBase):
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.loki_tester_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.log_error_action, self._on_log_error_action)
         self.framework.observe(
             self._loki_consumer.on.loki_push_api_endpoint_joined,
@@ -86,15 +87,17 @@ class LokiTesterCharm(CharmBase):
             )
         )
 
+    def _on_pebble_ready(self, _):
+        """Set the unit to ready when pebble is active."""
+        self.unit.status = ActiveStatus()
+
     def _on_config_changed(self, _):
         """Handle changed configuration."""
-        self.unit.status = ActiveStatus()
         self.set_logger()
         self.log("debug", "Handling configuration change")
 
     def _on_update_status(self, _):
         """Handle status updates."""
-        self.unit.status = ActiveStatus()
         self.set_logger()
         self.log("debug", "Updating status")
 
