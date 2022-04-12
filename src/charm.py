@@ -14,7 +14,6 @@ develop a new k8s charm using the Operator Framework:
 
 import logging
 import os
-import textwrap
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
@@ -121,8 +120,6 @@ class LokiOperatorCharm(CharmBase):
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
             return False
-        except Exception as e:
-            logger.error(f"Configuration error : {e}")
 
         if restart:
             self._container.add_layer(self._name, new_layer, combine=True)
@@ -201,42 +198,39 @@ class LokiOperatorCharm(CharmBase):
         Returns:
             Dictionary representation of the Loki YAML config
         """
-        config = textwrap.dedent(
-            f"""
-            target: all
-            auth_enabled: false
+        config = {
+            "target": "all",
+            "auth_enabled": False,
+            "server": {"http_listen_port": self._port, "http_listen_address": "0.0.0.0"},
+            "common": {
+                "path_prefix": LOKI_DIR,
+                "storage": {
+                    "filesystem": {
+                        "chunks_directory": os.path.join(LOKI_DIR, "chunks"),
+                        "rules_directory": RULES_DIR,
+                    }
+                },
+                "replication_factor": 1,
+                "ring": {
+                    "instance_addr": self.loki_provider.unit_ip,
+                    "kvstore": {"store": "inmemory"},
+                },
+            },
+            "schema_config": {
+                "configs": [
+                    {
+                        "from": "2020-10-24",
+                        "store": "boltdb-shipper",
+                        "object_store": "filesystem",
+                        "schema": "v11",
+                        "index": {"prefix": "index_", "period": "24h"},
+                    }
+                ]
+            },
+            "ruler": {"alertmanager_url": self._alerting_config()},
+        }
 
-            server:
-              http_listen_port: {self._port}
-              http_listen_address: 0.0.0.0
-
-            common:
-              path_prefix: {LOKI_DIR}
-              storage:
-                filesystem:
-                  chunks_directory: {os.path.join(LOKI_DIR, "chunks")}
-                  rules_directory: {RULES_DIR}
-              replication_factor: 1
-              ring:
-                instance_addr: {self.loki_provider.unit_ip if self.loki_provider else ""}
-                kvstore:
-                  store: inmemory
-
-            schema_config:
-              configs:
-                - from: 2020-10-24
-                  store: boltdb-shipper
-                  object_store: filesystem
-                  schema: v11
-                  index:
-                    prefix: index_
-                    period: 24h
-
-            ruler:
-              alertmanager_url: {self._alerting_config()}
-        """
-        )
-        return yaml.safe_load(config)
+        return config
 
 
 if __name__ == "__main__":
