@@ -104,7 +104,7 @@ class LokiOperatorCharm(CharmBase):
             return False
 
         current_layer = self._container.get_plan().services
-        new_layer = self._build_pebble_layer
+        new_layer = self._pebble_layer
 
         if current_layer != new_layer:
             restart = True
@@ -139,7 +139,7 @@ class LokiOperatorCharm(CharmBase):
         return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
 
     @property
-    def _build_pebble_layer(self):
+    def _pebble_layer(self):
         """Construct the pebble layer.
 
         Returns:
@@ -180,12 +180,11 @@ class LokiOperatorCharm(CharmBase):
             a string consisting of comma-separated list of Alertmanager URLs
             to send notifications to.
         """
-        alerting_config = ""
         alertmanagers = self.alertmanager_consumer.get_cluster_info()
 
         if not alertmanagers:
             logger.debug("No alertmanagers available")
-            return alerting_config
+            return ""
 
         return ",".join([f"http://{am}" for am in alertmanagers])
 
