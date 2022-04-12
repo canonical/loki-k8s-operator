@@ -110,7 +110,12 @@ class LokiOperatorCharm(CharmBase):
         if current_layer != new_layer:
             restart = True
 
-        config = self._loki_config()
+        try:
+            config = self._loki_config()
+        except Exception as e:
+            logger.error("EXCEPTION BUILDING CONFIG: {e}")
+            self.unit.status = BlockedStatus(str(e))
+            return False
 
         try:
             if yaml.safe_load(self._stored.config) != config:
@@ -122,6 +127,8 @@ class LokiOperatorCharm(CharmBase):
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
             return False
+        except Exception as e:
+            logger.error("EXCEPTION: {e}")
 
         if restart:
             self._container.add_layer(self._name, new_layer, combine=True)
