@@ -112,12 +112,6 @@ class LokiOperatorCharm(CharmBase):
 
         try:
             config = self._loki_config()
-        except Exception as e:
-            logger.error("EXCEPTION BUILDING CONFIG: {e}")
-            self.unit.status = BlockedStatus(str(e))
-            return False
-
-        try:
             if yaml.safe_load(self._stored.config) != config:
                 config_as_yaml = yaml.safe_dump(config)
                 self._container.push(LOKI_CONFIG, config_as_yaml)
@@ -128,7 +122,7 @@ class LokiOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus(str(e))
             return False
         except Exception as e:
-            logger.error("EXCEPTION: {e}")
+            logger.error(f"Configuration error : {e}")
 
         if restart:
             self._container.add_layer(self._name, new_layer, combine=True)
