@@ -22,6 +22,7 @@ async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
     if not address:
         raise RuntimeError("Failed to get unit address")
 
+    logger.info("Got address %s", address)
     return address
 
 
@@ -31,6 +32,7 @@ async def is_loki_up(ops_test, app_name, unit_num=0) -> bool:
     logger.debug("Loki address: %s", address)
 
     url = f"http://{address}:3100/loki/api/v1/status/buildinfo"
+    logger.info("Connecting to URL %s : ", url)
     response = urllib.request.urlopen(url, data=None, timeout=2.0)
 
     if response.code == 200 and "version" in json.loads(response.read()):
