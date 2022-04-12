@@ -15,7 +15,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 logger = logging.getLogger(__name__)
 
 
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
+@retry(stop=stop_after_attempt(10), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
     status = await ops_test.model.get_status()  # noqa: F821
     address = status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
@@ -25,7 +25,7 @@ async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
     return address
 
 
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
+@retry(stop=stop_after_attempt(10), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def is_loki_up(ops_test, app_name, unit_num=0) -> bool:
     address = await get_unit_address(ops_test, app_name, unit_num)
     logger.debug("Loki address: %s", address)
