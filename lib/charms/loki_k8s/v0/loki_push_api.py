@@ -1219,9 +1219,14 @@ class LokiPushApiProvider(RelationManagerBase):
                 logger.debug("Could not create loki directory.")
 
         events = self._charm.on[relation_name]
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
+
+    def _on_upgrade_charm(self, _):
+        # Upgrade event or other charm-level event
+        for relation in self._charm.model.relations[self._relation_name]:
+            self._process_logging_relation_changed(relation)
 
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
@@ -1233,12 +1238,16 @@ class LokiPushApiProvider(RelationManagerBase):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-        if isinstance(event, RelationEvent):
-            self._process_logging_relation_changed(event.relation)
-        else:
-            # Upgrade event or other charm-level event
-            for relation in self._charm.model.relations[self._relation_name]:
-                self._process_logging_relation_changed(relation)
+        self._process_logging_relation_changed(event.relation)
+
+    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
+        """Removes alert rules files when consumer charms left the relation with Loki.
+
+        Args:
+            event: a `CharmEvent` in response to which the Loki
+                charm must update its relation data.
+        """
+        self._update_alert_rules(event.relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
@@ -1252,17 +1261,22 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             relation: the `Relation` instance to update.
         """
+        self._update_relation_data(relation)
+        self._update_alert_rules(relation)
+        self._check_alert_rules()
+
+    def _update_relation_data(self, relation):
         if self._charm.unit.is_leader():
             relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
             logger.debug("Saved endpoints in relation data")
 
+    def _update_alert_rules(self, relation):
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
-            self._check_alert_rules()
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1329,15 +1343,6 @@ class LokiPushApiProvider(RelationManagerBase):
 
         return False
 
-    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
-        """Removes alert rules files when consumer charms left the relation with Loki.
-
-        Args:
-            event: a `CharmEvent` in response to which the Loki
-                charm must update its relation data.
-        """
-        self._process_logging_relation_changed(event.relation)
-
     @property
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
@@ -1358,6 +1363,9 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             container: Container which has alert rules files to be deleted
         """
+        if not container.can_connect():
+            return
+
         files = container.list_files(self._rules_dir)
         logger.debug("Previous Alert rules files deleted")
         for f in files:
@@ -1370,6 +1378,9 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             container: Container into which alert rules files are going to be uploaded
         """
+        if not container.can_connect():
+            return
+
         for identifier, alert_rules in self.alerts().items():
             filename = "{}_alert.rules".format(identifier)
             path = os.path.join(self._rules_dir, filename)
