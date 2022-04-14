@@ -45,10 +45,6 @@ class RelatedApp:
         )
 
 
-async def test_setup_env(ops_test: OpsTest):
-    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
-
-
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest, loki_charm, loki_tester_charm):
     """Build the charm-under-test and deploy it together with related charms."""
@@ -137,18 +133,18 @@ async def test_rerelate_app(ops_test: OpsTest, loki_tester_charm):
         ops_test.model.deploy(
             loki_tester_charm,
             resources=tester_resources,
-            application_name="loki-tester-new",
+            application_name="loki-tester",
         ),
         ops_test.model.deploy(
             "ch:alertmanager-k8s",
-            application_name="alertmanager-new",
+            application_name="alertmanager",
             channel="edge",
         ),
     )
 
     await asyncio.gather(
-        ops_test.model.add_relation(app_name, "loki-tester-new"),
-        ops_test.model.add_relation(app_name, "alertmanager-new"),
+        ops_test.model.add_relation(app_name, "loki-tester"),
+        ops_test.model.add_relation(app_name, "alertmanager"),
     )
     await ops_test.model.wait_for_idle(status="active", timeout=600)
 
