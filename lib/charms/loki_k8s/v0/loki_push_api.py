@@ -1266,7 +1266,6 @@ class LokiPushApiProvider(Object):
         """
         update_data = True
         if event:
-            logger.debug("-- SET: event type: {}\tdir: {}".format(type(event), dir(event)))
             # Don't try to set updates on relations where there aren't any units left.
             # It may confuse Juju and it's useless anyway
             if isinstance(event, RelationBrokenEvent):
