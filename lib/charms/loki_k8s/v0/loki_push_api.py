@@ -1265,17 +1265,14 @@ class LokiPushApiProvider(Object):
 
         """
         update_data = True
-        if self._charm.unit.is_leader():
-            if event:
-                # Don't try to set updates on relations where there aren't any units left.
-                # It may confuse Juju and it's useless anyway
-                update_data = (
-                    False
-                    if len(event.relation.units) == 0 or isinstance(event, RelationBrokenEvent)
-                    else True
-                )
-                if not update_data:
-                    logger.debug("No units in relation -- not updating")
+        if event:
+            # Don't try to set updates on relations where there aren't any units left.
+            # It may confuse Juju and it's useless anyway
+            update_data = (
+                False if event.relation.units or isinstance(event, RelationBrokenEvent) else True
+            )
+            if not update_data:
+                logger.debug("No units in relation -- not updating")
 
         if update_data and self._charm.unit.is_leader():
             # Condense the updates so we aren't setting keys to the same values
@@ -1509,6 +1506,10 @@ class ConsumerBase(Object):
 
     def _handle_alert_rules(self, relation):
         if not self._charm.unit.is_leader():
+            return
+
+        if not relation.units:
+            # The relation is departing or breaking. Do nothing
             return
 
         try:

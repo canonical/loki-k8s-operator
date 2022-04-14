@@ -187,6 +187,7 @@ class TestReloadAlertRules(unittest.TestCase):
         self.harness.begin_with_initial_hooks()
         self.harness.set_leader(True)
         self.rel_id = self.harness.add_relation("logging", "loki")
+        self.harness.add_relation_unit(self.rel_id, "loki/0")
 
         # need to manually emit relation changed
         # https://github.com/canonical/operator/issues/682
