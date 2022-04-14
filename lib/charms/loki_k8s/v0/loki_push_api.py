@@ -1269,10 +1269,12 @@ class LokiPushApiProvider(Object):
             # Don't try to set updates on relations where there aren't any units left.
             # It may confuse Juju and it's useless anyway
             update_data = (
-                False if event.relation.units or isinstance(event, RelationBrokenEvent) else True
+                False
+                if not event.relation.units or isinstance(event, RelationBrokenEvent)
+                else True
             )
             if not update_data:
-                logger.debug("No units in relation -- not updating")
+                logger.debug("No units in relation or RelationBrokenEvent -- not updating")
 
         if update_data and self._charm.unit.is_leader():
             # Condense the updates so we aren't setting keys to the same values
