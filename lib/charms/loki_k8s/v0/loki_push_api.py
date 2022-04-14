@@ -1271,7 +1271,7 @@ class LokiPushApiProvider(Object):
             # It may confuse Juju and it's useless anyway
             if isinstance(event, RelationBrokenEvent):
                 update_data = False
-            elif isinstance(event, RelationDepartedEvent) and len(event.relation.units <= 1):
+            elif isinstance(event, RelationDepartedEvent) and len(event.relation.units) <= 1:
                 update_data = False
             if not update_data:
                 logger.debug(
