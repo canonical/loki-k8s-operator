@@ -194,11 +194,13 @@ class TestReloadAlertRules(unittest.TestCase):
             self.harness.charm.model.get_relation("logging")
         )
 
-    def test_reload_when_dir_is_still_empty_changes_nothing(self):
+    def test_aaa_reload_when_dir_is_still_empty_changes_nothing(self):
         """Scenario: The reload method is called when the alerts dir is still empty."""
         # GIVEN relation data contains no alerts
         relation = self.harness.charm.model.get_relation("logging")
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+        self.assertEqual(
+            relation.data[self.harness.charm.app].get("alert_rules", "{}"), self.NO_ALERTS
+        )
 
         # WHEN no rule files are present
 
@@ -207,13 +209,17 @@ class TestReloadAlertRules(unittest.TestCase):
 
         # THEN relation data is unchanged
         relation = self.harness.charm.model.get_relation("logging")
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+        self.assertEqual(
+            relation.data[self.harness.charm.app].get("alert_rules", "{}"), self.NO_ALERTS
+        )
 
-    def test_reload_after_dir_is_populated_updates_relation_data(self):
+    def test_bbb_reload_after_dir_is_populated_updates_relation_data(self):
         """Scenario: The reload method is called after some alert files are added."""
         # GIVEN relation data contains no alerts
         relation = self.harness.charm.model.get_relation("logging")
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+        self.assertEqual(
+            relation.data[self.harness.charm.app].get("alert_rules", "{}"), self.NO_ALERTS
+        )
 
         # WHEN some rule files are added to the alerts dir
         self.sandbox.put_file(os.path.join(self.alert_rules_path, "alert.rule"), self.ALERT)
@@ -227,7 +233,7 @@ class TestReloadAlertRules(unittest.TestCase):
             relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS
         )
 
-    def test_reload_after_dir_is_emptied_updates_relation_data(self):
+    def test_ccc_reload_after_dir_is_emptied_updates_relation_data(self):
         """Scenario: The reload method is called after all the loaded alert files are removed."""
         # GIVEN alert files are present and relation data contains respective alerts
         alert_filename = os.path.join(self.alert_rules_path, "alert.rule")
@@ -248,7 +254,7 @@ class TestReloadAlertRules(unittest.TestCase):
         relation = self.harness.charm.model.get_relation("logging")
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
-    def test_reload_after_dir_itself_removed_updates_relation_data(self):
+    def test_ddd_after_dir_itself_removed_updates_relation_data(self):
         """Scenario: The reload method is called after the alerts dir doesn't exist anymore."""
         # GIVEN alert files are present and relation data contains respective alerts
         alert_filename = os.path.join(self.alert_rules_path, "alert.rule")

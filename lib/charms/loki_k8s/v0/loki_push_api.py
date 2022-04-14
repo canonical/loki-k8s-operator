@@ -1112,21 +1112,6 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         super().__init__(self.message)
 
 
-class RelationManagerBase(Object):
-    """Base class that represents relation ends ("provides" and "requires").
-
-    :class:`RelationManagerBase` is used to create a relation manager. This is done by inheriting
-    from :class:`RelationManagerBase` and customising the sub class as required.
-
-    Attributes:
-        name (str): consumer's relation name
-    """
-
-    def __init__(self, charm: CharmBase, relation_name):
-        super().__init__(charm, relation_name)
-        self.name = relation_name
-
-
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -1161,7 +1146,7 @@ class LokiPushApiEvents(ObjectEvents):
     loki_push_api_alert_rules_changed = EventSource(LokiPushApiAlertRulesChanged)
 
 
-class LokiPushApiProvider(RelationManagerBase):
+class LokiPushApiProvider(Object):
     """A LokiPushApiProvider class."""
 
     on = LokiPushApiEvents()
@@ -1281,10 +1266,14 @@ class LokiPushApiProvider(RelationManagerBase):
         """
         update_data = True
         if self._charm.unit.is_leader():
-            if event and type(event) in [RelationBrokenEvent, RelationDepartedEvent]:
+            if event:
                 # Don't try to set updates on relations where there aren't any units left.
                 # It may confuse Juju and it's useless anyway
-                update_data = False if len(event.relation.units) == 0 else True
+                update_data = (
+                    False
+                    if len(event.relation.units) == 0 or isinstance(event, RelationBrokenEvent)
+                    else True
+                )
                 if not update_data:
                     logger.debug("No units in relation -- not updating")
 
@@ -1501,7 +1490,7 @@ class LokiPushApiProvider(RelationManagerBase):
         return alerts
 
 
-class ConsumerBase(RelationManagerBase):
+class ConsumerBase(Object):
     """Consumer's base class."""
 
     def __init__(
@@ -1515,35 +1504,34 @@ class ConsumerBase(RelationManagerBase):
         self._charm = charm
         self._relation_name = relation_name
         self.topology = ProviderTopology.from_charm(charm)
-
-        try:
-            alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
-        except InvalidAlertRulePathError as e:
-            logger.warning(
-                "Invalid Loki alert rules folder at %s: %s",
-                e.alert_rules_absolute_path,
-                e.message,
-            )
         self._alert_rules_path = alert_rules_path
-
         self._recursive = recursive
 
     def _handle_alert_rules(self, relation):
         if not self._charm.unit.is_leader():
             return
 
-        alert_rules = AlertRules(self.topology)
-        alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
-        alert_rules_as_dict = alert_rules.as_dict()
+        try:
+            alert_rules_path = _resolve_dir_against_charm_path(self._charm, self._alert_rules_path)
+            alert_rules = AlertRules(self.topology)
+            alert_rules.add_path(alert_rules_path, recursive=self._recursive)
+            alert_rules_as_dict = alert_rules.as_dict()
+            relation.data[self._charm.app]["alert_rules"] = json.dumps(
+                alert_rules_as_dict,
+                sort_keys=True,  # sort, to prevent unnecessary relation_changed events
+            )
+        except InvalidAlertRulePathError as e:
+            logger.warning(
+                "Invalid Loki alert rules folder at %s: %s",
+                e.alert_rules_absolute_path,
+                e.message,
+            )
+            relation.data[self._charm.app]["alert_rules"] = json.dumps({})
 
         # if alert_rules_error_message:
         #     self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
 
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
-        relation.data[self._charm.app]["alert_rules"] = json.dumps(
-            alert_rules_as_dict,
-            sort_keys=True,  # sort, to prevent unnecessary relation_changed events
-        )
 
 
 class LokiPushApiConsumer(ConsumerBase):
@@ -1636,9 +1624,7 @@ class LokiPushApiConsumer(ConsumerBase):
         self._handle_alert_rules(event.relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _on_logging_relation_changed(self, event: RelationEvent):
-        self._handle_alert_rules(event.relation)
-
+    def _on_logging_relation_changed(self, _: RelationEvent):
         # Tell the consumer charm that it may need to respond to changes
         self.on.loki_push_api_endpoint_joined.emit()
 
