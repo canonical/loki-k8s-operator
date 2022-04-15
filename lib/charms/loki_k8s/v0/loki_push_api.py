@@ -452,7 +452,6 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
-    RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
@@ -1246,9 +1245,21 @@ class LokiPushApiProvider(Object):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-        self._process_logging_relation_changed(event.relation, event)
+        self._process_logging_relation_changed(event.relation)
 
-    def _process_logging_relation_changed(self, relation: Relation, event: RelationEvent = None):
+    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
+        """Removes alert rules files when consumer charms left the relation with Loki.
+
+        Args:
+            event: a `CharmEvent` in response to which the Loki
+                charm must update its relation data.
+        """
+        remaining_units = any([u.name != event.departing_unit.name for u in event.relation.units])
+        if remaining_units:
+            self._process_logging_relation_changed(event.relation)
+        self._update_alert_rules(event.relation)
+
+    def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
 
         When there are changes in relations between Loki and its consumers,
@@ -1264,43 +1275,35 @@ class LokiPushApiProvider(Object):
                 RelationDepartedEvent no updates are sent to the relation data bag
 
         """
-        update_data = True
-        if event:
-            # Don't try to set updates on relations where there aren't any units left.
-            # It may confuse Juju and it's useless anyway
-            if isinstance(event, RelationBrokenEvent):
-                update_data = False
-            elif isinstance(event, RelationDepartedEvent) and len(event.relation.units) <= 1:
-                update_data = False
-            if not update_data:
-                logger.debug(
-                    "No relevant units in relation or RelationBrokenEvent -- not updating"
-                )
-
-        if update_data and self._charm.unit.is_leader():
+        if self._charm.unit.is_leader():
             # Condense the updates so we aren't setting keys to the same values
             # every time, such as _promtail_binary_url
-            current_data = {}
+            current_data = dict(relation.data[self._charm.app].items())
             updated_data = {
                 "endpoints": json.dumps(self._endpoints()),
                 **self._promtail_binary_url,
             }
 
-            for k in updated_data.keys():
-                current_data[k] = relation.data[self._charm.app].get(k, "")
+            if current_data != updated_data:
+                current_data.update(updated_data)
+                relation.data[self._charm.app].update(current_data)
 
-            current_data.update(updated_data)
-            relation.data[self._charm.app].update(updated_data)
+                logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
+                logger.debug("Saved endpoints in relation data")
 
-            logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
-            logger.debug("Saved endpoints in relation data")
+        self._update_alert_rules(relation)
 
+    def _update_alert_rules(self, relation: Relation):
+        """Regenerate the alert rules if there are any in a new relation.
+
+        Args:
+            relation: a `Relation` to check for alert rules
+        """
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
             self._remove_alert_rules_files(self.container)
             self._generate_alert_rules_files(self.container)
             self._check_alert_rules()
-            logger.debug("Cannot connect to the workload container. Shutting down?")
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1364,15 +1367,6 @@ class LokiPushApiProvider(Object):
             logger.debug(log_msg)
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
             return True
-
-    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
-        """Removes alert rules files when consumer charms left the relation with Loki.
-
-        Args:
-            event: a `CharmEvent` in response to which the Loki
-                charm must update its relation data.
-        """
-        self._process_logging_relation_changed(event.relation, event)
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -2056,7 +2050,7 @@ class LogProxyConsumer(ConsumerBase):
         """
         clients = []  # type: list
         for relation in self._charm.model.relations.get(self._relation_name, []):
-            endpoints = json.loads(relation.data[relation.app].get("endpoints", []))
+            endpoints = json.loads(relation.data[relation.app].get("endpoints", "[]"))
             if endpoints:
                 clients += endpoints
         return clients
