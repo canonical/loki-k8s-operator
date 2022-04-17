@@ -452,6 +452,7 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
+    RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
@@ -1256,6 +1257,11 @@ class LokiPushApiProvider(Object):
         """
         remaining_units = any([u.name != event.departing_unit.name for u in event.relation.units])
         if remaining_units:
+            logger.warning("SET -- There are still remaining units!")
+            logger.warning(
+                "SET -- Departing: {}\t{}".format(event.departing_unit.name, event.departing_unit)
+            )
+            logger.warning("UNITS: {}".format([u.name for u in event.relation.units]))
             self._process_logging_relation_changed(event.relation)
         self._update_alert_rules(event.relation)
 
@@ -1271,9 +1277,6 @@ class LokiPushApiProvider(Object):
 
         Args:
             relation: the `Relation` instance to update.
-            event: an optional event, the type of which is checked. If it is a
-                RelationDepartedEvent no updates are sent to the relation data bag
-
         """
         if self._charm.unit.is_leader():
             # Condense the updates so we aren't setting keys to the same values
@@ -1307,7 +1310,13 @@ class LokiPushApiProvider(Object):
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
-        return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
+        endpoints = []
+
+        for i in range(self._charm.app.planned_units()):
+            endpoints.append(
+                {"url": self._url(unit_number=i), "unit": "{}/{}".format(self._charm.app.name, i)}
+            )
+        return endpoints
 
     def _url(self, unit_number) -> str:
         """Get the url for a given unit."""
@@ -1595,6 +1604,8 @@ class LokiPushApiConsumer(ConsumerBase):
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
+        self._departing_endpoints = {"relations": [], "units": {}}  # type: ignore
+
     def _on_lifecycle_event(self, _: HookEvent):
         """Handle updating providers on charm lifecycle events.
 
@@ -1626,7 +1637,7 @@ class LokiPushApiConsumer(ConsumerBase):
         # Tell the consumer charm that it may need to respond to changes
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _on_logging_relation_departed(self, _: RelationEvent):
+    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Handle departures in related providers.
 
         Anytime there are departures in relations between the consumer charm and Loki
@@ -1635,7 +1646,19 @@ class LokiPushApiConsumer(ConsumerBase):
         """
         # Provide default to avoid throwing, as in some complicated scenarios with
         # upgrades and hook failures we might not have data in the storage
+        self._departing_endpoints["units"].update({event.departing_unit.name: event.relation})  # type: ignore
         self.on.loki_push_api_endpoint_departed.emit()
+
+    def _on_logging_relation_broken(self, event: RelationBrokenEvent):
+        """Handle departures in related providers.
+
+        Anytime there are departures in relations between the consumer charm and Loki
+        the consumer charm is informed, through a `LokiPushApiEndpointDeparted` event.
+        The consumer charm can then choose to update its configuration.
+        """
+        # Provide default to avoid throwing, as in some complicated scenarios with
+        # upgrades and hook failures we might not have data in the storage
+        self._departing_endpoints["relations"].append(event.relation)  # type: ignore
 
     @property
     def loki_endpoints(self) -> List[dict]:
@@ -1647,11 +1670,31 @@ class LokiPushApiConsumer(ConsumerBase):
         endpoints = []  # type: list
 
         # Filter out relations with nothing meaningful on the other side
-        for relation in filter(
-            lambda r: len(r.units) > 0, self._charm.model.relations[self._relation_name]
-        ):
-            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
+        for relation in self._filtered_relations():
+            relation_endpoints = json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            relation_urls = [
+                {"url": endpoint["url"]}
+                for endpoint in relation_endpoints
+                if endpoint["unit"] not in self._departing_endpoints["units"]
+            ]
+
+            endpoints = endpoints + relation_urls
+        print("Returning {}".format(endpoints))
         return endpoints
+
+    def _filtered_relations(self) -> list:
+        """Filter out relations which are broken or have only departing units."""
+        relations = [
+            r
+            for r in self._charm.model.relations[self._relation_name]
+            if r not in self._departing_endpoints["relations"]
+        ]
+        relations = [
+            r
+            for r in relations
+            if len([u for u in r.units if u.name not in self._departing_endpoints["units"]]) > 0
+        ]
+        return relations
 
 
 class ContainerNotFoundError(Exception):

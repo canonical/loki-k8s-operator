@@ -109,7 +109,10 @@ class TestLokiPushApiProvider(unittest.TestCase):
     def test_relation_data(self):
         self.harness.charm.app.name = "loki"
         expected_value = [
-            {"url": "http://loki-0.loki-endpoints.None.svc.cluster.local:3100/loki/api/v1/push"}
+            {
+                "url": "http://loki-0.loki-endpoints.None.svc.cluster.local:3100/loki/api/v1/push",
+                "unit": "loki/0",
+            }
         ]
         self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoints())
 
