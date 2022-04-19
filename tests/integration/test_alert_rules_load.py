@@ -18,7 +18,7 @@ app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
 rules_app = "loki-tester"
 rules_app2 = "loki-tester2"
-rules_app3 = "cos-config"
+rules_app3 = "loki-tester3"
 
 
 @pytest.mark.abort_on_fail
@@ -91,21 +91,13 @@ async def test_remove_app_one_alert_rules_is_retained(ops_test):
 
 
 @pytest.mark.abort_on_fail
-async def test_wrong_alert_rule(ops_test):
-    await ops_test.model.deploy(
-        "ch:cos-configuration-k8s",
-        application_name=rules_app3,
-        channel="edge",
-        config={
-            "git_repo": "https://github.com/canonical/loki-k8s-operator",
-            "git_branch": "itest-refactor",
-            "loki_alert_rules_path": "tests/sample_rule_files/error",
-        },
+async def test_wrong_alert_rule(ops_test, faulty_loki_tester_charm):
+    await asyncio.gather(
+        ops_test.model.deploy(
+            faulty_loki_tester_charm,
+            application_name=rules_app3,
+        ),
     )
-
-    # force an update, just in case the files showed up on disk after the last hook fired
-    action = await ops_test.model.applications[rules_app3].units[0].run_action("sync-now")
-    await action.wait()
 
     # form a relation between loki and the app that provides rules
     await ops_test.model.add_relation(app_name, rules_app3)
