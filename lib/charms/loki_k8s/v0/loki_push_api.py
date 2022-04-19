@@ -440,13 +440,13 @@ import logging
 import os
 from collections import OrderedDict
 from copy import deepcopy
+from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib import request
 from urllib.error import HTTPError, URLError
-from zipfile import ZipFile
 
 import yaml
 from ops.charm import (
@@ -479,23 +479,21 @@ DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
 DEFAULT_LOG_PROXY_RELATION_NAME = "log-proxy"
 
-PROMTAIL_BINARY_ZIP_URL = (
-    "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
-)
+PROMTAIL_BINARY_GZIP_URL = "https://github.com/canonical/loki-k8s-operator/releases/download/promtail-v2.5.0/promtail-static-amd64.gz"
 
 
 # Paths in `charm` container
 BINARY_DIR = "/tmp"
-BINARY_ZIP_FILE_NAME = "promtail-linux-amd64.zip"
-BINARY_ZIP_PATH = "{}/{}".format(BINARY_DIR, BINARY_ZIP_FILE_NAME)
-BINARY_FILE_NAME = "promtail-linux-amd64"
+BINARY_GZIP_FILE_NAME = "promtail-static-amd64.gz"
+BINARY_GZIP_PATH = "{}/{}".format(BINARY_DIR, BINARY_GZIP_FILE_NAME)
+BINARY_FILE_NAME = "promtail-static"
 BINARY_PATH = "{}/{}".format(BINARY_DIR, BINARY_FILE_NAME)
-BINARY_ZIP_SHA256SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
-BINARY_SHA256SUM = "00ed6a4b899698abc97d471c483a6a7e7c95e761714f872eb8d6ffd45f3d32e6"
+BINARY_GZIP_SHA256SUM = "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d"
+BINARY_SHA256SUM = "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9"
 
 # Paths in `workload` container
 WORKLOAD_BINARY_DIR = "/opt/promtail"
-WORKLOAD_BINARY_FILE_NAME = "promtail-linux-amd64"
+WORKLOAD_BINARY_FILE_NAME = "promtail-static"
 WORKLOAD_BINARY_PATH = "{}/{}".format(WORKLOAD_BINARY_DIR, WORKLOAD_BINARY_FILE_NAME)
 WORKLOAD_CONFIG_DIR = "/etc/promtail"
 WORKLOAD_CONFIG_FILE_NAME = "promtail_config.yaml"
@@ -1341,7 +1339,7 @@ class LokiPushApiProvider(RelationManagerBase):
     @property
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
-        return {"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL}
+        return {"promtail_binary_zip_url": PROMTAIL_BINARY_GZIP_URL}
 
     @property
     def unit_ip(self) -> str:
@@ -1959,17 +1957,17 @@ class LogProxyConsumer(ConsumerBase):
 
         with request.urlopen(url) as r:
             file_bytes = r.read()
-            with open(BINARY_ZIP_PATH, "wb") as f:
+            with open(BINARY_GZIP_PATH, "wb") as f:
                 f.write(file_bytes)
                 logger.info(
                     "Promtail binary zip file has been downloaded and stored in: %s",
-                    BINARY_ZIP_PATH,
+                    BINARY_GZIP_PATH,
                 )
 
-            ZipFile(BytesIO(file_bytes)).extractall(BINARY_DIR)
-            logger.debug("Promtail binary file has been downloaded.")
-
-        self._push_binary_to_workload()
+            decompressed_file = GzipFile(fileobj=BytesIO(file_bytes))
+            with open(BINARY_PATH, "wb") as outfile:
+                outfile.write(decompressed_file.read())
+                logger.debug("Promtail binary file has been downloaded.")
 
     @property
     def _cli_args(self) -> str:
