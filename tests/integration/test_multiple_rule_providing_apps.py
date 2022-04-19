@@ -92,10 +92,10 @@ async def test_remove_app_one_alert_rules_is_retained(ops_test):
 
 
 @pytest.mark.abort_on_fail
-async def test_wrong_alert_rule(ops_test, loki_tester_charm):
+async def test_wrong_alert_rule(ops_test, faulty_loki_tester_charm):
     await asyncio.gather(
         ops_test.model.deploy(
-            loki_tester_charm,
+            faulty_loki_tester_charm,
             application_name=rules_app3,
         ),
     )

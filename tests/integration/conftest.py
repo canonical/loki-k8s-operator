@@ -38,3 +38,14 @@ async def loki_tester_charm(ops_test):
     charm_path = "tests/integration/loki-tester"
     charm = await ops_test.build_charm(charm_path)
     return charm
+
+
+@pytest.fixture(scope="module")
+async def faulty_loki_tester_charm(ops_test):
+    """A faulty tester charm for integration test of the Loki charm."""
+    charm_path = "tests/integration/loki-tester"
+    rules_path = "tests/sample_rule_files/error/alert.rule"
+    install_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule"
+    shutil.copyfile(rules_path, install_path)
+    charm = await ops_test.build_charm(charm_path)
+    return charm
