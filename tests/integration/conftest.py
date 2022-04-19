@@ -1,6 +1,7 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 import logging
+import os
 import shutil
 
 import pytest
@@ -47,5 +48,7 @@ async def faulty_loki_tester_charm(ops_test):
     rules_path = "tests/sample_rule_files/error/alert.rule"
     install_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule"
     shutil.copyfile(rules_path, install_path)
+    os.remove(install_path)
     charm = await ops_test.build_charm(charm_path)
+
     return charm
