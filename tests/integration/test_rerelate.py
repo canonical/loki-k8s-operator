@@ -124,7 +124,7 @@ async def test_remove_related_app(ops_test: OpsTest):
         await ops_test.run(*cmd)
 
     logger.info("Waiting for idle")
-    await ops_test.model.wait_for_idle(wait_for_active=True, timeout=300)
+    await ops_test.model.wait_for_idle(status="active", timeout=300)
     assert await is_loki_up(ops_test, app_name)
 
 
