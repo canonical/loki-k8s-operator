@@ -37,6 +37,9 @@ async def loki_charm(ops_test: OpsTest):
 async def loki_tester_charm(ops_test):
     """A charm for integration test of the Loki charm."""
     charm_path = "tests/integration/loki-tester"
+    clean_cmd = ["charmcraft", "clean" "-p", charm_path]
+    await ops_test.run(*clean_cmd)
+
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -45,10 +48,14 @@ async def loki_tester_charm(ops_test):
 async def faulty_loki_tester_charm(ops_test):
     """A faulty tester charm for integration test of the Loki charm."""
     charm_path = "tests/integration/loki-tester"
+
+    clean_cmd = ["charmcraft", "clean", "-p", charm_path]
+    await ops_test.run(*clean_cmd)
+
     rules_path = "tests/sample_rule_files/error/alert.rule"
     install_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule"
     shutil.copyfile(rules_path, install_path)
-    os.remove(install_path)
     charm = await ops_test.build_charm(charm_path)
+    os.remove(install_path)
 
     return charm
