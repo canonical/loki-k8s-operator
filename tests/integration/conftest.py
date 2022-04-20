@@ -29,7 +29,7 @@ async def loki_charm(ops_test: OpsTest):
 async def loki_tester_charm(ops_test):
     """A charm for integration test of the Loki charm."""
     charm_path = "tests/integration/loki-tester"
-    clean_cmd = ["charmcraft", "clean" "-p", charm_path]
+    clean_cmd = ["charmcraft", "clean", "-p", charm_path]
     await ops_test.run(*clean_cmd)
     bad_rule_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule"
     try:
