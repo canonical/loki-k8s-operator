@@ -39,7 +39,11 @@ async def loki_tester_charm(ops_test):
     charm_path = "tests/integration/loki-tester"
     clean_cmd = ["charmcraft", "clean" "-p", charm_path]
     await ops_test.run(*clean_cmd)
-
+    bad_rule_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule"
+    try:
+        os.remove(bad_rule_path)
+    except FileNotFoundError:
+        pass
     charm = await ops_test.build_charm(charm_path)
     return charm
 
@@ -56,6 +60,9 @@ async def faulty_loki_tester_charm(ops_test):
     install_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule"
     shutil.copyfile(rules_path, install_path)
     charm = await ops_test.build_charm(charm_path)
-    os.remove(install_path)
+    try:
+        os.remove(install_path)
+    except FileNotFoundError:
+        logger.warning("Failed to delete bad alert rule file")
 
     return charm
