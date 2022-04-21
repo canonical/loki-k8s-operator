@@ -96,20 +96,16 @@ async def test_remove_related_app(ops_test: OpsTest):
     await asyncio.gather(
         ops_test.model.applications["loki-tester"].remove(),
         ops_test.model.applications["alertmanager"].remove(),
-        # Block until it is really gone. Added after an itest failed when tried to redeploy:
-        # juju.errors.JujuError: ['cannot add application "...": application already exists']
-        ops_test.model.block_until(lambda: "loki-tester" not in ops_test.model.applications),
-        ops_test.model.block_until(lambda: "alertmanager" not in ops_test.model.applications),
     )
 
-    logger.info("Applications removed. Blocking for 60 seconds then force removing...")
-    # Block until it is really gone. Added after an itest failed when tried to redeploy:
-    # juju.errors.JujuError: ['cannot add application "...": application already exists']
-    await ops_test.model.block_until(
-        lambda: "loki-tester" not in ops_test.model.applications,
-        lambda: "alertmanager" not in ops_test.model.applications,
-        timeout=60,
-    )
+    try:
+        await ops_test.model.block_until(
+            lambda: "loki-tester" not in ops_test.model.applications,
+            lambda: "alertmanager" not in ops_test.model.applications,
+            timeout=300,
+        )
+    except asyncio.exceptions.TimeoutError:
+        logger.warning("Failed to remove applications, forcing it")
 
     for app in filter(lambda x: x in ops_test.model.applications, ["loki-tester", "alertmanager"]):
         cmd = [
