@@ -98,11 +98,11 @@ class LokiOperatorCharm(CharmBase):
 
         if isinstance(event, LokiPushApiAlertRulesChanged) and event.error:
             self.unit.status = BlockedStatus(event.message)
-            return False
+            return
 
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
-            return False
+            return
 
         current_layer = self._container.get_plan().services
         new_layer = self._build_pebble_layer
@@ -121,7 +121,10 @@ class LokiOperatorCharm(CharmBase):
                 restart = True
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
-            return False
+            return
+        except Exception as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
 
         if restart:
             self._container.add_layer(self._name, new_layer, combine=True)

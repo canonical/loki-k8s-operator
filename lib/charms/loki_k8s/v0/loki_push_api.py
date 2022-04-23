@@ -1217,6 +1217,8 @@ class LokiPushApiProvider(RelationManagerBase):
                 self.container.make_dir(self._rules_dir, make_parents=True)
             except (FileNotFoundError, ProtocolError, PathError):
                 logger.debug("Could not create loki directory.")
+            except Exception as e:
+                logger.debug("Could create loki directory: %s", e)
 
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
@@ -1293,6 +1295,8 @@ class LokiPushApiProvider(RelationManagerBase):
             self.port,
         )
 
+    # FIXME: we're returning a bool just for unit testing? See test_dashboard_provider in Grafana
+    # we should just listen to events
     def _check_alert_rules(self) -> bool:
         """Check alert rules using Loki API.
 
@@ -1312,14 +1316,6 @@ class LokiPushApiProvider(RelationManagerBase):
                 log_msg = "Checking alert rules: No rule groups found"
                 logger.debug(log_msg)
                 self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-                return True
-
-            if e.code == 404 and "404 page not found" in msg:
-                logger.error("Checking alert rules: 404 page not found: %s", url)
-                self.on.loki_push_api_alert_rules_changed.emit(
-                    error=True,
-                    message="Errors in alert rule groups. Check juju debug-log.",
-                )
                 return False
 
             message = "{} - {}".format(e.code, e.msg)  # type: ignore
@@ -1336,13 +1332,18 @@ class LokiPushApiProvider(RelationManagerBase):
                 message="Errors in alert rule groups. Check juju debug-log.",
             )
             return False
+        except Exception as e:
+            logger.error("Checking alert rules: %s", e)
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Errors in alert rule groups. Check juju debug-log.",
+            )
+            return False
         else:
             log_msg = "Checking alert rules: Ok"
             logger.debug(log_msg)
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
             return True
-
-        return False
 
     @property
     def _promtail_binary_url(self) -> dict:
