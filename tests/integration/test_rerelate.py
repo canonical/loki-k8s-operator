@@ -99,33 +99,13 @@ async def test_remove_related_app(ops_test: OpsTest):
     )
 
     logger.info("Trying to remove related applications")
-    try:
-        await ops_test.model.block_until(
-            lambda: "loki-tester" not in ops_test.model.applications,
-            lambda: "alertmanager" not in ops_test.model.applications,
-            timeout=300,
-        )
-    except asyncio.exceptions.TimeoutError:
-        logger.warning("Failed to remove applications, forcing it")
-
-    for app in filter(lambda x: x in ops_test.model.applications, ["loki-tester", "alertmanager"]):
-        cmd = [
-            "juju",
-            "remove-application",
-            "--destroy-storage",
-            "--force",
-            "--no-wait",
-            app,
-        ]
-        logger.info("Forcibly removing {}".format(app))
-        await ops_test.run(*cmd)
-
+    await ops_test.model.block_until(
+        lambda: "loki-tester" not in ops_test.model.applications,
+        lambda: "alertmanager" not in ops_test.model.applications,
+        timeout=300,
+    )
     logger.info("Waiting for idle")
-    try:
-        await ops_test.model.wait_for_idle(status="active", timeout=300)
-    except asyncio.exceptions.TimeoutError:
-        logger.warning("Timeout waiting for idle, ignoring it.")
-
+    await ops_test.model.wait_for_idle(status="active", timeout=300)
     assert await is_loki_up(ops_test, app_name)
 
 
