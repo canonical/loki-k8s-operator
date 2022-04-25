@@ -1264,6 +1264,9 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             relation: the `Relation` instance to update.
         """
+        relation.data[self._charm.unit]["public_address"] = (
+            str(self._charm.model.get_binding(self._relation_name).network.bind_address) or ""
+        )
         self._update_relation_data(relation)
         self._update_alert_rules(relation)
         self._check_alert_rules()
@@ -1308,7 +1311,7 @@ class LokiPushApiProvider(RelationManagerBase):
         url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
         req = request.Request(url)
         try:
-            request.urlopen(req)
+            request.urlopen(req, timeout=2.0)
         except HTTPError as e:
             msg = e.read().decode("utf-8")
 
@@ -1353,7 +1356,10 @@ class LokiPushApiProvider(RelationManagerBase):
     @property
     def unit_ip(self) -> str:
         """Returns unit's IP."""
-        bind_address = self._charm.model.get_binding(self._relation_name).network.bind_address
+        bind_address = ""
+        if self._charm.model.relations[self._relation_name]:
+            relation = self._charm.model.relations[self._relation_name][0]
+            bind_address = relation.data[self._charm.unit].get("public_address", "")
 
         if bind_address:
             return str(bind_address)
@@ -1433,7 +1439,7 @@ class LokiPushApiProvider(RelationManagerBase):
 
             try:
                 # NOTE: this `metadata` key SHOULD NOT be changed to `scrape_metadata`
-                # to align with Prometheus without careful consideration
+                # to align with Prometheus without careful consideration'
                 metadata = json.loads(relation.data[relation.app]["metadata"])
                 identifier = ProviderTopology.from_relation_data(metadata).identifier
                 alerts[identifier] = alert_rules
