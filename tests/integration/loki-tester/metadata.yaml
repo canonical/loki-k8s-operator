@@ -4,6 +4,7 @@
 # For a complete list of supported options, see:
 # https://juju.is/docs/sdk/metadata-reference
 name: loki-tester
+display-name: loki-tester
 summary: loki-tester
 description: |
   An integration tester for the Loki Operator.

@@ -22,7 +22,7 @@ tester_resources = {
     )
 }
 rules_app = "loki-tester"
-rules_app2 = "loki-tester2"
+rules_app2 = "other-tester"
 rules_app3 = "cos-config"
 
 

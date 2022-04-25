@@ -9,10 +9,7 @@
 
 import logging
 
-import aiohttp
 import requests
-import yaml
-from yaml.scanner import ScannerError
 
 logger = logging.getLogger(__name__)
 
@@ -72,37 +69,13 @@ class LokiServer:
             version = info.get("version", None)
             if not version:
                 raise LokiServerNotReadyError("Loki version could not be retrieved.")
+            return version
         except requests.exceptions.ConnectionError as e:
             raise LokiServerNotReadyError(str(e))
         except requests.exceptions.HTTPError as e:
             raise LokiServerError(str(e))
-
-        return version
-
-    async def rules(self, namespace: str = None) -> dict:
-        """Send a GET request to get Loki rules.
-
-        Args:
-          namespace: limit output to alerts under the given namespace (filename).
-
-        Returns:
-          Rule Groups list or empty list
-        """
-        url = f"{self.base_url}/loki/api/v1/rules{'/' + namespace if namespace else ''}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                result = await response.text()
-                # response looks like the alert yaml, unless there is an error, in which case an
-                # error message is returned as plain string
-                try:
-                    # error message could have a colon or not, raising ScannerError or ValueError,
-                    # respectively
-                    # error message from the loki server can be:
-                    #   - '404 page not found'
-                    as_yaml = yaml.safe_load(result)
-                    return as_yaml if type(as_yaml) is dict else {}
-                except (ScannerError, ValueError):
-                    return {}
+        except requests.exceptions.RequestException as e:
+            raise LokiServerError(str(e))
 
     @property
     def loki_push_api(self) -> str:

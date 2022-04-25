@@ -27,7 +27,7 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from ops.pebble import PathError, ProtocolError
+from ops.pebble import Layer, PathError, ProtocolError
 
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
@@ -97,16 +97,16 @@ class LokiOperatorCharm(CharmBase):
 
         if isinstance(event, LokiPushApiAlertRulesChanged) and event.error:
             self.unit.status = BlockedStatus(event.message)
-            return False
+            return
 
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
-            return False
+            return
 
-        current_layer = self._container.get_plan().services
+        current_layer = self._container.get_plan()
         new_layer = self._pebble_layer
 
-        if current_layer != new_layer:
+        if current_layer.services != new_layer.services:
             restart = True
 
         try:
@@ -119,7 +119,10 @@ class LokiOperatorCharm(CharmBase):
                 restart = True
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
-            return False
+            return
+        except Exception as e:
+            self.unit.status = BlockedStatus(str(e))
+            return
 
         if restart:
             self._container.add_layer(self._name, new_layer, combine=True)
@@ -139,24 +142,26 @@ class LokiOperatorCharm(CharmBase):
         return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
 
     @property
-    def _pebble_layer(self):
+    def _pebble_layer(self) -> Layer:
         """Construct the pebble layer.
 
         Returns:
             a Pebble layer specification for the Loki workload container.
         """
-        pebble_layer = {
-            "summary": "Loki layer",
-            "description": "pebble config layer for Loki",
-            "services": {
-                "loki": {
-                    "override": "replace",
-                    "summary": "loki",
-                    "command": self._loki_command,
-                    "startup": "enabled",
+        pebble_layer = Layer(
+            {
+                "summary": "Loki layer",
+                "description": "pebble config layer for Loki",
+                "services": {
+                    "loki": {
+                        "override": "replace",
+                        "summary": "loki",
+                        "command": self._loki_command,
+                        "startup": "enabled",
+                    },
                 },
-            },
-        }
+            }
+        )
 
         return pebble_layer
 

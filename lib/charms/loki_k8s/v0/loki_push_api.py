@@ -1203,6 +1203,8 @@ class LokiPushApiProvider(Object):
                 self.container.make_dir(self._rules_dir, make_parents=True)
             except (FileNotFoundError, ProtocolError, PathError):
                 logger.debug("Could not create loki directory.")
+            except Exception:
+                logger.debug("Could not create loki directory.")
 
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
@@ -1257,11 +1259,6 @@ class LokiPushApiProvider(Object):
         """
         remaining_units = any([u.name != event.departing_unit.name for u in event.relation.units])
         if remaining_units:
-            logger.warning("SET -- There are still remaining units!")
-            logger.warning(
-                "SET -- Departing: {}\t{}".format(event.departing_unit.name, event.departing_unit)
-            )
-            logger.warning("UNITS: {}".format([u.name for u in event.relation.units]))
             self._process_logging_relation_changed(event.relation)
         self._update_alert_rules(event.relation)
 
@@ -1278,6 +1275,9 @@ class LokiPushApiProvider(Object):
         Args:
             relation: the `Relation` instance to update.
         """
+        relation.data[self._charm.unit]["public_address"] = (
+            str(self._charm.model.get_binding(relation).network.bind_address) or ""
+        )
         if self._charm.unit.is_leader():
             # Condense the updates so we aren't setting keys to the same values
             # every time, such as _promtail_binary_url
@@ -1339,23 +1339,14 @@ class LokiPushApiProvider(Object):
         url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
         req = request.Request(url)
         try:
-            request.urlopen(req)
+            request.urlopen(req, timeout=2.0)
         except HTTPError as e:
             msg = e.read().decode("utf-8")
 
             if e.code == 404 and "no rule groups found" in msg:
                 log_msg = "Checking alert rules: No rule groups found"
-                logger.debug(log_msg)
                 self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
                 return True
-
-            if e.code == 404 and "404 page not found" in msg:
-                logger.error("Checking alert rules: 404 page not found: %s", url)
-                self.on.loki_push_api_alert_rules_changed.emit(
-                    error=True,
-                    message="Errors in alert rule groups. Check juju debug-log.",
-                )
-                return False
 
             message = "{} - {}".format(e.code, e.msg)  # type: ignore
             logger.error("Checking alert rules: %s", message)
@@ -1365,7 +1356,14 @@ class LokiPushApiProvider(Object):
             )
             return False
         except URLError as e:
-            logger.error("Checking alert rules: %s", e.reason)
+            logger.error("URLERROR: Checking alert rules: %s", e.reason)
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Errors in alert rule groups. Check juju debug-log.",
+            )
+            return False
+        except Exception as e:
+            logger.error("EXCEPTION: Checking alert rules: %s", e)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
@@ -1373,9 +1371,10 @@ class LokiPushApiProvider(Object):
             return False
         else:
             log_msg = "Checking alert rules: Ok"
-            logger.debug(log_msg)
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
             return True
+        finally:
+            logger.debug("Done checking alert rules")
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -1385,7 +1384,10 @@ class LokiPushApiProvider(Object):
     @property
     def unit_ip(self) -> str:
         """Returns unit's IP."""
-        bind_address = self._charm.model.get_binding(self._relation_name).network.bind_address
+        bind_address = ""
+        if self._charm.model.relations[self._relation_name]:
+            relation = self._charm.model.relations[self._relation_name][0]
+            bind_address = relation.data[self._charm.unit].get("public_address", "")
 
         if bind_address:
             return str(bind_address)
@@ -1409,6 +1411,7 @@ class LokiPushApiProvider(Object):
         Args:
             container: Container into which alert rules files are going to be uploaded
         """
+        logger.debug("Generating alert rules files")
         for identifier, alert_rules in self.alerts().items():
             filename = "{}_alert.rules".format(identifier)
             path = os.path.join(self._rules_dir, filename)
@@ -1528,15 +1531,13 @@ class ConsumerBase(Object):
                 sort_keys=True,  # sort, to prevent unnecessary relation_changed events
             )
         except InvalidAlertRulePathError as e:
-            logger.warning(
+            logger.debug(
                 "Invalid Loki alert rules folder at %s: %s",
                 e.alert_rules_absolute_path,
                 e.message,
             )
             relation.data[self._charm.app]["alert_rules"] = json.dumps({})
-
-        # if alert_rules_error_message:
-        #     self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
+            return
 
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
 
@@ -1675,11 +1676,10 @@ class LokiPushApiConsumer(ConsumerBase):
             relation_urls = [
                 {"url": endpoint["url"]}
                 for endpoint in relation_endpoints
-                if endpoint["unit"] not in self._departing_endpoints["units"]
+                if endpoint.get("unit", "") not in self._departing_endpoints["units"]
             ]
 
             endpoints = endpoints + relation_urls
-        print("Returning {}".format(endpoints))
         return endpoints
 
     def _filtered_relations(self) -> list:
@@ -1810,6 +1810,7 @@ class LogProxyConsumer(ConsumerBase):
         self.framework.observe(events.relation_created, self._on_relation_created)
         self.framework.observe(events.relation_changed, self._on_relation_changed)
         self.framework.observe(events.relation_departed, self._on_relation_departed)
+
         # turn the container name to a valid Python identifier
         snake_case_container_name = self._container_name.replace("-", "_")
         self.framework.observe(
