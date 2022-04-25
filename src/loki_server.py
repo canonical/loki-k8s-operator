@@ -69,14 +69,13 @@ class LokiServer:
             version = info.get("version", None)
             if not version:
                 raise LokiServerNotReadyError("Loki version could not be retrieved.")
+            return version
         except requests.exceptions.ConnectionError as e:
             raise LokiServerNotReadyError(str(e))
         except requests.exceptions.HTTPError as e:
             raise LokiServerError(str(e))
         except requests.exceptions.RequestException as e:
             raise LokiServerError(str(e))
-
-        return version
 
     @property
     def loki_push_api(self) -> str:

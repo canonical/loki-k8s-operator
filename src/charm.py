@@ -28,7 +28,7 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from ops.pebble import PathError, ProtocolError
+from ops.pebble import Layer, PathError, ProtocolError
 
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
@@ -104,10 +104,10 @@ class LokiOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
 
-        current_layer = self._container.get_plan().services
+        current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
 
-        if current_layer != new_layer:
+        if current_layer.services != new_layer.services:
             restart = True
 
         config = self._loki_config()
@@ -144,24 +144,26 @@ class LokiOperatorCharm(CharmBase):
         return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
 
     @property
-    def _build_pebble_layer(self):
+    def _build_pebble_layer(self) -> Layer:
         """Construct the pebble layer.
 
         Returns:
             a Pebble layer specification for the Loki workload container.
         """
-        pebble_layer = {
-            "summary": "Loki layer",
-            "description": "pebble config layer for Loki",
-            "services": {
-                "loki": {
-                    "override": "replace",
-                    "summary": "loki",
-                    "command": self._loki_command,
-                    "startup": "enabled",
+        pebble_layer = Layer(
+            {
+                "summary": "Loki layer",
+                "description": "pebble config layer for Loki",
+                "services": {
+                    "loki": {
+                        "override": "replace",
+                        "summary": "loki",
+                        "command": self._loki_command,
+                        "startup": "enabled",
+                    },
                 },
-            },
-        }
+            }
+        )
 
         return pebble_layer
 

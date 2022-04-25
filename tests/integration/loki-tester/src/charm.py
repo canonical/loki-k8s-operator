@@ -103,7 +103,7 @@ class LokiTesterCharm(CharmBase):
 
     def _on_loki_push_api_endpoint_departed(self, _):
         # TODO (multi-logger): remove only the logger whose endpoint departed
-        self.set_logger()
+        self.set_logger(local_only=True)
         self.log("debug", "Loki push API endpoint departed")
 
     def _on_log_error_action(self, event):
