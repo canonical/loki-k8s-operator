@@ -66,6 +66,7 @@ async def test_build_and_deploy(ops_test: OpsTest, loki_charm, loki_tester_charm
         ops_test.model.add_relation(app_name, "loki-tester"),
         ops_test.model.add_relation(app_name, "alertmanager"),
     )
+
     await ops_test.model.wait_for_idle(status="active", timeout=1000)
 
     assert await is_loki_up(ops_test, app_name)
@@ -99,13 +100,50 @@ async def test_remove_related_app(ops_test: OpsTest):
     )
 
     logger.info("Trying to remove related applications")
-    await ops_test.model.block_until(
-        lambda: "loki-tester" not in ops_test.model.applications,
-        lambda: "alertmanager" not in ops_test.model.applications,
-        timeout=300,
-    )
+    try:
+        await ops_test.model.block_until(
+            lambda: "loki-tester" not in ops_test.model.applications,
+            lambda: "alertmanager" not in ops_test.model.applications,
+            timeout=300,
+        )
+    except asyncio.exceptions.TimeoutError:
+        logger.warning(
+            "Failed to remove applications: %s",
+            ", ".join(
+                [
+                    app
+                    for app in ops_test.model.applications
+                    if app in ["loki-tester", "alertmanager"]
+                ]
+            ),
+        )
+        hung_apps = [
+            app_name
+            for app_name, app in ops_test.model.applications.items()
+            if len(app.units) == 0 and app.status == "active"
+        ]
+        if hung_apps:
+            for app in hung_apps:
+                logger.warning("%s stuck removing. Forcing...", app)
+                cmd = [
+                    "juju",
+                    "remove-application",
+                    "--destroy-storage",
+                    "--force",
+                    "--no-wait",
+                    app,
+                ]
+                logger.info("Forcibly removing {}".format(app))
+                await ops_test.run(*cmd)
+        else:
+            raise
+
     logger.info("Waiting for idle")
-    await ops_test.model.wait_for_idle(status="active", timeout=300)
+    try:
+        await ops_test.model.wait_for_idle(status="active", timeout=300)
+    except asyncio.exceptions.TimeoutError:
+        logger.warning("Timeout waiting for idle, ignoring it.")
+
     assert await is_loki_up(ops_test, app_name)
 
 
