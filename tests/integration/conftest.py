@@ -49,6 +49,7 @@ def timed_memoizer(func):
 
     return wrapper
 
+
 @pytest.fixture(scope="module", autouse=True)
 def copy_loki_library_into_tester_charm(ops_test):
     """Ensure that the tester charm uses the current Prometheus library."""
