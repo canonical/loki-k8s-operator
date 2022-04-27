@@ -1307,7 +1307,7 @@ class LokiPushApiProvider(Object):
         Args:
             container: Container into which alert rules files are going to be uploaded
         """
-        alert_rules = {}
+        alert_rules = {}  # type: ignore
 
         logger.debug("Generating alert rules files")
         for identifier, alert_rules in self.alerts.items():
@@ -1362,7 +1362,6 @@ class LokiPushApiProvider(Object):
                 log_msg = "Checking alert rules: No rule groups found"
                 logger.debug(log_msg)
                 self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-                return False
 
             message = "{} - {}".format(e.code, e.msg)  # type: ignore
             logger.error("Checking alert rules: %s", message)
@@ -1370,26 +1369,22 @@ class LokiPushApiProvider(Object):
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
             )
-            return False
         except URLError as e:
             logger.error("Checking alert rules: %s", e.reason)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
             )
-            return False
         except Exception as e:
             logger.error("Checking alert rules: %s", e)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
             )
-            return False
         else:
             log_msg = "Checking alert rules: Ok"
             logger.debug(log_msg)
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-            return True
 
     @property
     def alerts(self) -> dict:
