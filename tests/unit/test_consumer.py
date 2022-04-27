@@ -172,7 +172,8 @@ class TestReloadAlertRules(unittest.TestCase):
     ALERT = yaml.safe_dump({"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5"})
 
     def setUp(self):
-        # override the default ordering, since each of these steps depends on the state of the previous
+        # override the default ordering, since each of these steps depends on the
+        # state of the previous test
 
         # The "GIVEN" statements explicitly work against the way unittest is designed, and it is
         # only through sheer luck that they have worked thus far

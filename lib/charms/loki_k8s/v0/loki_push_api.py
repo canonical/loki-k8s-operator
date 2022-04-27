@@ -452,6 +452,7 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
+    RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
@@ -1226,6 +1227,7 @@ class LokiPushApiProvider(RelationManagerBase):
         self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
+        self.framework.observe(events.relation_broken, self._on_logging_relation_broken)
 
     def _on_lifecycle_event(self, _):
         # Upgrade event or other charm-level event
@@ -1257,6 +1259,16 @@ class LokiPushApiProvider(RelationManagerBase):
                 charm must update its relation data.
         """
         self._process_logging_relation_changed(event.relation)
+
+    def _on_logging_relation_broken(self, event: RelationBrokenEvent):
+        """Removes alert rules files when consumer charms left the relation with Loki.
+
+        Args:
+            event: a `CharmEvent` in response to which the Loki
+                charm must update its relation data.
+        """
+        self._regenerate_alert_rules()
+        self._check_alert_rules()
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
@@ -1294,9 +1306,13 @@ class LokiPushApiProvider(RelationManagerBase):
 
     def _update_alert_rules(self, relation):
         if relation.data.get(relation.app).get("alert_rules"):
-            logger.debug("Saved alerts rules to disk")
-            self._remove_alert_rules_files(self.container)
-            self._generate_alert_rules_files(self.container)
+            self._regenerate_alert_rules()
+
+    def _regenerate_alert_rules(self):
+        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
+        self._remove_alert_rules_files(self.container)
+        self._generate_alert_rules_files(self.container)
+        logger.debug("Saved alerts rules to disk")
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
