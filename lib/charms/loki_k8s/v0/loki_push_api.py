@@ -1307,7 +1307,7 @@ class LokiPushApiProvider(Object):
         Args:
             container: Container into which alert rules files are going to be uploaded
         """
-        alert_rules = {}  # type: ignore
+        alert_rules_mapping = {}  # type: ignore
 
         logger.debug("Generating alert rules files")
         for identifier, alert_rules in self.alerts.items():
@@ -1323,9 +1323,9 @@ class LokiPushApiProvider(Object):
         logger.debug("Removing existing alert rules")
         self._remove_alert_rules_files(container)
 
-        for filename, rules in alert_rules.items():
+        for filename, content in alert_rules_mapping.items():
             path = os.path.join(self._rules_dir, filename)
-            container.push(path, rules, make_dirs=True)
+            container.push(path, content, make_dirs=True)
             logger.debug("Updated alert rules file %s", filename)
 
     def _remove_alert_rules_files(self, container: Container) -> None:
