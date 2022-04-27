@@ -44,6 +44,10 @@ requires:
   alertmanager:
     interface: alertmanager_dispatch
 
+peers:
+  replicas:
+    interface: loki_replica
+
 resources:
   loki-image:
     type: oci-image

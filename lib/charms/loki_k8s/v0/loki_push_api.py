@@ -452,9 +452,11 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
+    RelationChangedEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
+    RelationJoinedEvent,
     RelationRole,
     WorkloadEvent,
 )
@@ -1222,6 +1224,7 @@ class LokiPushApiProvider(RelationManagerBase):
 
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
@@ -1230,7 +1233,11 @@ class LokiPushApiProvider(RelationManagerBase):
         for relation in self._charm.model.relations[self._relation_name]:
             self._process_logging_relation_changed(relation)
 
-    def _on_logging_relation_changed(self, event: HookEvent):
+    def _on_logging_relation_joined(self, event: RelationJoinedEvent):
+        if self._charm.unit.is_leader():
+            event.relation.data[self._charm.app].update(self._promtail_binary_url)
+
+    def _on_logging_relation_changed(self, event: RelationChangedEvent):
         """Handle changes in related consumers.
 
         Anytime there are changes in the relation between Loki
@@ -1273,7 +1280,6 @@ class LokiPushApiProvider(RelationManagerBase):
 
     def _update_relation_data(self, relation):
         if self._charm.unit.is_leader():
-            relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
             logger.debug("Saved endpoints in relation data")
@@ -1365,8 +1371,9 @@ class LokiPushApiProvider(RelationManagerBase):
         if bind_address:
             logger.warning("Returning IP %s", str(bind_address))
             return str(bind_address)
-        logger.warning("No address found")
-        return ""
+        else:
+            logger.warning("No address found")
+            return ""
 
     def _remove_alert_rules_files(self, container: Container) -> None:
         """Remove alert rules files from workload container.

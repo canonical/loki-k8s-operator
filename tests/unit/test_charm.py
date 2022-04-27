@@ -3,15 +3,23 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
+import json
 import unittest
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
+import hypothesis.strategies as st
+import ops.testing
 import yaml
+from helpers import patch_network_get
+from hypothesis import given
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
 from charm import LokiOperatorCharm
 from loki_server import LokiServerError, LokiServerNotReadyError
+
+ops.testing.SIMULATE_CAN_CONNECT = True
+
 
 LOKI_CONFIG = """
 auth_enabled: false
@@ -84,7 +92,8 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(version_patcher.stop)
         self.harness.set_leader(True)
-        self.harness.begin()
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("loki")
         self.harness.charm._stored.config = LOKI_CONFIG
 
     def test__alerting_config(self):
@@ -150,3 +159,97 @@ class TestCharm(unittest.TestCase):
                 sorted(logger.output),
                 ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
             )
+
+
+class TestPebblePlan(unittest.TestCase):
+    """Feature: Multi-unit loki deployments.
+
+    Background: TODO
+    """
+
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch_network_get(private_address="1.1.1.1")
+    @given(st.booleans(), st.integers(1, 3), st.integers(0, 3))
+    def test_loki_starts_when_cluster_deployed_without_any_relations(
+        self, is_leader, num_units, num_consumer_apps
+    ):
+        """Scenario: A loki cluster is deployed without any relations."""
+        self.harness = Harness(LokiOperatorCharm)
+        self.addCleanup(self.harness.cleanup)
+
+        # WHEN the unit is started as either a leader or not
+        self.harness.set_leader(is_leader)
+
+        # AND potentially some peers join
+        self.peer_rel_id = self.harness.add_relation("replicas", self.harness.model.name)
+        for i in range(1, num_units):
+            self.harness.add_relation_unit(self.peer_rel_id, f"{self.harness.model.name}/{i}")
+        self.assertEqual(self.harness.model.app.planned_units(), num_units)
+
+        # AND potentially some logging relations join
+        for i in range(num_consumer_apps):
+            self.log_rel_id = self.harness.add_relation("logging", f"consumer-app-{i}")
+            # Add two units per consumer app
+            for u in range(2):
+                self.harness.add_relation_unit(self.log_rel_id, f"consumer-app-{i}/{u}")
+
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("loki")
+
+        # THEN a pebble service is created for this unit
+        plan = self.harness.get_container_pebble_plan("loki")
+        self.assertIn("loki", plan.services)
+
+        # AND the command includes a config file
+        command = plan.services["loki"].command
+        self.assertIn("-config.file=", command)
+
+        # AND the service is running
+        container = self.harness.charm.unit.get_container("loki")
+        service = container.get_service("loki")
+        self.assertTrue(service.is_running())
+
+
+class TestAppRelationData(unittest.TestCase):
+    """Feature: Loki advertises common global info over app relation data.
+
+    Background: Consumer charms need to have a URL for downloading promtail.
+    """
+
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch_network_get(private_address="1.1.1.1")
+    def setUp(self) -> None:
+        self.harness = Harness(LokiOperatorCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+
+        self.rel_id = self.harness.add_relation("logging", "consumer")
+        self.harness.add_relation_unit(self.rel_id, "consumer/0")
+
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("loki")
+
+    def test_endpoints(self):
+        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
+        # Relation data must include an "endpoints" key
+        self.assertIn("endpoints", rel_data)
+        endpoints = json.loads(rel_data["endpoints"])
+
+        # The endpoints must be a list of dicts
+        self.assertIsInstance(endpoints, list)
+        self.assertIsInstance(endpoints[0], dict)
+
+        # Each endpoint must have a "url" key
+        urls = [d["url"] for d in endpoints]
+        for url in urls:
+            self.assertTrue(url.startswith("http"))
+
+    def test_promtail_url(self):
+        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
+
+        # Relation data must include a "promtail_binary_zip_url" key
+        self.assertIn("promtail_binary_zip_url", rel_data)
+
+        # The value must be a url
+        url = rel_data["promtail_binary_zip_url"]
+        self.assertTrue(url.startswith("http"))
