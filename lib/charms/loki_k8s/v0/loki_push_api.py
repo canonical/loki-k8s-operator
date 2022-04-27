@@ -2012,6 +2012,7 @@ class LogProxyConsumer(ConsumerBase):
         """
         if not self._container.can_connect():
             logger.debug("Could not connect to promtail container!")
+            return {}
         try:
             raw_current = self._container.pull(WORKLOAD_CONFIG_PATH).read()
             return yaml.safe_load(raw_current)
