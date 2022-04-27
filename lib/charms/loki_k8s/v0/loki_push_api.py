@@ -2010,9 +2010,18 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             A dict containing Promtail configuration.
         """
-        raw_current = self._container.pull(WORKLOAD_CONFIG_PATH).read()
-        current_config = yaml.safe_load(raw_current)
-        return current_config
+        if not self._container.can_connect():
+            logger.debug("Could not connect to promtail container!")
+        try:
+            raw_current = self._container.pull(WORKLOAD_CONFIG_PATH).read()
+            return yaml.safe_load(raw_current)
+        except (ProtocolError, PathError) as e:
+            logger.warning(
+                "Could not check the current promtail configuration due to "
+                "a failure in retrieving the file: %s",
+                e,
+            )
+            return {}
 
     @property
     def _promtail_config(self) -> dict:
@@ -2128,7 +2137,7 @@ class LogProxyConsumer(ConsumerBase):
             msg = "Promtail binary couldn't be download - {}".format(str(e))
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
-        if self._current_config["clients"]:
+        if self._current_config.get("clients"):
             try:
                 self._container.restart(WORKLOAD_SERVICE_NAME)
             except ChangeError as e:

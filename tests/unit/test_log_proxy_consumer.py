@@ -10,6 +10,7 @@ from charms.loki_k8s.v0.loki_push_api import ContainerNotFoundError, LogProxyCon
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.model import Container
+from ops.pebble import PathError
 from ops.testing import Harness
 
 LOG_FILES = ["/var/log/apache2/access.log", "/var/log/alternatives.log", "/var/log/test.log"]
@@ -273,6 +274,11 @@ class TestLogProxyConsumer(unittest.TestCase):
                     "DEBUG:charms.loki_k8s.v0.loki_push_api:Promtail binary file is already in the the charm container."
                 ],
             )
+
+    @patch("ops.model.Container.pull")
+    def test__promtail_can_handle_missing_configuration(self, mock_pull):
+        mock_pull.side_effect = PathError(None, "irrelevant")
+        self.assertEqual(self.harness.charm._log_proxy._current_config, {})
 
 
 class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
