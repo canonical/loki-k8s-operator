@@ -452,6 +452,7 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
+    RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
@@ -1231,6 +1232,7 @@ class LokiPushApiProvider(RelationManagerBase):
         self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
+        self.framework.observe(events.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
@@ -1250,7 +1252,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 self._process_logging_relation_changed(relation)
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
-        """Removes alert rules files when consumer charms left the relation with Loki.
+        """Handle departures in related consumers.
 
         Args:
             event: a `CharmEvent` in response to which the Loki
@@ -1258,7 +1260,16 @@ class LokiPushApiProvider(RelationManagerBase):
         """
         self._process_logging_relation_changed(event.relation)
 
-    def update_endpoint(self, relation: Relation = None) -> None:
+    def _on_logging_relation_broken(self, event: RelationBrokenEvent):
+        """Handle broken relation in related consumers.
+
+        Args:
+            event: a `CharmEvent` in response to which the Loki
+                charm must update its relation data.
+        """
+        self._process_logging_relation_changed(event.relation)
+
+    def update_endpoint(self, url: str = None, relation: Relation = None) -> None:
         """Triggers programmatically the update of the relation data.
 
         This method should be used when the charm relying on this library needs
@@ -1268,11 +1279,11 @@ class LokiPushApiProvider(RelationManagerBase):
         Ingress after the `logging` relation is established.
 
         Args:
+            url: An optional url value to update relation data.
             relation: An optional instance of `class:ops.model.Relation` to update.
-                If not provided, all instances of the `prometheus_remote_write`
-                relation are updated.
         """
-        if not self._charm.unit.is_leader():
+        if isinstance(relation, (RelationDepartedEvent, RelationBrokenEvent)):
+            relation.data[self._charm.unit].update({})
             return
 
         if not relation:
@@ -1281,7 +1292,12 @@ class LokiPushApiProvider(RelationManagerBase):
 
             relation = self._charm.model.get_relation(self._relation_name)
 
-        relation.data[self._charm.app].update({"endpoints": json.dumps(self._endpoints())})
+        endpoint = self._endpoint(self._url)
+
+        if url:
+            endpoint = self._endpoint(url)
+
+        relation.data[self._charm.unit].update({"endpoint": json.dumps(endpoint)})
 
     def _process_logging_relation_changed(self, relation: Relation):
         """Handle changes in related consumers.
@@ -1298,7 +1314,8 @@ class LokiPushApiProvider(RelationManagerBase):
         if self._charm.unit.is_leader():
             relation.data[self._charm.app].update(self._promtail_binary_url)
             logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
-            self.update_endpoint(relation)
+
+        self.update_endpoint(relation=relation)
 
         if relation.data.get(relation.app).get("alert_rules"):
             logger.debug("Saved alerts rules to disk")
@@ -1306,36 +1323,30 @@ class LokiPushApiProvider(RelationManagerBase):
             self._generate_alert_rules_files(self.container)
             self._check_alert_rules()
 
-    def _endpoints(self) -> List[dict]:
-        """Return a list of Loki Push Api endpoints."""
-        endpoints = []
-        path = "/loki/api/v1/push"
+    @property
+    def _url(self) -> str:
+        """Get local Loki Push API url.
 
-        if self._charm.ingress_per_unit.urls:
-            return [
-                {"url": url.rstrip("/") + path}
-                for url in self._charm.ingress_per_unit.urls.values()
-            ]
-
-        peers = [*self._charm.meta.peers.keys()][0]
-        units = self._charm.model.get_relation(peers).units
-        units.add(self._charm.unit)
-
-        for unit in units:
-            unit_number = unit.name.split("/")[-1]
-            endpoints.append({"url": self._url(unit_number)})
-
-        return endpoints
-
-    def _url(self, unit_number) -> str:
-        """Get the url for a given unit."""
-        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
+        Returns: str
+        """
+        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}".format(
             self._charm.app.name,
-            unit_number,
+            self._charm.unit.name.split("/")[-1],
             self._charm.app.name,
             self._charm.model.name,
             self.port,
         )
+
+    def _endpoint(self, url) -> dict:
+        """Get Loki push API endpoint for a given url.
+
+        Args:
+            url: A loki unit URL.
+
+        Returns: str
+        """
+        endpoint = "/loki/api/v1/push"
+        return {"url": "{}{}".format(url.rstrip("/"), endpoint)}
 
     def _check_alert_rules(self) -> bool:
         """Check alert rules using Loki API.
@@ -1652,7 +1663,16 @@ class LokiPushApiConsumer(ConsumerBase):
         endpoints = []  # type: list
 
         for relation in self._charm.model.relations[self._relation_name]:
-            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            for unit in relation.units:
+                if unit.app is self._charm.app:
+                    # This is a peer unit
+                    continue
+
+                endpoint = relation.data[unit].get("endpoint")
+                if endpoint:
+                    deserialized_endpoint = json.loads(endpoint)
+                    endpoints.append(deserialized_endpoint)
+
         return endpoints
 
 

@@ -111,7 +111,7 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_ingress_changed(self, event):
         self._configure(event)
-        self.loki_provider.update_endpoint()
+        self.loki_provider.update_endpoint(url=self._external_url)
 
     def _configure(self, event):
         """Configure Loki charm."""

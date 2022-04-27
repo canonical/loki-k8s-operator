@@ -141,24 +141,22 @@ class TestLokiPushApiProvider(unittest.TestCase):
         MagicMock(),
     )
     @patch("urllib.request.urlopen")
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoints")
-    def test__on_logging_relation_changed(self, mock_endpoints, mock_urlopen):
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoint")
+    def test__on_logging_relation_changed(self, mock_endpoint, mock_urlopen):
         mock_urlopen.return_value = True
         with self.assertLogs(level="DEBUG") as logger:
             expected_data = [
                 {"url": "http://loki0.endpoint/loki/api/v1/push"},
-                {"url": "http://loki1.endpoint/loki/api/v1/push"},
             ]
 
-            mock_endpoints.return_value = expected_data
+            mock_endpoint.return_value = expected_data
             rel_id = self.harness.add_relation("logging", "promtail")
             self.harness.add_relation_unit(rel_id, "promtail/0")
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
-            data = self.harness.get_relation_data(rel_id, self.harness.model.app.name)
+            data = self.harness.get_relation_data(rel_id, self.harness.model.unit.name)
 
-            self.assertTrue("endpoints" in data)
-            self.assertTrue(json.dumps(expected_data[0]) in data["endpoints"])
-            self.assertTrue(json.dumps(expected_data[1]) in data["endpoints"])
+            self.assertTrue("endpoint" in data)
+            self.assertTrue(json.dumps(expected_data[0]) in data["endpoint"])
 
             self.assertEqual(
                 logger.output[1],
@@ -170,15 +168,14 @@ class TestLokiPushApiProvider(unittest.TestCase):
 
     @patch("os.makedirs", MagicMock())
     @patch("urllib.request.urlopen")
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoints")
-    def test_alerts(self, mock_endpoints, mock_urlopen):
+    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoint")
+    def test_alerts(self, mock_endpoint, mock_urlopen):
         mock_urlopen.return_value = True
         expected_data = [
             {"url": "http://loki0.endpoint/loki/api/v1/push"},
-            {"url": "http://loki1.endpoint/loki/api/v1/push"},
         ]
 
-        mock_endpoints.return_value = expected_data
+        mock_endpoint.return_value = expected_data
         rel_id = self.harness.add_relation("logging", "consumer")
         self.harness.update_relation_data(
             rel_id,
