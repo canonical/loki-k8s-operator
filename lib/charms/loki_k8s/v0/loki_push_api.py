@@ -1329,14 +1329,14 @@ class LokiPushApiProvider(RelationManagerBase):
             )
             return False
         except URLError as e:
-            logger.error("URLERROR: Checking alert rules: %s", e.reason)
+            logger.error("Checking alert rules: %s", e.reason)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
             )
             return False
         except Exception as e:
-            logger.error("EXCEPTION: Checking alert rules: %s", e)
+            logger.error("Checking alert rules: %s", e)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
@@ -1357,13 +1357,11 @@ class LokiPushApiProvider(RelationManagerBase):
     def unit_ip(self) -> str:
         """Returns unit's IP."""
         bind_address = ""
-        logger.warning("Trying to get IP")
         if self._charm.model.relations[self._relation_name]:
             relation = self._charm.model.relations[self._relation_name][0]
             bind_address = relation.data[self._charm.unit].get("public_address", "")
 
         if bind_address:
-            logger.warning("Returning IP %s", str(bind_address))
             return str(bind_address)
         logger.warning("No address found")
         return ""
@@ -1392,7 +1390,7 @@ class LokiPushApiProvider(RelationManagerBase):
         if not container.can_connect():
             return
 
-        logger.warning("Generating alert rules files")
+        logger.debug("Generating alert rules files")
         for identifier, alert_rules in self.alerts().items():
             filename = "{}_alert.rules".format(identifier)
             path = os.path.join(self._rules_dir, filename)
@@ -1434,22 +1432,17 @@ class LokiPushApiProvider(RelationManagerBase):
         """
         alerts = {}  # type: Dict[str, dict] # mapping b/w juju identifiers and alert rule files
         for relation in self._charm.model.relations[self._relation_name]:
-            logger.warning("Checking relation %s", relation)
             if not relation.units:
-                logger.warning("No units!")
                 continue
 
             alert_rules = json.loads(relation.data[relation.app].get("alert_rules", "{}"))
             if not alert_rules:
-                logger.warning("No rules!")
                 continue
 
             try:
                 # NOTE: this `metadata` key SHOULD NOT be changed to `scrape_metadata`
                 # to align with Prometheus without careful consideration'
-                logger.warning("Checking metadata")
                 metadata = json.loads(relation.data[relation.app]["metadata"])
-                logger.warning("Got metadata %s", metadata)
                 identifier = ProviderTopology.from_relation_data(metadata).identifier
                 alerts[identifier] = alert_rules
             except KeyError as e:
@@ -1509,7 +1502,7 @@ class ConsumerBase(RelationManagerBase):
         if not self._charm.unit.is_leader():
             return
 
-        logger.warning("Handling alert rules")
+        logger.debug("Handling alert rules")
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
@@ -1517,7 +1510,7 @@ class ConsumerBase(RelationManagerBase):
         # if alert_rules_error_message:
         #     self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
 
-        logger.warning("Setting alert rules")
+        logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         relation.data[self._charm.app]["alert_rules"] = json.dumps(
             alert_rules_as_dict,
@@ -1602,7 +1595,6 @@ class LokiPushApiConsumer(ConsumerBase):
             loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
                 file is encountered or if `alert_rules_path` is empty.
         """
-        logger.warning("Changed! %s", event)
         if isinstance(event, RelationEvent):
             self._process_logging_relation_changed(event.relation)
         else:
@@ -1616,7 +1608,6 @@ class LokiPushApiConsumer(ConsumerBase):
             self._handle_alert_rules(relation)
 
     def _process_logging_relation_changed(self, relation: Relation):
-        logger.warning("Changed")
         self._handle_alert_rules(relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
@@ -1638,11 +1629,9 @@ class LokiPushApiConsumer(ConsumerBase):
         Returns:
             A list with Loki Push API endpoints.
         """
-        logger.warning("Trying to fetch loki endpoints")
         endpoints = []  # type: list
         for relation in self._charm.model.relations[self._relation_name]:
             endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
-        logger.warning("Returning endpoints: %s", endpoints)
         return endpoints
 
 
