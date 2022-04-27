@@ -4,4 +4,4 @@ requests
 lightkube
 lightkube-models
 aiohttp
-serialized_data_interface >= 0.4.0
+jsonschema
