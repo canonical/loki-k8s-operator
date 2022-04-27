@@ -77,28 +77,31 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #           CHARM HOOKS HANDLERS             #
     ##############################################
-    def _on_config_changed(self, event):
-        self._configure(event)
+    def _on_config_changed(self, _):
+        self._configure()
 
-    def _on_upgrade_charm(self, event):
-        self._configure(event)
+    def _on_upgrade_charm(self, _):
+        self._configure()
 
-    def _on_loki_pebble_ready(self, event):
-        self._configure(event)
+    def _on_loki_pebble_ready(self, _):
+        self._configure()
 
-    def _on_alertmanager_change(self, event):
-        self._configure(event)
+    def _on_alertmanager_change(self, _):
+        self._configure()
 
     def _loki_push_api_alert_rules_changed(self, event):
-        self._configure(event)
+        if isinstance(event, LokiPushApiAlertRulesChanged):
+            if event.error:
+                self.unit.status = BlockedStatus(event.message)
+                return
+            elif isinstance(self.unit.status, BlockedStatus) and not event.error:
+                self.unit.status = ActiveStatus()
+                logger.info("Clearing blocked status with successful alert rule check")
+        self._configure()
 
-    def _configure(self, event):
+    def _configure(self):
         """Configure Loki charm."""
         restart = False
-
-        if isinstance(event, LokiPushApiAlertRulesChanged) and event.error:
-            self.unit.status = BlockedStatus(event.message)
-            return
 
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")

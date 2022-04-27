@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import yaml
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiAlertRulesChanged
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
@@ -123,6 +124,29 @@ class TestCharm(unittest.TestCase):
         # Since harness was not started with begin_with_initial_hooks(), this must
         # be emitted by hand to actually trigger _configure()
         self.harness.charm.on.config_changed.emit()
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+    @patch("charm.LokiOperatorCharm._loki_config")
+    def test__alert_rule_events_appropriately_set_state(self, mock_loki_config):
+        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
+        self.harness.set_leader(True)
+
+        # Since harness was not started with begin_with_initial_hooks(), this must
+        # be emitted by hand to actually trigger _configure()
+        self.harness.charm.on.config_changed.emit()
+
+        self.harness.charm._loki_push_api_alert_rules_changed(
+            LokiPushApiAlertRulesChanged(
+                None, error=True, message="I should be in blocked status!"
+            )
+        )
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(self.harness.charm.unit.status.message, "I should be in blocked status!")
+
+        self.harness.charm._loki_push_api_alert_rules_changed(
+            LokiPushApiAlertRulesChanged(None, error=False)
+        )
+
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     def test__provide_loki(self):
