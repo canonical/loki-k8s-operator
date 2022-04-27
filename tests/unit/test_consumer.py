@@ -177,7 +177,7 @@ class TestReloadAlertRules(unittest.TestCase):
 
         # The "GIVEN" statements explicitly work against the way unittest is designed, and it is
         # only through sheer luck that they have worked thus far
-        unittest.TestLoader.sortTestMethodsUsing = None
+        unittest.TestLoader.sortTestMethodsUsing = None  # type: ignore
         self.sandbox = TempFolderSandbox()
         alert_rules_path = os.path.join(self.sandbox.root, "alerts")
         self.alert_rules_path = alert_rules_path
