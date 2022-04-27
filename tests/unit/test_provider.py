@@ -5,7 +5,7 @@ import io
 import json
 import textwrap
 import unittest
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
 
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
@@ -78,6 +78,7 @@ class FakeLokiCharm(CharmBase):
             (object,),
             {
                 "make_dir": lambda *a, **kw: None,
+                "push": lambda *a, **kw: None,
                 "remove_path": lambda *a, **kw: None,
                 "can_connect": lambda *a, **kw: True,
                 "list_files": lambda *a, **kw: [],
@@ -108,7 +109,9 @@ class TestLokiPushApiProvider(unittest.TestCase):
     def test_relation_data(self):
         self.harness.charm.app.name = "loki"
         expected_value = [
-            {"url": "http://loki-0.loki-endpoints.None.svc.cluster.local:3100/loki/api/v1/push"}
+            {
+                "url": "http://loki-0.loki-endpoints.None.svc.cluster.local:3100/loki/api/v1/push",
+            }
         ]
         self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoints())
 
@@ -120,27 +123,44 @@ class TestLokiPushApiProvider(unittest.TestCase):
         "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
         MagicMock(),
     )
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
-    )
+    @patch("ops.testing._TestingModelBackend.network_get")
     def test__on_logging_relation_changed(self, mock_unit_ip):
         with self.assertLogs(level="DEBUG") as logger:
-            mock_unit_ip.return_value = "10.1.2.3"
+            fake_network = {
+                "bind-addresses": [
+                    {
+                        "interface-name": "eth0",
+                        "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
+                    }
+                ]
+            }
+            mock_unit_ip.return_value = fake_network
             rel_id = self.harness.add_relation("logging", "promtail")
             self.harness.add_relation_unit(rel_id, "promtail/0")
 
             self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
-            self.assertEqual(
-                sorted(logger.output)[0],
-                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
+            self.assertTrue(
+                any(
+                    [
+                        log_msg
+                        == "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk"
+                        for log_msg in logger.output
+                    ]
+                )
             )
 
     @patch("os.makedirs", MagicMock())
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider.unit_ip", new_callable=PropertyMock
-    )
+    @patch("ops.testing._TestingModelBackend.network_get")
     def test_alerts(self, mock_unit_ip):
-        mock_unit_ip.return_value = "10.1.2.3"
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
         rel_id = self.harness.add_relation("logging", "consumer")
         self.harness.update_relation_data(
             rel_id,

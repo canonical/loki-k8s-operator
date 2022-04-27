@@ -1,7 +1,0 @@
-record: nginx:requests:rate1m
-expr: |
-  sum(
-    rate({container="nginx", %%juju_topology%%}[1m])
-  )
-labels:
-  cluster: "us-central1"

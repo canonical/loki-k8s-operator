@@ -2,7 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-
+import asyncio
 import logging
 from pathlib import Path
 
@@ -15,19 +15,16 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
-rules_app = "cos-config"
+rules_app = "loki-tester"
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy_charms(ops_test):
-    """Build the charm-under-test and deploy it together with related charms.
+async def test_deploy_charms(ops_test, loki_charm, loki_tester_charm):
+    """Deploy Loki.
 
     Assert on the unit status before any relations/configurations take place.
     """
-    # build and deploy charm from local source folder
-    logger.debug("Building charm")
-    charm_under_test = await ops_test.build_charm(".")
-    await ops_test.model.deploy(charm_under_test, resources=resources, application_name=app_name)
+    await ops_test.model.deploy(loki_charm, resources=resources, application_name=app_name)
 
     async with IPAddressWorkaround(ops_test):
         await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
@@ -35,21 +32,12 @@ async def test_build_and_deploy_charms(ops_test):
 
     assert await is_loki_up(ops_test, app_name)
 
-    logger.debug("deploy charm from charmhub")
-    await ops_test.model.deploy(
-        "ch:cos-configuration-k8s",
-        application_name=rules_app,
-        channel="edge",
-        config={
-            "git_repo": "https://github.com/canonical/loki-k8s-operator",
-            "git_branch": "main",
-            "loki_alert_rules_path": "tests/sample_rule_files/free-standing",
-        },
+    await asyncio.gather(
+        ops_test.model.deploy(
+            loki_tester_charm,
+            application_name=rules_app,
+        ),
     )
-
-    # force an update, just in case the files showed up on disk after the last hook fired
-    action = await ops_test.model.applications[rules_app].units[0].run_action("sync-now")
-    await action.wait()
 
     # form a relation between loki and the app that provides rules
     await ops_test.model.add_relation(app_name, rules_app)
