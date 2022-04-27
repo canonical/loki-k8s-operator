@@ -19,7 +19,6 @@ import pytest
 import yaml
 from helpers import IPAddressWorkaround, is_loki_up
 from pytest_operator.plugin import OpsTest
-from tenacity import Retrying, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +62,7 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     # Refresh from path
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
     await ops_test.model.wait_for_idle(status="active", timeout=1000)
-    for attempt in Retrying(
-        wait=wait_exponential(multiplier=1.1, min=5, max=30), stop=stop_after_attempt(10)
-    ):
-        with attempt:
-            assert await is_loki_up(ops_test, app_name)
+    assert await is_loki_up(ops_test, app_name)
 
 
 @pytest.mark.abort_on_fail
@@ -80,9 +75,4 @@ async def test_upgrade_with_multiple_units(ops_test: OpsTest, loki_charm):
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
     await ops_test.model.wait_for_idle(status="active", timeout=1000)
 
-    # is_loki_up times out here for some reason - using tenacity
-    for attempt in Retrying(
-        wait=wait_exponential(multiplier=1.1, min=5, max=30), stop=stop_after_attempt(10)
-    ):
-        with attempt:
-            assert await is_loki_up(ops_test, app_name, num_units=2)
+    assert await is_loki_up(ops_test, app_name, num_units=2)

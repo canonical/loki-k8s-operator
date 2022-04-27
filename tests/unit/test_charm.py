@@ -125,9 +125,9 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
-    def test__provide_loki(self):
+    def test__loki_ready(self):
         with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._provide_loki()
+            self.harness.charm._loki_ready()
             self.assertEqual(
                 sorted(logger.output),
                 ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
@@ -135,17 +135,17 @@ class TestCharm(unittest.TestCase):
 
     def test__provide_loki_not_ready(self):
         self.mock_version.side_effect = LokiServerNotReadyError
-        self.harness.charm._provide_loki()
+        self.harness.charm._loki_ready()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
     def test__provide_loki_server_error(self):
         self.mock_version.side_effect = LokiServerError
-        self.harness.charm._provide_loki()
+        self.harness.charm._loki_ready()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
     def test__loki_config(self):
         with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._provide_loki()
+            self.harness.charm._loki_ready()
             self.assertEqual(
                 sorted(logger.output),
                 ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],

@@ -60,7 +60,6 @@ class LokiOperatorCharm(CharmBase):
             source_port=str(self._port),
         )
         self._loki_server = LokiServer()
-        self._provide_loki()
         self.loki_provider = LokiPushApiProvider(self)
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -104,6 +103,7 @@ class LokiOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
 
+
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
 
@@ -130,6 +130,10 @@ class LokiOperatorCharm(CharmBase):
             self._container.add_layer(self._name, new_layer, combine=True)
             self._container.restart(self._name)
             logger.info("Loki (re)started")
+
+        if not self._loki_ready():
+            self.unit.status = WaitingStatus("Waiting for Loki to be ready")
+            return
 
         self.unit.status = ActiveStatus()
 
@@ -170,15 +174,18 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #             UTILITY METHODS                #
     ##############################################
-    def _provide_loki(self):
+    def _loki_ready(self) -> bool:
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
         try:
             version = self._loki_server.version
             logger.debug("Loki Provider is available. Loki version: %s", version)
+            return True
         except LokiServerNotReadyError as e:
             self.unit.status = WaitingStatus(str(e))
+            return False
         except LokiServerError as e:
             self.unit.status = BlockedStatus(str(e))
+            return False
 
     def _alerting_config(self) -> str:
         """Construct Loki altering configuration.
