@@ -116,11 +116,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
         self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoints())
 
     @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files",
-        MagicMock(),
-    )
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._regenerate_alert_rules_files",
         MagicMock(),
     )
     @patch("ops.testing._TestingModelBackend.network_get")
@@ -172,7 +168,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
         )
         self.harness.add_relation_unit(rel_id, "consumer/0")
 
-        alerts = self.harness.charm.loki_provider.alerts()
+        alerts = self.harness.charm.loki_provider.alerts
         self.assertEqual(len(alerts), 1)
         self.assertDictEqual(list(alerts.values())[0]["groups"][0], ALERT_RULES["groups"][0])
 
