@@ -103,7 +103,6 @@ class LokiOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
 
-
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
 
