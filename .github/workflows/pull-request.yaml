@@ -15,6 +15,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check libs
+        continue-on-error: true
         uses: canonical/charming-actions/check-libraries@1.0.1-rc
         with:
           credentials: "${{ secrets.CHARMHUB_TOKEN }}"
