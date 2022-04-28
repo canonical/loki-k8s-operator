@@ -973,7 +973,7 @@ class AlertRules:
         """
         file_path = Path(file_path) if not isinstance(file_path, Path) else file_path
         root_path = Path(root_path) if not isinstance(root_path, Path) else root_path
-        rel_path = Path(file_path).parent.relative_to(root_path)
+        rel_path = file_path.parent.relative_to(root_path.as_posix())
 
         # We should account for both absolute paths and Windows paths. Convert it to a POSIX
         # string, strip off any leading /, then join it
