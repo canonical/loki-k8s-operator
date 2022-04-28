@@ -162,10 +162,12 @@ class TestDelayedPebbleReady(unittest.TestCase):
 
     @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules", new=tautology
-    )
     def setUp(self):
+        self.check_alert_rules_patcher = patch(
+            "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules",
+            new=tautology,
+        )
+        self.check_alert_rules_patcher.start()
         self.harness = Harness(LokiOperatorCharm)
 
         # GIVEN this unit is the leader
@@ -185,6 +187,9 @@ class TestDelayedPebbleReady(unittest.TestCase):
                 "alert_rules": {},
             },
         )
+
+    def tearDown(self):
+        self.check_alert_rules_patcher.stop()
 
     def test_regular_relation_departed_runs_before_pebble_ready(self):
         """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
