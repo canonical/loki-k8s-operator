@@ -137,11 +137,20 @@ class TestCharm(unittest.TestCase):
 
         self.harness.charm._loki_push_api_alert_rules_changed(
             LokiPushApiAlertRulesChanged(
-                None, error=True, message="I should be in blocked status!"
+                None, error=True, message="Errors in alert rule groups: fubar!"
             )
         )
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-        self.assertEqual(self.harness.charm.unit.status.message, "I should be in blocked status!")
+        self.assertEqual(
+            self.harness.charm.unit.status.message, "Errors in alert rule groups: fubar!"
+        )
+
+        # Emit another config changed to make sure we stay blocked
+        self.harness.charm.on.config_changed.emit()
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status.message, "Errors in alert rule groups: fubar!"
+        )
 
         self.harness.charm._loki_push_api_alert_rules_changed(
             LokiPushApiAlertRulesChanged(None, error=False)

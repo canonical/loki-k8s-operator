@@ -134,6 +134,13 @@ class LokiOperatorCharm(CharmBase):
             self._container.restart(self._name)
             logger.info("Loki (re)started")
 
+        # Don't clear alert error states on reconfigure
+        if (
+            isinstance(self.unit.status, BlockedStatus)
+            and "Errors in alert rule" in self.unit.status.message
+        ):
+            return
+
         self.unit.status = ActiveStatus()
 
     @property
