@@ -63,7 +63,11 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     # Refresh from path
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
     await ops_test.model.wait_for_idle(status="active", timeout=1000)
-    assert await is_loki_up(ops_test, app_name)
+    for attempt in Retrying(
+        wait=wait_exponential(multiplier=1.1, min=5, max=30), stop=stop_after_attempt(10)
+    ):
+        with attempt:
+            assert await is_loki_up(ops_test, app_name)
 
 
 @pytest.mark.abort_on_fail
