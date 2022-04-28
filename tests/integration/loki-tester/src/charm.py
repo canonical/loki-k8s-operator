@@ -34,33 +34,80 @@ class LokiTesterCharm(CharmBase):
         )
 
         self.topology = ProviderTopology.from_charm(self)
+        self.unit.status = ActiveStatus()
 
-        self.logger = None
-        self.log_handler = None
-        self.log_endpoints = []
-        self.set_logger()
+    def _setup_logging(self, handlers: dict = None) -> None:
+        """Ensure logging is configured correctly.
 
-        self.log("debug", "Constructed loki tester")
+        A dict of "wanted" loggers is passed in, and the list of current loggers known to
+        `logging.getLogger()` is compared. If the "wanted" loggers are not part of that list,
+        or that list has loggers which are not "wanted", it is reconciled via `addHandler()` and
+        `removeHandler()`. Python's `logging` objects are actually global variables, and this
+        add/remove is a necessary step to ensure the state is "correct" rather than blindly
+        adding/removing them.
+
+        Args:
+            handlers: a dict of 'name' -> handler objects
+        """
+        handlers = handlers or {}
+        logger = logging.getLogger("Loki-Tester")
+        logger.setLevel(logging.INFO)
+
+        # Make sure we always have a local console logger
+        console_handler = {"console": logging.StreamHandler()}
+        handlers.update(console_handler)
+
+        for k, v in handlers.items():
+            # Give each handler a "name" property which matches so we can find it
+            v.name = k
+
+        # Check against logger.Manager and exclude "useless" values like logging.Placeholder
+        existing_handlers: dict[str, logging.Handler] = {v.name: v for v in logger.manager.loggerDict.values() if type(v) == logging.Handler}  # type: ignore
+
+        if set(handlers.keys()) == set(existing_handlers.keys()):
+            # Nothing to do
+            return
+
+        # If we're here, we need to add or remove some loggers
+        to_remove = [v for k, v in existing_handlers.items() if k not in handlers]
+        to_add = [v for k, v in handlers.items() if k not in existing_handlers]
+
+        # Remove loggers we don't want anymore
+        for h in to_remove:
+            logger.removeHandler(h)
+
+        # Add any missing loggers whichshould be there
+        for h in to_add:
+            logger.addHandler(h)
+
+        self.logger = logger
+        logger.debug(
+            "Configured logging with {} handlers: {}".format(
+                len(handlers.keys()), ", ".join(handlers.keys())
+            )
+        )
 
     def _on_config_changed(self, _):
         """Handle changed configuration."""
+        self.set_logger()
         self.log("debug", "Handling configuration change")
-        self.unit.status = ActiveStatus()
 
     def _on_update_status(self, _):
-        self.log("debug", "Updating logger status")
-        self.unit.status = ActiveStatus()
+        """Handle status updates."""
+        self.set_logger()
+        self.log("debug", "Updating status")
 
     def _on_loki_push_api_endpoint_joined(self, _):
-        self.log("debug", "Loki push API endpoint joined")
         self.set_logger()
+        self.log("debug", "Loki push API endpoint joined")
 
     def _on_loki_push_api_endpoint_departed(self, _):
+        # TODO (multi-logger): remove only the logger whose endpoint departed
+        self.set_logger(local_only=True)
         self.log("debug", "Loki push API endpoint departed")
-        # TODO (multi-logger): remove only the logger whoe's endpoint departed
-        self.logger = None
 
     def _on_log_error_action(self, event):
+        self.set_logger()
         message = event.params["message"]
         logged = self.log("error", message)
         if logged:
@@ -68,20 +115,46 @@ class LokiTesterCharm(CharmBase):
         else:
             event.fail("Failed to log error message")
 
-    def set_logger(self):
+    def set_logger(self, local_only=False):
+        """Set self.log to a meaningful value.
+
+        Set the log attribute for this charm. There is a `local_only` param which
+        can be used on RelationBroken or RelationDeparted where leaving a "remote"
+        Loki logger may lead to attempts to send a request to a dying endpoint,
+        and `local_only` will ensure that it is only to the console of this charm
+        to isolate behavior.
+
+        If `local_only` is not set, try to fetch a list of Loki endpoints and set
+        the logger for this charm to match. If the endpoint list is empty, then
+        it will be console only.
+
+        Args:
+            local_only: a boolean to enable only local console logging
+        """
+        if local_only:
+            self._setup_logging({})
+            return
+
         tags = self.topology.as_promql_label_dict()
         log_endpoints = self._loki_consumer.loki_endpoints
 
+        loki_handlers = {}
         if log_endpoints:
             logging_loki.emitter.LokiEmitter.level_tag = "level"
-            # TODO (multi-logger): create logggers for each endpoint
-            self.log_handler = logging_loki.LokiHandler(
-                url=log_endpoints[0]["url"], version="1", tags=dict(tags)
+            # TODO (multi-logger): create loggers for each endpoint
+
+            loki_handlers.update(
+                {
+                    "loki": logging_loki.LokiHandler(
+                        url=log_endpoints[0]["url"], version="1", tags=dict(tags)
+                    )
+                }
             )
             # TODO (multi-logger): each logger will need a different name
-            self.logger = logging.getLogger("Loki-Tester")
-            self.logger.addHandler(self.log_handler)
 
+        self._setup_logging(loki_handlers)
+
+        if loki_handlers:
             self.log("debug", "Successfully set Loki Logger")
 
     def log(self, level, msg):

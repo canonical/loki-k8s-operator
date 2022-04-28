@@ -3,4 +3,3 @@ kubernetes
 requests
 lightkube
 lightkube-models
-aiohttp
