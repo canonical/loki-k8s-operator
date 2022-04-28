@@ -149,6 +149,40 @@ class TestLokiPushApiProvider(unittest.TestCase):
                 )
             )
 
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files",
+        MagicMock(),
+    )
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
+        MagicMock(),
+    )
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._regenerate_alert_rules",
+        MagicMock(),
+    )
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test__on_logging_relation_created_and_broken(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
+        rel_id = self.harness.add_relation("logging", "promtail")
+        self.harness.add_relation_unit(rel_id, "promtail/0")
+
+        self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
+        self.assertEqual(self.harness.charm.loki_provider._regenerate_alert_rules.call_count, 1)
+
+        self.harness.remove_relation(rel_id)
+        # This will be called once on depart and once on broken
+        # awaiting a cull of the mocking to look at the actual container
+        self.assertEqual(self.harness.charm.loki_provider._regenerate_alert_rules.call_count, 3)
+
     @patch("os.makedirs", MagicMock())
     @patch("ops.testing._TestingModelBackend.network_get")
     def test_alerts(self, mock_unit_ip):

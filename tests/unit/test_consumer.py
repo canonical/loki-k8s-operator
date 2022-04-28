@@ -61,7 +61,15 @@ class FakeConsumerCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
+        self._stored.set_default(endpoint_events=0)
+
         self.loki_consumer = LokiPushApiConsumer(self)
+        self.framework.observe(
+            self.loki_consumer.on.loki_push_api_endpoint_joined, self.endpoint_events
+        )
+
+    def endpoint_events(self, _):
+        self._stored.endpoint_events += 1
 
     @property
     def _loki_push_api(self) -> str:
@@ -120,31 +128,34 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             loki_push_api,
         )
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiEvents.loki_push_api_endpoint_joined")
-    def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self, mock_events):
+    def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self):
         self.harness.set_leader(True)
 
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
+        self.assertEqual(self.harness.charm._stored.endpoint_events, 1)
+
         self.harness.update_relation_data(
             rel_id,
             "promtail",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        mock_events.emit.assert_called_once()
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiEvents.loki_push_api_endpoint_joined")
-    def test__on_upgrade_charm_endpoint_joined_event_fired_for_follower(self, mock_events):
+        self.assertEqual(self.harness.charm._stored.endpoint_events, 2)
+
+    def test__on_upgrade_charm_endpoint_joined_event_fired_for_follower(self):
         self.harness.set_leader(False)
 
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
+        self.assertEqual(self.harness.charm._stored.endpoint_events, 1)
+
         self.harness.update_relation_data(
             rel_id,
             "promtail",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        mock_events.emit.assert_called_once()
+        self.assertEqual(self.harness.charm._stored.endpoint_events, 2)
 
 
 class TestReloadAlertRules(unittest.TestCase):
@@ -161,6 +172,12 @@ class TestReloadAlertRules(unittest.TestCase):
     ALERT = yaml.safe_dump({"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5"})
 
     def setUp(self):
+        # override the default ordering, since each of these steps depends on the
+        # state of the previous test
+
+        # The "GIVEN" statements explicitly work against the way unittest is designed, and it is
+        # only through sheer luck that they have worked thus far
+        unittest.TestLoader.sortTestMethodsUsing = None  # type: ignore
         self.sandbox = TempFolderSandbox()
         alert_rules_path = os.path.join(self.sandbox.root, "alerts")
         self.alert_rules_path = alert_rules_path
@@ -190,7 +207,7 @@ class TestReloadAlertRules(unittest.TestCase):
 
         # need to manually emit relation changed
         # https://github.com/canonical/operator/issues/682
-        self.harness.charm.on.logging_relation_changed.emit(
+        self.harness.charm.on.logging_relation_joined.emit(
             self.harness.charm.model.get_relation("logging")
         )
 
