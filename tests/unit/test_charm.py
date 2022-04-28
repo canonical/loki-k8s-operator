@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import ops
 import yaml
-from helpers import patch_network_get
+from helpers import patch_network_get, tautology
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
@@ -162,6 +162,9 @@ class TestDelayedPebbleReady(unittest.TestCase):
 
     @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules", new=tautology
+    )
     def setUp(self):
         self.harness = Harness(LokiOperatorCharm)
 
@@ -173,6 +176,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.harness.add_relation_unit(self.log_rel_id, "consumer-app/0")
         self.harness.add_relation_unit(self.log_rel_id, "consumer-app/1")
         self.harness.begin_with_initial_hooks()
+        # self.harness.charm.loki_provider._check_alert_rules = tautology
         self.harness.update_relation_data(
             self.log_rel_id,
             "consumer-app",
@@ -186,16 +190,22 @@ class TestDelayedPebbleReady(unittest.TestCase):
         """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
         # WHEN relation-departed fires before pebble-ready
         self.harness.remove_relation_unit(self.log_rel_id, "consumer-app/1")
-        self.harness.container_pebble_ready("loki")
 
-        # THEN
-        # nothing special
+        # THEN app status is "Waiting" before pebble-ready
+        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+
+        # AND app status is "Active" after pebble-ready
+        self.harness.container_pebble_ready("loki")
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     def test_regular_relation_broken_runs_before_pebble_ready(self):
         """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
         # WHEN relation-broken fires before pebble-ready
         self.harness.remove_relation(self.log_rel_id)
-        self.harness.container_pebble_ready("loki")
 
-        # THEN
-        # nothing special
+        # THEN app status is "Waiting" before pebble-ready
+        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+
+        # AND app status is "Active" after pebble-ready
+        self.harness.container_pebble_ready("loki")
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)

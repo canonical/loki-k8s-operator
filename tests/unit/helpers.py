@@ -8,6 +8,10 @@ from typing import Callable, Tuple
 from unittest.mock import patch
 
 
+def tautology(*args, **kwargs) -> bool:
+    return True
+
+
 def patch_network_get(private_address="10.1.157.116") -> Callable:
     def network_get(*args, **kwargs) -> dict:
         """Patch for the not-yet-implemented testing backend needed for `bind_address`.
