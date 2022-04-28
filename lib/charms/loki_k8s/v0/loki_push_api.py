@@ -987,7 +987,7 @@ class AlertRules:
             rel_path = Path(
                 re.sub(r"^([A-Za-z]+:)?/", "", rel_path.as_posix())
                 if rel_path.is_absolute()
-                else rel_path
+                else str(rel_path)
             )
 
             # Get rid of relative path characters in the middle which both os.path and pathlib
