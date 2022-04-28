@@ -1332,14 +1332,14 @@ class LokiPushApiProvider(RelationManagerBase):
             logger.error("Checking alert rules: %s", e.reason)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
             return False
         except Exception as e:
             logger.error("Checking alert rules: %s", e)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
             return False
         else:

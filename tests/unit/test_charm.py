@@ -127,7 +127,7 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @patch("charm.LokiOperatorCharm._loki_config")
-    def test__alert_rule_events_appropriately_set_state(self, mock_loki_config):
+    def test__alert_rule_errors_appropriately_set_state(self, mock_loki_config):
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
         self.harness.set_leader(True)
 
@@ -156,6 +156,31 @@ class TestCharm(unittest.TestCase):
             LokiPushApiAlertRulesChanged(None, error=False)
         )
 
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+    @patch("charm.LokiOperatorCharm._loki_config")
+    def test__loki_connection_errors_on_lifecycle_events_appropriately_clear(
+        self, mock_loki_config
+    ):
+        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
+        self.harness.set_leader(True)
+
+        # Since harness was not started with begin_with_initial_hooks(), this must
+        # be emitted by hand to actually trigger _configure()
+        self.harness.charm.on.config_changed.emit()
+
+        self.harness.charm._loki_push_api_alert_rules_changed(
+            LokiPushApiAlertRulesChanged(
+                None, error=True, message="Error connecting to Loki: fubar!"
+            )
+        )
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status.message, "Error connecting to Loki: fubar!"
+        )
+
+        # Emit another config changed to make sure we unblock
+        self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     def test__provide_loki(self):

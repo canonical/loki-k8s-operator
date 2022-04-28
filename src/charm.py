@@ -135,6 +135,7 @@ class LokiOperatorCharm(CharmBase):
             logger.info("Loki (re)started")
 
         # Don't clear alert error states on reconfigure
+        # but let errors connecting clear after a restart
         if (
             isinstance(self.unit.status, BlockedStatus)
             and "Errors in alert rule" in self.unit.status.message
