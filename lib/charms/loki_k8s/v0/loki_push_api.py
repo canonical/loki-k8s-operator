@@ -438,6 +438,8 @@ key.
 import json
 import logging
 import os
+import re
+import typing
 from collections import OrderedDict
 from copy import deepcopy
 from hashlib import sha256
@@ -950,7 +952,9 @@ class AlertRules:
 
             return alert_groups
 
-    def _group_name(self, root_path: str, file_path: str, group_name: str) -> str:
+    def _group_name(
+        self, root: typing.Union[Path, str], file: typing.Union[Path, str], group_name: str
+    ) -> str:
         """Generate group name from path and topology.
 
         The group name is made up of the relative path between the root dir_path, the file path,
@@ -964,16 +968,41 @@ class AlertRules:
         Returns:
             New group name, augmented by juju topology and relative path.
         """
-        rel_path = os.path.relpath(os.path.dirname(file_path), root_path)
-        rel_path = "" if rel_path == "." else rel_path.replace(os.path.sep, "_")
+        file_path = Path(file) if not isinstance(file, Path) else file
+        root_path = Path(root) if not isinstance(root, Path) else root
+        rel_path = Path(file_path).parent.relative_to(root_path)
+
+        # We should account for both absolute paths and Windows paths. Convert it to a POSIX
+        # string, strip off any leading /, then join it
+
+        path_str = ""
+        if not rel_path == Path("."):
+            # Get rid of leaving / and optionally drive letters so they don't muck up
+            # the template later, since Path.parts returns them. The 'if relpath.is_absolute ...'
+            # isn't even needed since re.sub doesn't throw exceptions if it doesn't match, so it's
+            # optional, but it makes it clear what we're doing.
+
+            # Note that Path doesn't actually care whether the path is valid just to instantiate
+            # the object, so we can happily strip that stuff out to make templating nicer
+            rel_path = Path(
+                re.sub(r"^([A-Za-z]+:)?/", "", rel_path.as_posix())
+                if rel_path.is_absolute()
+                else rel_path
+            )
+
+            # Get rid of relative path characters in the middle which both os.path and pathlib
+            # leave hanging around. We could use path.resolve(), but that would lead to very
+            # long template strings when rules come from pods and/or other deeply nested charm
+            # paths
+            path_str = "_".join(filter(lambda x: x not in ["..", "/"], rel_path.parts))
 
         # Generate group name:
         #  - name, from juju topology
         #  - suffix, from the relative path of the rule file;
         group_name_parts = [self.topology.identifier] if self.topology else []
-        group_name_parts.extend([rel_path, group_name, "alerts"])
+        group_name_parts.extend([path_str, group_name, "alerts"])
         # filter to remove empty strings
-        return "_".join(filter(None, group_name_parts))
+        return "_".join(filter(lambda x: x, group_name_parts))
 
     @classmethod
     def _multi_suffix_glob(
