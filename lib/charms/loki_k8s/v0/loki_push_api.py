@@ -1037,7 +1037,7 @@ class AlertRules:
         elif path.is_file():
             self.alert_groups.extend(self._from_file(path.parent, path))
         else:
-            logger.debug("path does not exist: %s", path)
+            logger.debug("The alerts file does not exist: %s", path)
 
     def as_dict(self) -> dict:
         """Return standard alert rules file in dict representation.
@@ -1198,7 +1198,6 @@ class LokiPushApiProvider(Object):
         # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
         # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
         if self.container.can_connect():
-            logger.debug("Cannot connect to container to make alert rules path!")
             try:
                 self.container.make_dir(self._rules_dir, make_parents=True)
             except (FileNotFoundError, ProtocolError, PathError):
@@ -1491,7 +1490,6 @@ class ConsumerBase(Object):
         if not self._charm.unit.is_leader():
             return
 
-        logger.debug("Handling alert rules")
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
@@ -1499,7 +1497,6 @@ class ConsumerBase(Object):
         # if alert_rules_error_message:
         #     self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
 
-        logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         relation.data[self._charm.app]["alert_rules"] = json.dumps(
             alert_rules_as_dict,
@@ -1752,7 +1749,6 @@ class LogProxyConsumer(ConsumerBase):
     def _on_relation_created(self, _: RelationCreatedEvent) -> None:
         """Event handler for `relation_created`."""
         if not self._container.can_connect():
-            logger.debug("Cannot connect to container to check promtail!")
             return
         if not self._is_promtail_installed():
             self._setup_promtail()
@@ -1766,7 +1762,6 @@ class LogProxyConsumer(ConsumerBase):
         self._handle_alert_rules(event.relation)
 
         if not self._container.can_connect():
-            logger.debug("Cannot connect to container to check promtail!")
             return
         if self.model.relations[self._relation_name] and not self._is_promtail_installed():
             self._setup_promtail()
@@ -1784,7 +1779,6 @@ class LogProxyConsumer(ConsumerBase):
             event: The event object `RelationDepartedEvent`.
         """
         if not self._container.can_connect():
-            logger.debug("Cannot connect to container to check promtail!")
             return
         if not self._charm.model.relations[self._relation_name]:
             self._container.stop(WORKLOAD_SERVICE_NAME)
