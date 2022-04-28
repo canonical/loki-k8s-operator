@@ -953,7 +953,10 @@ class AlertRules:
             return alert_groups
 
     def _group_name(
-        self, root: typing.Union[Path, str], file: typing.Union[Path, str], group_name: str
+        self,
+        root_path: typing.Union[Path, str],
+        file_path: typing.Union[Path, str],
+        group_name: str,
     ) -> str:
         """Generate group name from path and topology.
 
@@ -968,8 +971,8 @@ class AlertRules:
         Returns:
             New group name, augmented by juju topology and relative path.
         """
-        file_path = Path(file) if not isinstance(file, Path) else file
-        root_path = Path(root) if not isinstance(root, Path) else root
+        file_path = Path(file_path) if not isinstance(file_path, Path) else file_path
+        root_path = Path(root_path) if not isinstance(root_path, Path) else root_path
         rel_path = Path(file_path).parent.relative_to(root_path)
 
         # We should account for both absolute paths and Windows paths. Convert it to a POSIX
