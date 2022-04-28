@@ -157,25 +157,24 @@ class TestCharm(unittest.TestCase):
             )
 
 
-class TestCharmResilientToStartupEventOrdering(unittest.TestCase):
+class TestDelayedPebbleReady(unittest.TestCase):
     """Feature: Charm code must be resilient to any (reasonable) order of startup event firing."""
 
     @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def test_regular_relation_departed_runs_before_pebble_ready(self):
-        """Scenario: a regular relation is added and removed quickly, before pebble-ready fires."""
-        harness = Harness(LokiOperatorCharm)
+    def setUp(self):
+        self.harness = Harness(LokiOperatorCharm)
 
         # GIVEN this unit is the leader
-        harness.set_leader(True)
+        self.harness.set_leader(True)
 
-        # WHEN a "logging" app joins with several units
-        log_rel_id = harness.add_relation("logging", "consumer-app")
-        harness.add_relation_unit(log_rel_id, "consumer-app/0")
-        harness.add_relation_unit(log_rel_id, "consumer-app/1")
-        harness.begin_with_initial_hooks()
-        harness.update_relation_data(
-            log_rel_id,
+        # AND a "logging" app joins with several units
+        self.log_rel_id = self.harness.add_relation("logging", "consumer-app")
+        self.harness.add_relation_unit(self.log_rel_id, "consumer-app/0")
+        self.harness.add_relation_unit(self.log_rel_id, "consumer-app/1")
+        self.harness.begin_with_initial_hooks()
+        self.harness.update_relation_data(
+            self.log_rel_id,
             "consumer-app",
             {
                 "metadata": {},
@@ -183,39 +182,20 @@ class TestCharmResilientToStartupEventOrdering(unittest.TestCase):
             },
         )
 
-        # AND relation-departed fires before pebble-ready
-        harness.remove_relation_unit(log_rel_id, "consumer-app/1")
-        harness.container_pebble_ready("loki")
+    def test_regular_relation_departed_runs_before_pebble_ready(self):
+        """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
+        # WHEN relation-departed fires before pebble-ready
+        self.harness.remove_relation_unit(self.log_rel_id, "consumer-app/1")
+        self.harness.container_pebble_ready("loki")
 
         # THEN
         # nothing special
 
-    @patch_network_get(private_address="1.1.1.1")
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def test_regular_relation_broken_runs_before_pebble_ready(self):
-        """Scenario: a regular relation is added and removed quickly, before pebble-ready fires."""
-        harness = Harness(LokiOperatorCharm)
-
-        # GIVEN this unit is the leader
-        harness.set_leader(True)
-
-        # WHEN a "logging" app joins with several units
-        log_rel_id = harness.add_relation("logging", "consumer-app")
-        harness.add_relation_unit(log_rel_id, "consumer-app/0")
-        harness.add_relation_unit(log_rel_id, "consumer-app/1")
-        harness.begin_with_initial_hooks()
-        harness.update_relation_data(
-            log_rel_id,
-            "consumer-app",
-            {
-                "metadata": {},
-                "alert_rules": {},
-            },
-        )
-
-        # AND relation-broken fires before pebble-ready
-        harness.remove_relation(log_rel_id)
-        harness.container_pebble_ready("loki")
+        """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
+        # WHEN relation-broken fires before pebble-ready
+        self.harness.remove_relation(self.log_rel_id)
+        self.harness.container_pebble_ready("loki")
 
         # THEN
         # nothing special
