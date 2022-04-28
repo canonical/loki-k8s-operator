@@ -19,6 +19,8 @@ jobs:
         with:
           credentials: "${{ secrets.CHARMHUB_TOKEN }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
+          fail-build: true
+          comment-on-pr: false
 
   static-libs:
     name: Static analysis of /lib for Python 3.5
