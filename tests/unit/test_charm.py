@@ -163,6 +163,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
     @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
+        # Path _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
             "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules",
             new=tautology,
@@ -178,7 +179,6 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.harness.add_relation_unit(self.log_rel_id, "consumer-app/0")
         self.harness.add_relation_unit(self.log_rel_id, "consumer-app/1")
         self.harness.begin_with_initial_hooks()
-        # self.harness.charm.loki_provider._check_alert_rules = tautology
         self.harness.update_relation_data(
             self.log_rel_id,
             "consumer-app",
