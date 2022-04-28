@@ -452,9 +452,11 @@ import yaml
 from ops.charm import (
     CharmBase,
     HookEvent,
+    RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
     RelationEvent,
+    RelationJoinedEvent,
     RelationRole,
     WorkloadEvent,
 )
@@ -1221,14 +1223,30 @@ class LokiPushApiProvider(RelationManagerBase):
                 logger.debug("Could create loki directory: %s", e)
 
         events = self._charm.on[relation_name]
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
+        self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
+        self.framework.observe(events.relation_broken, self._on_logging_relation_broken)
 
-    def _on_upgrade_charm(self, _):
+    def _on_lifecycle_event(self, _):
         # Upgrade event or other charm-level event
         for relation in self._charm.model.relations[self._relation_name]:
             self._process_logging_relation_changed(relation)
+
+    def _on_logging_relation_joined(self, event: RelationJoinedEvent):
+        """Set basic data on relation joins.
+
+        Set the promtail binary URL location, which will not change, and anything
+        else which may be required, but is static..
+
+        Args:
+            event: a `CharmEvent` in response to which the consumer
+                charm must set its relation data.
+        """
+        if self._charm.unit.is_leader():
+            event.relation.data[self._charm.app].update(self._promtail_binary_url)
+            logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
 
     def _on_logging_relation_changed(self, event: HookEvent):
         """Handle changes in related consumers.
@@ -1241,6 +1259,16 @@ class LokiPushApiProvider(RelationManagerBase):
                 charm must update its relation data.
         """
         self._process_logging_relation_changed(event.relation)
+
+    def _on_logging_relation_broken(self, event: RelationBrokenEvent):
+        """Removes alert rules files when consumer charms left the relation with Loki.
+
+        Args:
+            event: a `CharmEvent` in response to which the Loki
+                charm must update its relation data.
+        """
+        self._regenerate_alert_rules()
+        self._check_alert_rules()
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
@@ -1273,16 +1301,18 @@ class LokiPushApiProvider(RelationManagerBase):
 
     def _update_relation_data(self, relation):
         if self._charm.unit.is_leader():
-            relation.data[self._charm.app].update(self._promtail_binary_url)
-            logger.debug("Saved promtail binary url: %s", self._promtail_binary_url)
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
             logger.debug("Saved endpoints in relation data")
 
     def _update_alert_rules(self, relation):
         if relation.data.get(relation.app).get("alert_rules"):
-            logger.debug("Saved alerts rules to disk")
-            self._remove_alert_rules_files(self.container)
-            self._generate_alert_rules_files(self.container)
+            self._regenerate_alert_rules()
+
+    def _regenerate_alert_rules(self):
+        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
+        self._remove_alert_rules_files(self.container)
+        self._generate_alert_rules_files(self.container)
+        logger.debug("Saved alerts rules to disk")
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1507,9 +1537,6 @@ class ConsumerBase(RelationManagerBase):
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
 
-        # if alert_rules_error_message:
-        #     self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
-
         logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         relation.data[self._charm.app]["alert_rules"] = json.dumps(
@@ -1576,11 +1603,42 @@ class LokiPushApiConsumer(ConsumerBase):
         )
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         events = self._charm.on[relation_name]
-        self.framework.observe(self._charm.on.upgrade_charm, self._on_logging_relation_changed)
+        self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
+        self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
 
-    def _on_logging_relation_changed(self, event: HookEvent):
+    def _on_lifecycle_event(self, _: HookEvent):
+        """Update require relation data on charm upgrades and other lifecycle events.
+
+        Args:
+            event: a `CharmEvent` in response to which the consumer
+                charm must update its relation data.
+        """
+        # Upgrade event or other charm-level event
+        self._reinitialize_alert_rules()
+        self.on.loki_push_api_endpoint_joined.emit()
+
+    def _on_logging_relation_joined(self, event: RelationJoinedEvent):
+        """Handle changes in related consumers.
+
+        Update relation data and emit events when a relation is established.
+
+        Args:
+            event: a `CharmEvent` in response to which the consumer
+                charm must update its relation data.
+
+        Emits:
+            loki_push_api_endpoint_joined: Once the relation is established, this event is emitted.
+            loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
+                file is encountered or if `alert_rules_path` is empty.
+        """
+        # Alert rules will not change over the lifecycle of a charm, and do not need to be
+        # constantly set on every relation_changed event. Leave them here.
+        self._handle_alert_rules(event.relation)
+        self.on.loki_push_api_endpoint_joined.emit()
+
+    def _on_logging_relation_changed(self, _: RelationEvent):
         """Handle changes in related consumers.
 
         Anytime there are changes in the relation between Loki
@@ -1595,21 +1653,12 @@ class LokiPushApiConsumer(ConsumerBase):
             loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
                 file is encountered or if `alert_rules_path` is empty.
         """
-        if isinstance(event, RelationEvent):
-            self._process_logging_relation_changed(event.relation)
-        else:
-            # Upgrade event or other charm-level event
-            for relation in self._charm.model.relations[self._relation_name]:
-                self._process_logging_relation_changed(relation)
+        self.on.loki_push_api_endpoint_joined.emit()
 
     def _reinitialize_alert_rules(self):
         """Reloads alert rules and updates all relations."""
         for relation in self._charm.model.relations[self._relation_name]:
             self._handle_alert_rules(relation)
-
-    def _process_logging_relation_changed(self, relation: Relation):
-        self._handle_alert_rules(relation)
-        self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.
