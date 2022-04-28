@@ -131,7 +131,6 @@ class LokiOperatorCharm(CharmBase):
             logger.info("Loki (re)started")
 
         if not self._loki_ready():
-            self.unit.status = WaitingStatus("Waiting for Loki to be ready")
             return
 
         self.unit.status = ActiveStatus()
