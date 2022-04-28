@@ -1307,7 +1307,7 @@ class LokiPushApiProvider(Object):
         Args:
             container: Container into which alert rules files are going to be uploaded
         """
-        file_mappings = {}  # type: ignore
+        file_mappings = {}
 
         logger.debug("Generating alert rules files")
         for identifier, alert_rules in self.alerts.items():
