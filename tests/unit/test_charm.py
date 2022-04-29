@@ -13,6 +13,7 @@ from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
 from charm import LokiOperatorCharm
+from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
 from loki_server import LokiServerError, LokiServerNotReadyError
 
 ops.testing.SIMULATE_CAN_CONNECT = True
@@ -92,23 +93,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._stored.config = LOKI_CONFIG
         self.harness.container_pebble_ready("loki")
 
-    def test__alerting_config(self):
-        self.harness.charm.alertmanager_consumer = Mock()
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = [
-            "10.1.2.52",
-            "10.1.3.52",
-        ]
-        expected_value = "http://10.1.2.52,http://10.1.3.52"
-        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
-
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = []
-        expected_value = ""
-        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
-
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._alerting_config()
-            self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
-
     def test__provide_loki(self):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
@@ -134,6 +118,53 @@ class TestCharm(unittest.TestCase):
                 sorted(logger.output),
                 ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
             )
+
+
+class TestConfigFile(unittest.TestCase):
+    """Feature: Loki config file in the workload container is rendered by the charm."""
+
+    @patch_network_get(private_address="1.1.1.1")
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    def setUp(self):
+        self.harness = Harness(LokiOperatorCharm)
+
+        # GIVEN this unit is the leader
+        self.harness.set_leader(True)
+
+        # AND an "alerting" app joins with several units
+        self.alerting_rel_id = self.harness.add_relation("alertmanager", "alertmanager-app")
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("loki")
+
+    def test_relating_over_alertmanager_updates_config_with_ip_addresses(self):
+        container = self.harness.charm.unit.get_container("loki")
+
+        # WHEN no units are related over the alertmanager relation
+
+        # THEN the `alertmanager_url` property is blank
+        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
+        self.assertEqual(config["ruler"]["alertmanager_url"], None)
+
+        # WHEN alertmanager units join
+        self.harness.add_relation_unit(self.alerting_rel_id, "alertmanager-app/0")
+        self.harness.add_relation_unit(self.alerting_rel_id, "alertmanager-app/1")
+        self.harness.update_relation_data(
+            self.alerting_rel_id, "alertmanager-app/0", {"public_address": "10.0.0.1"}
+        )
+        self.harness.update_relation_data(
+            self.alerting_rel_id, "alertmanager-app/1", {"public_address": "10.0.0.2"}
+        )
+
+        # THEN the `alertmanager_url` property has their ip addresses
+        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
+        self.assertEqual(config["ruler"]["alertmanager_url"], "http://10.0.0.1,http://10.0.0.2")
+
+        # WHEN the relation is broken
+        self.harness.remove_relation(self.alerting_rel_id)
+
+        # THEN the `alertmanager_url` property is blank again
+        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
+        self.assertEqual(config["ruler"]["alertmanager_url"], None)
 
 
 class TestDelayedPebbleReady(unittest.TestCase):
