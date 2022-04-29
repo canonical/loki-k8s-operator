@@ -292,12 +292,6 @@ class TestPebblePlan(unittest.TestCase):
         # WHEN the unit is started as either a leader or not
         self.harness.set_leader(is_leader)
 
-        # AND potentially some peers join
-        self.peer_rel_id = self.harness.add_relation("replicas", self.harness.model.name)
-        for i in range(1, num_units):
-            self.harness.add_relation_unit(self.peer_rel_id, f"{self.harness.model.name}/{i}")
-        self.assertEqual(self.harness.model.app.planned_units(), num_units)
-
         # AND potentially some logging relations join
         for i in range(num_consumer_apps):
             self.log_rel_id = self.harness.add_relation("logging", f"consumer-app-{i}")
