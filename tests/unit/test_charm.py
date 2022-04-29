@@ -166,6 +166,14 @@ class TestConfigFile(unittest.TestCase):
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
         self.assertEqual(config["ruler"]["alertmanager_url"], None)
 
+    def test_instance_address_is_set_to_this_unit_ip(self):
+        container = self.harness.charm.unit.get_container("loki")
+        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
+
+        # TODO enable this assertion when the following is resolved
+        # https://github.com/canonical/loki-k8s-operator/issues/159
+        # self.assertEqual(config["common"]["ring"]["instance_addr"], "1.1.1.1")
+
 
 class TestDelayedPebbleReady(unittest.TestCase):
     """Feature: Charm code must be resilient to any (reasonable) order of startup event firing."""
