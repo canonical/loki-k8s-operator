@@ -118,7 +118,4 @@ async def test_scale_down_to_zero_units(ops_test: OpsTest):
     )
 
     # There is only one "logging" relation in place so blindly taking [0]
-    endpoints = yaml.safe_load(
-        loki_data_on_requirer_side["relation-info"][0]["application-data"]["endpoints"]
-    )
-    assert len(endpoints) == 0
+    assert "related-units" not in loki_data_on_requirer_side["relation-info"][0]
