@@ -229,20 +229,18 @@ class TestAppRelationData(unittest.TestCase):
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
-    def test_endpoints(self):
-        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
+    def test_endpoint(self):
+        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.unit)
         # Relation data must include an "endpoints" key
-        self.assertIn("endpoints", rel_data)
-        endpoints = json.loads(rel_data["endpoints"])
+        self.assertIn("endpoint", rel_data)
+        endpoint = json.loads(rel_data["endpoint"])
 
-        # The endpoints must be a list of dicts
-        self.assertIsInstance(endpoints, list)
-        self.assertIsInstance(endpoints[0], dict)
+        # The endpoint must be a dicts
+        self.assertIsInstance(endpoint, dict)
 
-        # Each endpoint must have a "url" key
-        urls = [d["url"] for d in endpoints]
-        for url in urls:
-            self.assertTrue(url.startswith("http"))
+        # Endpoint must have a "url" key
+        self.assertIn("url", endpoint)
+        self.assertTrue(endpoint["url"].startswith("http"))
 
     def test_promtail_url(self):
         rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
