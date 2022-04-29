@@ -109,27 +109,6 @@ class TestCharm(unittest.TestCase):
             self.harness.charm._alerting_config()
             self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
 
-    @patch("ops.model.Container.can_connect", MagicMock(return_value=False))
-    @patch("charm.LokiOperatorCharm._loki_config")
-    def test__on_config_cannot_connect(self, mock_loki_config):
-        self.harness.set_leader(True)
-        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
-
-        # Since harness was not started with begin_with_initial_hooks(), this must
-        # be emitted by hand to actually trigger _configure()
-        self.harness.charm.on.config_changed.emit()
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
-
-    @patch("charm.LokiOperatorCharm._loki_config")
-    def test__on_config_can_connect(self, mock_loki_config):
-        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
-        self.harness.set_leader(True)
-
-        # Since harness was not started with begin_with_initial_hooks(), this must
-        # be emitted by hand to actually trigger _configure()
-        self.harness.charm.on.config_changed.emit()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
-
     def test__provide_loki(self):
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._provide_loki()
@@ -190,6 +169,17 @@ class TestDelayedPebbleReady(unittest.TestCase):
 
     def tearDown(self):
         self.check_alert_rules_patcher.stop()
+
+    def test_pebble_ready_changes_status_from_waiting_to_active(self):
+        """Scenario: a pebble-ready event is delayed."""
+        # WHEN all startup hooks except pebble-ready finished
+
+        # THEN app status is "Waiting" before pebble-ready
+        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+
+        # AND app status is "Active" after pebble-ready
+        self.harness.container_pebble_ready("loki")
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     def test_regular_relation_departed_runs_before_pebble_ready(self):
         """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
