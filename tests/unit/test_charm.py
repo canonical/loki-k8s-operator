@@ -4,7 +4,7 @@
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import unittest
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import PropertyMock, patch
 
 import ops
 import yaml
@@ -110,15 +110,23 @@ class TestConfigFile(unittest.TestCase):
     @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
+        # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
+        self.check_alert_rules_patcher = patch(
+            "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules",
+            new=tautology,
+        )
+        self.check_alert_rules_patcher.start()
+
         self.harness = Harness(LokiOperatorCharm)
 
         # GIVEN this unit is the leader
         self.harness.set_leader(True)
 
-        # AND an "alerting" app joins with several units
-        self.alerting_rel_id = self.harness.add_relation("alertmanager", "alertmanager-app")
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
+
+    def tearDown(self):
+        self.check_alert_rules_patcher.stop()
 
     def test_relating_over_alertmanager_updates_config_with_ip_addresses(self):
         """Scenario: The charm is related to alertmanager."""
@@ -131,6 +139,7 @@ class TestConfigFile(unittest.TestCase):
         self.assertEqual(config["ruler"]["alertmanager_url"], None)
 
         # WHEN alertmanager units join
+        self.alerting_rel_id = self.harness.add_relation("alertmanager", "alertmanager-app")
         self.harness.add_relation_unit(self.alerting_rel_id, "alertmanager-app/0")
         self.harness.add_relation_unit(self.alerting_rel_id, "alertmanager-app/1")
         self.harness.update_relation_data(
@@ -151,13 +160,32 @@ class TestConfigFile(unittest.TestCase):
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
         self.assertEqual(config["ruler"]["alertmanager_url"], None)
 
+    @patch_network_get(private_address="1.1.1.1")
     def test_instance_address_is_set_to_this_unit_ip(self):
         container = self.harness.charm.unit.get_container("loki")
-        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
 
-        # TODO enable this assertion when the following is resolved
-        # https://github.com/canonical/loki-k8s-operator/issues/159
-        # self.assertEqual(config["common"]["ring"]["instance_addr"], "1.1.1.1")
+        # WHEN no units are related over the logging relation
+
+        # THEN the `instance_addr` property is blank (`yaml.safe_load` converts blanks to None)
+        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
+        self.assertEqual(config["common"]["ring"]["instance_addr"], None)
+
+        # WHEN logging units join
+        # (FIXME) https://github.com/canonical/loki-k8s-operator/issues/159
+        self.log_rel_id = self.harness.add_relation("logging", "logging-app")
+        self.harness.add_relation_unit(self.log_rel_id, "logging-app/0")
+        self.harness.add_relation_unit(self.log_rel_id, "logging-app/1")
+        self.harness.update_relation_data(
+            self.log_rel_id, "logging-app/0", {"something": "just to trigger rel-changed event"}
+        )
+
+        # Must emit this, otherwise config file is not regenerated.
+        # (FIXME) https://github.com/canonical/loki-k8s-operator/issues/159
+        self.harness.charm.loki_provider.on.loki_push_api_alert_rules_changed.emit()
+
+        # THEN the `instance_addr` property has the first unit's bind address
+        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
+        self.assertEqual(config["common"]["ring"]["instance_addr"], "1.1.1.1")
 
 
 class TestDelayedPebbleReady(unittest.TestCase):
@@ -166,7 +194,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
     @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
-        # Path _check_alert_rules, which attempts to talk to a loki server endpoint
+        # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
             "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules",
             new=tautology,
