@@ -443,7 +443,7 @@ from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, cast
 from urllib import request
 from urllib.error import HTTPError, URLError
 from zipfile import ZipFile
@@ -1686,12 +1686,22 @@ class LokiPushApiConsumer(ConsumerBase):
 
 
 class ContainerNotFoundError(Exception):
-    """Raised if there is no container with the given name or the name is ambiguous."""
+    """Raised if the specified container does not exist."""
+
+    def __init__(self):
+        msg = "The specified container does not exist."
+        self.message = msg
+
+        super().__init__(self.message)
+
+
+class MultipleContainersFoundError(Exception):
+    """Raised if no container name is passed but multiple containers are present."""
 
     def __init__(self):
         msg = (
             "No 'container_name' parameter has been specified; since this Charmed Operator"
-            " is not running exactly one container, it must be specified which container"
+            " is has multiple containers, container_name must be specified for the container"
             " to get logs from."
         )
         self.message = msg
@@ -1858,7 +1868,7 @@ class LogProxyConsumer(ConsumerBase):
             self._container.stop(WORKLOAD_SERVICE_NAME)
         self.on.log_proxy_endpoint_departed.emit()
 
-    def _get_container(self, container_name: Optional[str] = "") -> Container:
+    def _get_container(self, container_name: str = None) -> Container:
         """Gets a single container by name or using the only container running in the Pod.
 
         If there is more than one container in the Pod a `PromtailDigestError` is emitted.
@@ -1867,48 +1877,52 @@ class LogProxyConsumer(ConsumerBase):
             container_name: The container name.
 
         Returns:
-            container: a `ops.model.Container` object representing the container.
+            A `ops.model.Container` object representing the container.
 
-        Raises:
-            ContainerNotFoundError if no container_name was specified
+        Emits:
+            PromtailDigestError, if there was a problem obtaining a container.
         """
-        if container_name:
-            try:
-                return self._charm.unit.get_container(container_name)
-            except ModelError as e:
-                msg = str(e)
-                logger.warning(msg)
-                self.on.promtail_digest_error.emit(msg)
-        else:
-            containers = dict(self._charm.model.unit.containers)
+        try:
+            container_name = self._get_container_name(container_name)
+            return self._charm.unit.get_container(container_name)
+        except (MultipleContainersFoundError, ContainerNotFoundError, ModelError) as e:
+            msg = str(e)
+            logger.warning(msg)
+            self.on.promtail_digest_error.emit(msg)
 
-            if len(containers) == 1:
-                return self._charm.unit.get_container([*containers].pop())
-
-            raise ContainerNotFoundError
-
-    def _get_container_name(self, container_name: Optional[str] = "") -> str:
-        """Gets a container_name.
-
-        If there is more than one container in the Pod a `ContainerNotFoundError` is raised.
+    def _get_container_name(self, container_name: str = None) -> str:
+        """Helper function for getting/validating a container name.
 
         Args:
-            container_name: The container name.
+            container_name: The container name to be validated (optional).
 
         Returns:
-            container_name: a string representing the container_name.
+            container_name: The same container_name that was passed (if it exists) or the only
+            container name that is present (if no container_name was passed).
 
         Raises:
-            ContainerNotFoundError if no container_name was specified
+            ContainerNotFoundError, if container_name does not exist.
+            MultipleContainersFoundError, if container_name was not provided but multiple
+            containers are present.
         """
-        if container_name:
-            return container_name
-
         containers = dict(self._charm.model.unit.containers)
-        if len(containers) == 1:
-            return "".join(list(containers.keys()))
+        if len(containers) == 0:
+            raise ContainerNotFoundError
 
-        raise ContainerNotFoundError
+        if not container_name:
+            # container_name was not provided - will get it ourselves, if it is the only one
+            if len(containers) > 1:
+                raise MultipleContainersFoundError
+
+            # Get the first key in the containers' dict.
+            # Need to "cast", otherwise:
+            # error: Incompatible return value type (got "Optional[str]", expected "str")
+            container_name = cast(str, next(iter(containers.keys())))
+
+        elif container_name not in containers:
+            raise ContainerNotFoundError
+
+        return container_name
 
     def _add_pebble_layer(self) -> None:
         """Adds Pebble layer that manages Promtail service in Workload container."""
