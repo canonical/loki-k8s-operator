@@ -77,7 +77,7 @@ table_manager:
 """
 
 
-class TestCharm(unittest.TestCase):
+class TestWorkloadUnavailable(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
         self.container_name: str = "loki"
@@ -93,14 +93,6 @@ class TestCharm(unittest.TestCase):
         self.harness.charm._stored.config = LOKI_CONFIG
         self.harness.container_pebble_ready("loki")
 
-    def test__provide_loki(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._provide_loki()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
-
     def test__provide_loki_not_ready(self):
         self.mock_version.side_effect = LokiServerNotReadyError
         self.harness.charm._provide_loki()
@@ -110,14 +102,6 @@ class TestCharm(unittest.TestCase):
         self.mock_version.side_effect = LokiServerError
         self.harness.charm._provide_loki()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-
-    def test__loki_config(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._provide_loki()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
 
 
 class TestConfigFile(unittest.TestCase):
@@ -137,11 +121,12 @@ class TestConfigFile(unittest.TestCase):
         self.harness.container_pebble_ready("loki")
 
     def test_relating_over_alertmanager_updates_config_with_ip_addresses(self):
+        """Scenario: The charm is related to alertmanager."""
         container = self.harness.charm.unit.get_container("loki")
 
         # WHEN no units are related over the alertmanager relation
 
-        # THEN the `alertmanager_url` property is blank
+        # THEN the `alertmanager_url` property is blank (`yaml.safe_load` converts blanks to None)
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
         self.assertEqual(config["ruler"]["alertmanager_url"], None)
 
