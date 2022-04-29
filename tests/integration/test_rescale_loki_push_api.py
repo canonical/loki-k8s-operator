@@ -54,46 +54,24 @@ async def test_setup_env(ops_test: OpsTest, loki_charm, loki_tester_charm):
 async def test_requirer_has_loki_endpoint(ops_test: OpsTest):
     # THEN the requirer has the loki push endpoint URL over relation data.
 
+    related_unit = app_name + "/0"
     loki_app_data_on_requirer_side = await juju_show_unit(
         ops_test,
         "loki-tester/0",
         endpoint="logging",
-        related_unit=app_name + "/0",
-        app_data_only=True,
+        related_unit=related_unit,
     )
 
-    # Output looks like this:
-    # {
-    #     "opened-ports": [],
-    #     "charm": "ch:amd64/focal/grafana-agent-k8s-7",
-    #     "leader": True,
-    #     "relation-info": [
-    #         {
-    #             "endpoint": "logging-consumer",
-    #             "related-endpoint": "logging",
-    #             "application-data": {
-    #                 "endpoints": '[{"url": "http://loki-k8s-0...local:3100/loki/api/v1/push"}]',
-    #                 "promtail_binary_zip_url": "https://.../promtail-linux-amd64.zip",
-    #             },
-    #         }
-    #     ],
-    #     "provider-id": "grafana-agent-k8s-0",
-    #     "address": "10.1.50.210",
-    # }
-
     # There is only one "logging" relation in place so blindly taking [0]
-    relevant_data = loki_app_data_on_requirer_side["relation-info"][0]["application-data"]
-    endpoints = yaml.safe_load(relevant_data["endpoints"])
-    promtail_url = relevant_data["promtail_binary_zip_url"]
-
-    # We called juju_show_unit with specific endpoint (relation) name and related unit name, so
-    # there should be exactly one url listed.
-    assert len(endpoints) == 1
+    relevant_data_endpoint = loki_app_data_on_requirer_side["relation-info"][0]["related-units"][related_unit]["data"]
+    endpoint = yaml.safe_load(relevant_data_endpoint["endpoint"])
 
     # "Validate" the push api url
-    loki_push_url = endpoints[0]["url"]
+    loki_push_url = endpoint["url"]
     assert loki_push_url.startswith("http")
 
+    relevant_data_promtail = loki_app_data_on_requirer_side["relation-info"][0]["application-data"]
+    promtail_url = relevant_data_promtail["promtail_binary_zip_url"]
     # "Validate" promtail url
     assert promtail_url.startswith("http")
 
@@ -110,14 +88,15 @@ async def test_scale_up_to_three_units(ops_test: OpsTest):
         ops_test,
         "loki-tester/0",
         endpoint="logging",
-        app_data_only=True,
     )
 
     # There is only one "logging" relation in place so blindly taking [0]
-    endpoints = yaml.safe_load(
-        loki_data_on_requirer_side["relation-info"][0]["application-data"]["endpoints"]
-    )
-    assert len(endpoints) == 3
+    units = loki_data_on_requirer_side["relation-info"][0]["related-units"]
+    assert len(units) == 3
+
+    for unit in loki_data_on_requirer_side["relation-info"][0]["related-units"].values():
+        endpoint = yaml.safe_load(unit["data"]["endpoint"])["url"]
+        assert endpoint.startswith("http")
 
 
 @pytest.mark.abort_on_fail
