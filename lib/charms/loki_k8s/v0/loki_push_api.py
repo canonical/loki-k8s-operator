@@ -446,6 +446,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 from urllib import request
 from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin
 from zipfile import ZipFile
 
 import yaml
@@ -1365,7 +1366,7 @@ class LokiPushApiProvider(RelationManagerBase):
         Returns: str
         """
         endpoint = "/loki/api/v1/push"
-        return {"url": "{}{}".format(url.rstrip("/"), endpoint)}
+        return {"url": urljoin(url, endpoint)}
 
     # FIXME: we're returning a bool just for unit testing? See test_dashboard_provider in Grafana
     # we should just listen to events
