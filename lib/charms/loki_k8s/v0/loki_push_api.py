@@ -1832,7 +1832,9 @@ class LogProxyConsumer(ConsumerBase):
         else:
             new_config = self._promtail_config
             if new_config != self._current_config:
-                self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
+                self._container.push(
+                    WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True
+                )
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
 
@@ -1850,7 +1852,7 @@ class LogProxyConsumer(ConsumerBase):
 
         new_config = self._promtail_config
         if new_config != self._current_config:
-            self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
+            self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True)
 
         if new_config["clients"]:
             self._container.restart(WORKLOAD_SERVICE_NAME)
