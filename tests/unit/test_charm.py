@@ -12,69 +12,11 @@ from helpers import patch_network_get, tautology
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
-from charm import LokiOperatorCharm
 from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
+from charm import LokiOperatorCharm
 from loki_server import LokiServerError, LokiServerNotReadyError
 
 ops.testing.SIMULATE_CAN_CONNECT = True
-
-LOKI_CONFIG = """
-auth_enabled: false
-chunk_store_config:
-  max_look_back_period: 0s
-compactor:
-  shared_store: filesystem
-  working_directory: /loki/boltdb-shipper-compactor
-ingester:
-  chunk_idle_period: 1h
-  chunk_retain_period: 30s
-  chunk_target_size: 1048576
-  lifecycler:
-    address: 127.0.0.1
-    final_sleep: 0s
-    ring:
-      kvstore:
-        store: inmemory
-      replication_factor: 1
-  max_chunk_age: 1h
-  max_transfer_retries: 0
-limits_config:
-  reject_old_samples: true
-  reject_old_samples_max_age: 168h
-ruler:
-  alertmanager_url: ''
-  enable_api: true
-  ring:
-    kvstore:
-      store: inmemory
-  rule_path: /loki/rules-temp
-  storage:
-    local:
-      directory: /loki/rules
-    type: local
-schema_config:
-  configs:
-  - from: 2020-10-24
-    index:
-      period: 24h
-      prefix: index_
-    object_store: filesystem
-    schema: v11
-    store: boltdb-shipper
-server:
-  http_listen_port: 3100
-storage_config:
-  boltdb_shipper:
-    active_index_directory: /loki/boltdb-shipper-active
-    cache_location: /loki/boltdb-shipper-cache
-    cache_ttl: 24h
-    shared_store: filesystem
-  filesystem:
-    directory: /loki/chunks
-table_manager:
-  retention_deletes_enabled: false
-  retention_period: 0s
-"""
 
 
 class TestWorkloadUnavailable(unittest.TestCase):
@@ -90,7 +32,6 @@ class TestWorkloadUnavailable(unittest.TestCase):
         self.addCleanup(version_patcher.stop)
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
-        self.harness.charm._stored.config = LOKI_CONFIG
         self.harness.container_pebble_ready("loki")
 
     def test__provide_loki_not_ready(self):
