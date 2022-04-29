@@ -1337,10 +1337,7 @@ class LokiPushApiProvider(RelationManagerBase):
 
             relation = self._charm.model.get_relation(self._relation_name)
 
-        endpoint = self._endpoint(self._url)
-
-        if url:
-            endpoint = self._endpoint(url)
+        endpoint = self._endpoint(url or self._url)
 
         relation.data[self._charm.unit].update({"endpoint": json.dumps(endpoint)})
         logger.debug("Saved endpoint in unit relation data")
