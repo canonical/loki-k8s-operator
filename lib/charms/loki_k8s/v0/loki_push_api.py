@@ -438,6 +438,7 @@ key.
 import json
 import logging
 import os
+import socket
 from collections import OrderedDict
 from copy import deepcopy
 from hashlib import sha256
@@ -1349,13 +1350,7 @@ class LokiPushApiProvider(RelationManagerBase):
 
         Returns: str
         """
-        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}".format(
-            self._charm.app.name,
-            self._charm.unit.name.split("/")[-1],
-            self._charm.app.name,
-            self._charm.model.name,
-            self.port,
-        )
+        return "http://{}:{}".format(socket.getfqdn(), self.port)
 
     def _endpoint(self, url) -> dict:
         """Get Loki push API endpoint for a given url.
