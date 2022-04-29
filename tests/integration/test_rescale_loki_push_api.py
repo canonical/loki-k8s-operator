@@ -63,7 +63,9 @@ async def test_requirer_has_loki_endpoint(ops_test: OpsTest):
     )
 
     # There is only one "logging" relation in place so blindly taking [0]
-    relevant_data_endpoint = loki_app_data_on_requirer_side["relation-info"][0]["related-units"][related_unit]["data"]
+    relevant_data_endpoint = loki_app_data_on_requirer_side["relation-info"][0]["related-units"][
+        related_unit
+    ]["data"]
     endpoint = yaml.safe_load(relevant_data_endpoint["endpoint"])
 
     # "Validate" the push api url
