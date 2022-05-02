@@ -59,7 +59,9 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
         ops_test.model.add_relation(app_name, "am"),
         ops_test.model.add_relation(app_name, "grafana"),
     )
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=[app_name, "am", "grafana"], status="active", timeout=1000
+    )
 
     # Refresh from path
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
