@@ -118,7 +118,7 @@ class LokiOperatorCharm(CharmBase):
         try:
             if yaml.safe_load(self._stored.config) != config:
                 config_as_yaml = yaml.safe_dump(config)
-                self._container.push(LOKI_CONFIG, config_as_yaml)
+                self._container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
                 logger.info("Pushed new configuration")
                 self._stored.config = config_as_yaml
                 restart = True
