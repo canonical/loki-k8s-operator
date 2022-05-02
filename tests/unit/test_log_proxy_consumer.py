@@ -6,7 +6,7 @@ import unittest
 from hashlib import sha256
 from unittest.mock import MagicMock, mock_open, patch
 
-from charms.loki_k8s.v0.loki_push_api import ContainerNotFoundError, LogProxyConsumer
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.model import Container
@@ -169,7 +169,7 @@ class TestLogProxyConsumer(unittest.TestCase):
         )
 
     def test__get_container_container_name_not_exist(self):
-        # Container do not exist
+        # Container does not exist
         container_name = "loki_container"
         self.harness.charm._log_proxy._get_container(container_name)
 
@@ -185,8 +185,12 @@ class TestLogProxyConsumer(unittest.TestCase):
     def test__get_container_more_than_one_container(self):
         # More than 1 container in Pod
         container_name = ""
-        with self.assertRaises(ContainerNotFoundError):
-            self.harness.charm._log_proxy._get_container(container_name)
+
+        before = self.harness.charm._stored.invalid_events
+        self.harness.charm._log_proxy._get_container(container_name)
+        after = self.harness.charm._stored.invalid_events
+
+        self.assertGreater(after, before)
 
     def test__sha256sums_matches_match(self):
         read_data = str.encode("Bytes in the file")
