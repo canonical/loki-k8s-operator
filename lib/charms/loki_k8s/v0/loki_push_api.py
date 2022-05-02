@@ -1303,12 +1303,9 @@ class LokiPushApiProvider(RelationManagerBase):
         relation.data[self._charm.unit]["public_address"] = (
             str(self._charm.model.get_binding(relation).network.bind_address) or ""
         )
-        self._update_relation_data(relation)
+        self.update_endpoint(relation=relation)
         self._update_alert_rules(relation)
         self._check_alert_rules()
-
-    def _update_relation_data(self, relation):
-        self.update_endpoint(relation=relation)
 
     def _update_alert_rules(self, relation):
         if relation.data.get(relation.app).get("alert_rules"):
