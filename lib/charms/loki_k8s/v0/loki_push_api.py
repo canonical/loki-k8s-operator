@@ -1345,7 +1345,7 @@ class LokiPushApiProvider(RelationManagerBase):
     def _url(self) -> str:
         """Get local Loki Push API url.
 
-        Returns: str
+        Return url to loki, including port number, but without the endpoint subpath.
         """
         return "http://{}:{}".format(socket.getfqdn(), self.port)
 
@@ -1710,7 +1710,7 @@ class LokiPushApiConsumer(ConsumerBase):
         """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
 
         Returns:
-            A list with Loki Push API endpoints.
+            A list of dictionaries with Loki Push API endpoints.
         """
         endpoints = []  # type: list
 
