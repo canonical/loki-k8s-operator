@@ -123,10 +123,6 @@ class TestLokiPushApiProvider(unittest.TestCase):
         ]
         self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoints())
 
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._regenerate_alert_rules_files",
-        MagicMock(),
-    )
     @patch("ops.testing._TestingModelBackend.network_get")
     def test__on_logging_relation_changed(self, mock_unit_ip):
         with self.assertLogs(level="DEBUG") as logger:
@@ -142,12 +138,15 @@ class TestLokiPushApiProvider(unittest.TestCase):
             rel_id = self.harness.add_relation("logging", "promtail")
             self.harness.add_relation_unit(rel_id, "promtail/0")
 
-            self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
+            self.harness.update_relation_data(
+                rel_id, "promtail", {"alert_rules": json.dumps(ALERT_RULES)}
+            )
+            print(logger.output)
             self.assertTrue(
                 any(
                     [
                         log_msg
-                        == "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk"
+                        == "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alert rules to disk"
                         for log_msg in logger.output
                     ]
                 )
@@ -179,7 +178,9 @@ class TestLokiPushApiProvider(unittest.TestCase):
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
 
-        self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
+        self.harness.update_relation_data(
+            rel_id, "promtail", {"alert_rules": json.dumps(ALERT_RULES)}
+        )
         self.assertEqual(self.harness.charm.loki_provider._regenerate_alert_rules.call_count, 1)
 
         self.harness.remove_relation(rel_id)

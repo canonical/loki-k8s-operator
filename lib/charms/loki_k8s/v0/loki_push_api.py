@@ -1306,11 +1306,30 @@ class LokiPushApiProvider(Object):
         logger.warning("No address found")
         return ""
 
+    def _endpoints(self) -> List[dict]:
+        """Return a list of Loki Push Api endpoints."""
+        return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
+
+    def _url(self, unit_number) -> str:
+        """Get the url for a given unit."""
+        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
+            self._charm.app.name,
+            unit_number,
+            self._charm.app.name,
+            self._charm.model.name,
+            self.port,
+        )
+
+    def _regenerate_alert_rules(self):
+        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
+        self._remove_alert_rules_files(self.container)
+        self._generate_alert_rules_files(self.container)
+
     def _update_alert_rules(self, relation):
         if relation.data.get(relation.app).get("alert_rules"):
-            self._regenerate_alert_rules_files(self.container)
+            self._regenerate_alert_rules()
 
-    def _regenerate_alert_rules_files(self, container: Container) -> None:
+    def _generate_alert_rules_files(self, container: Container) -> None:
         """Generate and upload alert rules files.
 
         Args:
@@ -1318,7 +1337,6 @@ class LokiPushApiProvider(Object):
         """
         file_mappings = {}
 
-        logger.debug("Generating alert rules files")
         for identifier, alert_rules in self.alerts.items():
             rules = yaml.dump({"groups": alert_rules["groups"]})
             file_mappings["{}_alert.rules".format(identifier)] = rules
@@ -1327,13 +1345,12 @@ class LokiPushApiProvider(Object):
             logger.debug("Cannot connect to container to refresh alert rule files!")
             return
 
-        logger.debug("Removing existing alert rules")
         self._remove_alert_rules_files(container)
 
         for filename, content in file_mappings.items():
             path = os.path.join(self._rules_dir, filename)
             container.push(path, content, make_dirs=True)
-            logger.debug("Updated alert rules file %s", filename)
+        logger.debug("Saved alert rules to disk")
 
     def _remove_alert_rules_files(self, container: Container) -> None:
         """Remove alert rules files from workload container.
@@ -1347,7 +1364,6 @@ class LokiPushApiProvider(Object):
 
         files = container.list_files(self._rules_dir)
         for f in files:
-            logger.debug("Removing file... %s", f.path)
             container.remove_path(f.path)
 
     def _check_alert_rules(self):
@@ -1393,6 +1409,7 @@ class LokiPushApiProvider(Object):
             logger.debug(log_msg)
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
 
+    @property
     def alerts(self) -> dict:
         """Fetch alerts for all relations.
 
@@ -1501,9 +1518,6 @@ class ConsumerBase(Object):
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
-
-        # if alert_rules_error_message:
-        #     self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
 
         logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
