@@ -69,10 +69,10 @@ and three optional arguments.
           def __init__(self, *args):
               super().__init__(*args)
               ...
-              self._provide_loki()
+              self._loki_ready()
               ...
 
-          def _provide_loki(self):
+          def _loki_ready(self):
               try:
                   version = self._loki_server.version
                   self.loki_provider = LokiPushApiProvider(self)
@@ -443,7 +443,7 @@ from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, cast
 from urllib import request
 from urllib.error import HTTPError, URLError
 from zipfile import ZipFile
@@ -1537,10 +1537,6 @@ class ConsumerBase(RelationManagerBase):
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
 
-        # if alert_rules_error_message:
-        #     self.on.loki_push_api_alert_rules_error.emit(alert_rules_error_message)
-
-
         logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         relation.data[self._charm.app]["alert_rules"] = json.dumps(
@@ -1658,13 +1654,7 @@ class LokiPushApiConsumer(ConsumerBase):
             loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
                 file is encountered or if `alert_rules_path` is empty.
         """
-        if isinstance(event, RelationEvent):
-            self._process_logging_relation_changed(event.relation)
-        else:
-            # Upgrade event or other charm-level event
-            for relation in self._charm.model.relations[self._relation_name]:
-                self._process_logging_relation_changed(relation)
-
+        self.on.loki_push_api_endpoint_joined.emit()
 
     def _reinitialize_alert_rules(self):
         """Reloads alert rules and updates all relations."""
@@ -1700,12 +1690,22 @@ class LokiPushApiConsumer(ConsumerBase):
 
 
 class ContainerNotFoundError(Exception):
-    """Raised if there is no container with the given name or the name is ambiguous."""
+    """Raised if the specified container does not exist."""
+
+    def __init__(self):
+        msg = "The specified container does not exist."
+        self.message = msg
+
+        super().__init__(self.message)
+
+
+class MultipleContainersFoundError(Exception):
+    """Raised if no container name is passed but multiple containers are present."""
 
     def __init__(self):
         msg = (
             "No 'container_name' parameter has been specified; since this Charmed Operator"
-            " is not running exactly one container, it must be specified which container"
+            " is has multiple containers, container_name must be specified for the container"
             " to get logs from."
         )
         self.message = msg
@@ -1846,7 +1846,9 @@ class LogProxyConsumer(ConsumerBase):
         else:
             new_config = self._promtail_config
             if new_config != self._current_config:
-                self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
+                self._container.push(
+                    WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True
+                )
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
 
@@ -1864,7 +1866,7 @@ class LogProxyConsumer(ConsumerBase):
 
         new_config = self._promtail_config
         if new_config != self._current_config:
-            self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
+            self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True)
 
         if new_config["clients"]:
             self._container.restart(WORKLOAD_SERVICE_NAME)
@@ -1872,7 +1874,7 @@ class LogProxyConsumer(ConsumerBase):
             self._container.stop(WORKLOAD_SERVICE_NAME)
         self.on.log_proxy_endpoint_departed.emit()
 
-    def _get_container(self, container_name: Optional[str] = "") -> Container:
+    def _get_container(self, container_name: str = None) -> Container:
         """Gets a single container by name or using the only container running in the Pod.
 
         If there is more than one container in the Pod a `PromtailDigestError` is emitted.
@@ -1881,48 +1883,52 @@ class LogProxyConsumer(ConsumerBase):
             container_name: The container name.
 
         Returns:
-            container: a `ops.model.Container` object representing the container.
+            A `ops.model.Container` object representing the container.
 
-        Raises:
-            ContainerNotFoundError if no container_name was specified
+        Emits:
+            PromtailDigestError, if there was a problem obtaining a container.
         """
-        if container_name:
-            try:
-                return self._charm.unit.get_container(container_name)
-            except ModelError as e:
-                msg = str(e)
-                logger.warning(msg)
-                self.on.promtail_digest_error.emit(msg)
-        else:
-            containers = dict(self._charm.model.unit.containers)
+        try:
+            container_name = self._get_container_name(container_name)
+            return self._charm.unit.get_container(container_name)
+        except (MultipleContainersFoundError, ContainerNotFoundError, ModelError) as e:
+            msg = str(e)
+            logger.warning(msg)
+            self.on.promtail_digest_error.emit(msg)
 
-            if len(containers) == 1:
-                return self._charm.unit.get_container([*containers].pop())
-
-            raise ContainerNotFoundError
-
-    def _get_container_name(self, container_name: Optional[str] = "") -> str:
-        """Gets a container_name.
-
-        If there is more than one container in the Pod a `ContainerNotFoundError` is raised.
+    def _get_container_name(self, container_name: str = None) -> str:
+        """Helper function for getting/validating a container name.
 
         Args:
-            container_name: The container name.
+            container_name: The container name to be validated (optional).
 
         Returns:
-            container_name: a string representing the container_name.
+            container_name: The same container_name that was passed (if it exists) or the only
+            container name that is present (if no container_name was passed).
 
         Raises:
-            ContainerNotFoundError if no container_name was specified
+            ContainerNotFoundError, if container_name does not exist.
+            MultipleContainersFoundError, if container_name was not provided but multiple
+            containers are present.
         """
-        if container_name:
-            return container_name
-
         containers = dict(self._charm.model.unit.containers)
-        if len(containers) == 1:
-            return "".join(list(containers.keys()))
+        if len(containers) == 0:
+            raise ContainerNotFoundError
 
-        raise ContainerNotFoundError
+        if not container_name:
+            # container_name was not provided - will get it ourselves, if it is the only one
+            if len(containers) > 1:
+                raise MultipleContainersFoundError
+
+            # Get the first key in the containers' dict.
+            # Need to "cast", otherwise:
+            # error: Incompatible return value type (got "Optional[str]", expected "str")
+            container_name = cast(str, next(iter(containers.keys())))
+
+        elif container_name not in containers:
+            raise ContainerNotFoundError
+
+        return container_name
 
     def _add_pebble_layer(self) -> None:
         """Adds Pebble layer that manages Promtail service in Workload container."""
