@@ -1710,7 +1710,11 @@ class LokiPushApiConsumer(ConsumerBase):
         """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
 
         Returns:
-            A list of dictionaries with Loki Push API endpoints.
+            A list of dictionaries with Loki Push API endpoints, for instance:
+            [
+                {"url": "http://loki1:3100/loki/api/v1/push"},
+                {"url": "http://loki2:3100/loki/api/v1/push"},
+            ]
         """
         endpoints = []  # type: list
 
