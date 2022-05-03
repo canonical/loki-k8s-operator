@@ -444,7 +444,7 @@ from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, cast
 from urllib import request
 from urllib.error import HTTPError, URLError
 
@@ -1037,7 +1037,7 @@ class AlertRules:
         elif path.is_file():
             self.alert_groups.extend(self._from_file(path.parent, path))
         else:
-            logger.warning("path does not exist: %s", path)
+            logger.debug("The alerts file does not exist: %s", path)
 
     def as_dict(self) -> dict:
         """Return standard alert rules file in dict representation.
@@ -1111,21 +1111,6 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         super().__init__(self.message)
 
 
-class RelationManagerBase(Object):
-    """Base class that represents relation ends ("provides" and "requires").
-
-    :class:`RelationManagerBase` is used to create a relation manager. This is done by inheriting
-    from :class:`RelationManagerBase` and customising the sub class as required.
-
-    Attributes:
-        name (str): consumer's relation name
-    """
-
-    def __init__(self, charm: CharmBase, relation_name):
-        super().__init__(charm, relation_name)
-        self.name = relation_name
-
-
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -1160,7 +1145,7 @@ class LokiPushApiEvents(ObjectEvents):
     loki_push_api_alert_rules_changed = EventSource(LokiPushApiAlertRulesChanged)
 
 
-class LokiPushApiProvider(RelationManagerBase):
+class LokiPushApiProvider(Object):
     """A LokiPushApiProvider class."""
 
     on = LokiPushApiEvents()
@@ -1294,23 +1279,30 @@ class LokiPushApiProvider(RelationManagerBase):
             str(self._charm.model.get_binding(relation).network.bind_address) or ""
         )
         self._update_relation_data(relation)
-        self._update_alert_rules(relation)
         self._check_alert_rules()
 
     def _update_relation_data(self, relation):
         if self._charm.unit.is_leader():
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
-            logger.debug("Saved endpoints in relation data")
+        self._update_alert_rules(relation)
 
-    def _update_alert_rules(self, relation):
-        if relation.data.get(relation.app).get("alert_rules"):
-            self._regenerate_alert_rules()
+    @property
+    def _promtail_binary_url(self) -> dict:
+        """URL from which Promtail binary can be downloaded."""
+        return {"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL}
 
-    def _regenerate_alert_rules(self):
-        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
-        self._remove_alert_rules_files(self.container)
-        self._generate_alert_rules_files(self.container)
-        logger.debug("Saved alerts rules to disk")
+    @property
+    def unit_ip(self) -> str:
+        """Returns unit's IP."""
+        bind_address = ""
+        if self._charm.model.relations[self._relation_name]:
+            relation = self._charm.model.relations[self._relation_name][0]
+            bind_address = relation.data[self._charm.unit].get("public_address", "")
+
+        if bind_address:
+            return str(bind_address)
+        logger.warning("No address found")
+        return ""
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1326,9 +1318,53 @@ class LokiPushApiProvider(RelationManagerBase):
             self.port,
         )
 
-    # FIXME: we're returning a bool just for unit testing? See test_dashboard_provider in Grafana
-    # we should just listen to events
-    def _check_alert_rules(self) -> bool:
+    def _regenerate_alert_rules(self):
+        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
+        self._remove_alert_rules_files(self.container)
+        self._generate_alert_rules_files(self.container)
+
+    def _update_alert_rules(self, relation):
+        if relation.data.get(relation.app).get("alert_rules"):
+            self._regenerate_alert_rules()
+
+    def _generate_alert_rules_files(self, container: Container) -> None:
+        """Generate and upload alert rules files.
+
+        Args:
+            container: Container into which alert rules files are going to be uploaded
+        """
+        file_mappings = {}
+
+        for identifier, alert_rules in self.alerts.items():
+            rules = yaml.dump({"groups": alert_rules["groups"]})
+            file_mappings["{}_alert.rules".format(identifier)] = rules
+
+        if not container.can_connect():
+            logger.debug("Cannot connect to container to refresh alert rule files!")
+            return
+
+        self._remove_alert_rules_files(container)
+
+        for filename, content in file_mappings.items():
+            path = os.path.join(self._rules_dir, filename)
+            container.push(path, content, make_dirs=True)
+        logger.debug("Saved alert rules to disk")
+
+    def _remove_alert_rules_files(self, container: Container) -> None:
+        """Remove alert rules files from workload container.
+
+        Args:
+            container: Container which has alert rules files to be deleted
+        """
+        if not container.can_connect():
+            logger.debug("Cannot connect to container to remove alert rule files!")
+            return
+
+        files = container.list_files(self._rules_dir)
+        for f in files:
+            container.remove_path(f.path)
+
+    def _check_alert_rules(self):
         """Check alert rules using Loki API.
 
         Returns: bool
@@ -1347,7 +1383,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 log_msg = "Checking alert rules: No rule groups found"
                 logger.debug(log_msg)
                 self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-                return False
+                return
 
             message = "{} - {}".format(e.code, e.msg)  # type: ignore
             logger.error("Checking alert rules: %s", message)
@@ -1355,77 +1391,28 @@ class LokiPushApiProvider(RelationManagerBase):
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
             )
-            return False
+            return
         except URLError as e:
             logger.error("Checking alert rules: %s", e.reason)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
-            return False
+            return
         except Exception as e:
             logger.error("Checking alert rules: %s", e)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
-            return False
+            return
         else:
             log_msg = "Checking alert rules: Ok"
             logger.debug(log_msg)
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-            return True
-
-    @property
-    def _promtail_binary_url(self) -> dict:
-        """URL from which Promtail binary can be downloaded."""
-        return {"promtail_binary_zip_url": PROMTAIL_BINARY_GZIP_URL}
-
-    @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        bind_address = ""
-        if self._charm.model.relations[self._relation_name]:
-            relation = self._charm.model.relations[self._relation_name][0]
-            bind_address = relation.data[self._charm.unit].get("public_address", "")
-
-        if bind_address:
-            return str(bind_address)
-        logger.warning("No address found")
-        return ""
-
-    def _remove_alert_rules_files(self, container: Container) -> None:
-        """Remove alert rules files from workload container.
-
-        Args:
-            container: Container which has alert rules files to be deleted
-        """
-        if not container.can_connect():
             return
 
-        files = container.list_files(self._rules_dir)
-        logger.debug("Previous Alert rules files deleted")
-        for f in files:
-            logger.debug("Removing file... %s", f.path)
-            container.remove_path(f.path)
-
-    def _generate_alert_rules_files(self, container: Container) -> None:
-        """Generate and upload alert rules files.
-
-        Args:
-            container: Container into which alert rules files are going to be uploaded
-        """
-        if not container.can_connect():
-            return
-
-        logger.debug("Generating alert rules files")
-        for identifier, alert_rules in self.alerts().items():
-            filename = "{}_alert.rules".format(identifier)
-            path = os.path.join(self._rules_dir, filename)
-            rules = yaml.dump({"groups": alert_rules["groups"]})
-            container.push(path, rules, make_dirs=True)
-            logger.debug("Updated alert rules file %s", filename)
-
+    @property
     def alerts(self) -> dict:
         """Fetch alerts for all relations.
 
@@ -1499,7 +1486,7 @@ class LokiPushApiProvider(RelationManagerBase):
         return alerts
 
 
-class ConsumerBase(RelationManagerBase):
+class ConsumerBase(Object):
     """Consumer's base class."""
 
     def __init__(
@@ -1517,7 +1504,7 @@ class ConsumerBase(RelationManagerBase):
         try:
             alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
         except InvalidAlertRulePathError as e:
-            logger.warning(
+            logger.debug(
                 "Invalid Loki alert rules folder at %s: %s",
                 e.alert_rules_absolute_path,
                 e.message,
@@ -1530,12 +1517,10 @@ class ConsumerBase(RelationManagerBase):
         if not self._charm.unit.is_leader():
             return
 
-        logger.debug("Handling alert rules")
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
 
-        logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         relation.data[self._charm.app]["alert_rules"] = json.dumps(
             alert_rules_as_dict,
@@ -1659,6 +1644,10 @@ class LokiPushApiConsumer(ConsumerBase):
         for relation in self._charm.model.relations[self._relation_name]:
             self._handle_alert_rules(relation)
 
+    def _process_logging_relation_changed(self, relation: Relation):
+        self._handle_alert_rules(relation)
+        self.on.loki_push_api_endpoint_joined.emit()
+
     def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.
 
@@ -1684,12 +1673,22 @@ class LokiPushApiConsumer(ConsumerBase):
 
 
 class ContainerNotFoundError(Exception):
-    """Raised if there is no container with the given name or the name is ambiguous."""
+    """Raised if the specified container does not exist."""
+
+    def __init__(self):
+        msg = "The specified container does not exist."
+        self.message = msg
+
+        super().__init__(self.message)
+
+
+class MultipleContainersFoundError(Exception):
+    """Raised if no container name is passed but multiple containers are present."""
 
     def __init__(self):
         msg = (
             "No 'container_name' parameter has been specified; since this Charmed Operator"
-            " is not running exactly one container, it must be specified which container"
+            " is has multiple containers, container_name must be specified for the container"
             " to get logs from."
         )
         self.message = msg
@@ -1830,7 +1829,9 @@ class LogProxyConsumer(ConsumerBase):
         else:
             new_config = self._promtail_config
             if new_config != self._current_config:
-                self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
+                self._container.push(
+                    WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True
+                )
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
 
@@ -1848,7 +1849,7 @@ class LogProxyConsumer(ConsumerBase):
 
         new_config = self._promtail_config
         if new_config != self._current_config:
-            self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config))
+            self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True)
 
         if new_config["clients"]:
             self._container.restart(WORKLOAD_SERVICE_NAME)
@@ -1856,7 +1857,7 @@ class LogProxyConsumer(ConsumerBase):
             self._container.stop(WORKLOAD_SERVICE_NAME)
         self.on.log_proxy_endpoint_departed.emit()
 
-    def _get_container(self, container_name: Optional[str] = "") -> Container:
+    def _get_container(self, container_name: str = None) -> Container:
         """Gets a single container by name or using the only container running in the Pod.
 
         If there is more than one container in the Pod a `PromtailDigestError` is emitted.
@@ -1865,48 +1866,52 @@ class LogProxyConsumer(ConsumerBase):
             container_name: The container name.
 
         Returns:
-            container: a `ops.model.Container` object representing the container.
+            A `ops.model.Container` object representing the container.
 
-        Raises:
-            ContainerNotFoundError if no container_name was specified
+        Emits:
+            PromtailDigestError, if there was a problem obtaining a container.
         """
-        if container_name:
-            try:
-                return self._charm.unit.get_container(container_name)
-            except ModelError as e:
-                msg = str(e)
-                logger.warning(msg)
-                self.on.promtail_digest_error.emit(msg)
-        else:
-            containers = dict(self._charm.model.unit.containers)
+        try:
+            container_name = self._get_container_name(container_name)
+            return self._charm.unit.get_container(container_name)
+        except (MultipleContainersFoundError, ContainerNotFoundError, ModelError) as e:
+            msg = str(e)
+            logger.warning(msg)
+            self.on.promtail_digest_error.emit(msg)
 
-            if len(containers) == 1:
-                return self._charm.unit.get_container([*containers].pop())
-
-            raise ContainerNotFoundError
-
-    def _get_container_name(self, container_name: Optional[str] = "") -> str:
-        """Gets a container_name.
-
-        If there is more than one container in the Pod a `ContainerNotFoundError` is raised.
+    def _get_container_name(self, container_name: str = None) -> str:
+        """Helper function for getting/validating a container name.
 
         Args:
-            container_name: The container name.
+            container_name: The container name to be validated (optional).
 
         Returns:
-            container_name: a string representing the container_name.
+            container_name: The same container_name that was passed (if it exists) or the only
+            container name that is present (if no container_name was passed).
 
         Raises:
-            ContainerNotFoundError if no container_name was specified
+            ContainerNotFoundError, if container_name does not exist.
+            MultipleContainersFoundError, if container_name was not provided but multiple
+            containers are present.
         """
-        if container_name:
-            return container_name
-
         containers = dict(self._charm.model.unit.containers)
-        if len(containers) == 1:
-            return "".join(list(containers.keys()))
+        if len(containers) == 0:
+            raise ContainerNotFoundError
 
-        raise ContainerNotFoundError
+        if not container_name:
+            # container_name was not provided - will get it ourselves, if it is the only one
+            if len(containers) > 1:
+                raise MultipleContainersFoundError
+
+            # Get the first key in the containers' dict.
+            # Need to "cast", otherwise:
+            # error: Incompatible return value type (got "Optional[str]", expected "str")
+            container_name = cast(str, next(iter(containers.keys())))
+
+        elif container_name not in containers:
+            raise ContainerNotFoundError
+
+        return container_name
 
     def _add_pebble_layer(self) -> None:
         """Adds Pebble layer that manages Promtail service in Workload container."""
