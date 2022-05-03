@@ -1290,10 +1290,6 @@ class LokiPushApiProvider(Object):
         self._update_alert_rules(relation)
         self._check_alert_rules()
 
-    def _update_alert_rules(self, relation):
-        if relation.data.get(relation.app).get("alert_rules"):
-            self._regenerate_alert_rules()
-
     @property
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
