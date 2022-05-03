@@ -441,6 +441,7 @@ import os
 import socket
 from collections import OrderedDict
 from copy import deepcopy
+from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -448,7 +449,6 @@ from typing import Dict, List, Optional, Union, cast
 from urllib import request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
-from zipfile import ZipFile
 
 import yaml
 from ops.charm import (
@@ -483,23 +483,21 @@ DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
 DEFAULT_LOG_PROXY_RELATION_NAME = "log-proxy"
 
-PROMTAIL_BINARY_ZIP_URL = (
-    "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
-)
+PROMTAIL_BINARY_GZIP_URL = "https://github.com/canonical/loki-k8s-operator/releases/download/promtail-v2.5.0/promtail-static-amd64.gz"
 
 
 # Paths in `charm` container
 BINARY_DIR = "/tmp"
-BINARY_ZIP_FILE_NAME = "promtail-linux-amd64.zip"
-BINARY_ZIP_PATH = "{}/{}".format(BINARY_DIR, BINARY_ZIP_FILE_NAME)
-BINARY_FILE_NAME = "promtail-linux-amd64"
+BINARY_GZIP_FILE_NAME = "promtail-static-amd64.gz"
+BINARY_GZIP_PATH = "{}/{}".format(BINARY_DIR, BINARY_GZIP_FILE_NAME)
+BINARY_FILE_NAME = "promtail-static"
 BINARY_PATH = "{}/{}".format(BINARY_DIR, BINARY_FILE_NAME)
-BINARY_ZIP_SHA256SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
-BINARY_SHA256SUM = "00ed6a4b899698abc97d471c483a6a7e7c95e761714f872eb8d6ffd45f3d32e6"
+BINARY_GZIP_SHA256SUM = "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d"
+BINARY_SHA256SUM = "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9"
 
 # Paths in `workload` container
 WORKLOAD_BINARY_DIR = "/opt/promtail"
-WORKLOAD_BINARY_FILE_NAME = "promtail-linux-amd64"
+WORKLOAD_BINARY_FILE_NAME = "promtail-static"
 WORKLOAD_BINARY_PATH = "{}/{}".format(WORKLOAD_BINARY_DIR, WORKLOAD_BINARY_FILE_NAME)
 WORKLOAD_CONFIG_DIR = "/etc/promtail"
 WORKLOAD_CONFIG_FILE_NAME = "promtail_config.yaml"
@@ -1041,7 +1039,7 @@ class AlertRules:
         elif path.is_file():
             self.alert_groups.extend(self._from_file(path.parent, path))
         else:
-            logger.warning("path does not exist: %s", path)
+            logger.debug("The alerts file does not exist: %s", path)
 
     def as_dict(self) -> dict:
         """Return standard alert rules file in dict representation.
@@ -1115,21 +1113,6 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         super().__init__(self.message)
 
 
-class RelationManagerBase(Object):
-    """Base class that represents relation ends ("provides" and "requires").
-
-    :class:`RelationManagerBase` is used to create a relation manager. This is done by inheriting
-    from :class:`RelationManagerBase` and customising the sub class as required.
-
-    Attributes:
-        name (str): consumer's relation name
-    """
-
-    def __init__(self, charm: CharmBase, relation_name):
-        super().__init__(charm, relation_name)
-        self.name = relation_name
-
-
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -1164,7 +1147,7 @@ class LokiPushApiEvents(ObjectEvents):
     loki_push_api_alert_rules_changed = EventSource(LokiPushApiAlertRulesChanged)
 
 
-class LokiPushApiProvider(RelationManagerBase):
+class LokiPushApiProvider(Object):
     """A LokiPushApiProvider class."""
 
     on = LokiPushApiEvents()
@@ -1311,11 +1294,23 @@ class LokiPushApiProvider(RelationManagerBase):
         if relation.data.get(relation.app).get("alert_rules"):
             self._regenerate_alert_rules()
 
-    def _regenerate_alert_rules(self):
-        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
-        self._remove_alert_rules_files(self.container)
-        self._generate_alert_rules_files(self.container)
-        logger.debug("Saved alerts rules to disk")
+    @property
+    def _promtail_binary_url(self) -> dict:
+        """URL from which Promtail binary can be downloaded."""
+        return {"promtail_binary_zip_url": PROMTAIL_BINARY_GZIP_URL}
+
+    @property
+    def unit_ip(self) -> str:
+        """Returns unit's IP."""
+        bind_address = ""
+        if self._charm.model.relations[self._relation_name]:
+            relation = self._charm.model.relations[self._relation_name][0]
+            bind_address = relation.data[self._charm.unit].get("public_address", "")
+
+        if bind_address:
+            return str(bind_address)
+        logger.warning("No address found")
+        return ""
 
     def update_endpoint(self, url: str = None, relation: Relation = None) -> None:
         """Triggers programmatically the update of endpoint in unit relation data.
@@ -1360,9 +1355,53 @@ class LokiPushApiProvider(RelationManagerBase):
         endpoint = "/loki/api/v1/push"
         return {"url": urljoin(url, endpoint)}
 
-    # FIXME: we're returning a bool just for unit testing? See test_dashboard_provider in Grafana
-    # we should just listen to events
-    def _check_alert_rules(self) -> bool:
+    def _regenerate_alert_rules(self):
+        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
+        self._remove_alert_rules_files(self.container)
+        self._generate_alert_rules_files(self.container)
+
+    def _update_alert_rules(self, relation):
+        if relation.data.get(relation.app).get("alert_rules"):
+            self._regenerate_alert_rules()
+
+    def _generate_alert_rules_files(self, container: Container) -> None:
+        """Generate and upload alert rules files.
+
+        Args:
+            container: Container into which alert rules files are going to be uploaded
+        """
+        file_mappings = {}
+
+        for identifier, alert_rules in self.alerts.items():
+            rules = yaml.dump({"groups": alert_rules["groups"]})
+            file_mappings["{}_alert.rules".format(identifier)] = rules
+
+        if not container.can_connect():
+            logger.debug("Cannot connect to container to refresh alert rule files!")
+            return
+
+        self._remove_alert_rules_files(container)
+
+        for filename, content in file_mappings.items():
+            path = os.path.join(self._rules_dir, filename)
+            container.push(path, content, make_dirs=True)
+        logger.debug("Saved alert rules to disk")
+
+    def _remove_alert_rules_files(self, container: Container) -> None:
+        """Remove alert rules files from workload container.
+
+        Args:
+            container: Container which has alert rules files to be deleted
+        """
+        if not container.can_connect():
+            logger.debug("Cannot connect to container to remove alert rule files!")
+            return
+
+        files = container.list_files(self._rules_dir)
+        for f in files:
+            container.remove_path(f.path)
+
+    def _check_alert_rules(self):
         """Check alert rules using Loki API.
 
         Returns: bool
@@ -1381,7 +1420,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 log_msg = "Checking alert rules: No rule groups found"
                 logger.debug(log_msg)
                 self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-                return False
+                return
 
             message = "{} - {}".format(e.code, e.msg)  # type: ignore
             logger.error("Checking alert rules: %s", message)
@@ -1389,78 +1428,28 @@ class LokiPushApiProvider(RelationManagerBase):
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
             )
-            return False
+            return
         except URLError as e:
             logger.error("Checking alert rules: %s", e.reason)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
-            return False
+            return
         except Exception as e:
             logger.error("Checking alert rules: %s", e)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
-            return False
+            return
         else:
             log_msg = "Checking alert rules: Ok"
             logger.debug(log_msg)
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-            return True
-
-    @property
-    def _promtail_binary_url(self) -> dict:
-        """URL from which Promtail binary can be downloaded."""
-        return {"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL}
-
-    @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        bind_address = ""
-        if self._charm.model.relations[self._relation_name]:
-            relation = self._charm.model.relations[self._relation_name][0]
-            bind_address = relation.data[self._charm.unit].get("public_address", "")
-
-        if bind_address:
-            return str(bind_address)
-
-        logger.warning("No address found")
-        return ""
-
-    def _remove_alert_rules_files(self, container: Container) -> None:
-        """Remove alert rules files from workload container.
-
-        Args:
-            container: Container which has alert rules files to be deleted
-        """
-        if not container.can_connect():
             return
 
-        files = container.list_files(self._rules_dir)
-        logger.debug("Previous Alert rules files deleted")
-        for f in files:
-            logger.debug("Removing file... %s", f.path)
-            container.remove_path(f.path)
-
-    def _generate_alert_rules_files(self, container: Container) -> None:
-        """Generate and upload alert rules files.
-
-        Args:
-            container: Container into which alert rules files are going to be uploaded
-        """
-        if not container.can_connect():
-            return
-
-        logger.debug("Generating alert rules files")
-        for identifier, alert_rules in self.alerts().items():
-            filename = "{}_alert.rules".format(identifier)
-            path = os.path.join(self._rules_dir, filename)
-            rules = yaml.dump({"groups": alert_rules["groups"]})
-            container.push(path, rules, make_dirs=True)
-            logger.debug("Updated alert rules file %s", filename)
-
+    @property
     def alerts(self) -> dict:
         """Fetch alerts for all relations.
 
@@ -1534,7 +1523,7 @@ class LokiPushApiProvider(RelationManagerBase):
         return alerts
 
 
-class ConsumerBase(RelationManagerBase):
+class ConsumerBase(Object):
     """Consumer's base class."""
 
     def __init__(
@@ -1552,7 +1541,7 @@ class ConsumerBase(RelationManagerBase):
         try:
             alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
         except InvalidAlertRulePathError as e:
-            logger.warning(
+            logger.debug(
                 "Invalid Loki alert rules folder at %s: %s",
                 e.alert_rules_absolute_path,
                 e.message,
@@ -1565,12 +1554,10 @@ class ConsumerBase(RelationManagerBase):
         if not self._charm.unit.is_leader():
             return
 
-        logger.debug("Handling alert rules")
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
 
-        logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         relation.data[self._charm.app]["alert_rules"] = json.dumps(
             alert_rules_as_dict,
@@ -1693,6 +1680,10 @@ class LokiPushApiConsumer(ConsumerBase):
         """Reloads alert rules and updates all relations."""
         for relation in self._charm.model.relations[self._relation_name]:
             self._handle_alert_rules(relation)
+
+    def _process_logging_relation_changed(self, relation: Relation):
+        self._handle_alert_rules(relation)
+        self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.
@@ -2095,15 +2086,17 @@ class LogProxyConsumer(ConsumerBase):
 
         with request.urlopen(url) as r:
             file_bytes = r.read()
-            with open(BINARY_ZIP_PATH, "wb") as f:
+            with open(BINARY_GZIP_PATH, "wb") as f:
                 f.write(file_bytes)
                 logger.info(
                     "Promtail binary zip file has been downloaded and stored in: %s",
-                    BINARY_ZIP_PATH,
+                    BINARY_GZIP_PATH,
                 )
 
-            ZipFile(BytesIO(file_bytes)).extractall(BINARY_DIR)
-            logger.debug("Promtail binary file has been downloaded.")
+            decompressed_file = GzipFile(fileobj=BytesIO(file_bytes))
+            with open(BINARY_PATH, "wb") as outfile:
+                outfile.write(decompressed_file.read())
+                logger.debug("Promtail binary file has been downloaded.")
 
         self._push_binary_to_workload()
 
