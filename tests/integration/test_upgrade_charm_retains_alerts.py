@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, is_loki_up, loki_rules
+from helpers import is_loki_up, loki_rules
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +26,8 @@ async def test_deploy_charms(ops_test, loki_charm, loki_tester_charm):
     """
     await ops_test.model.deploy(loki_charm, resources=resources, application_name=app_name)
 
-    async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-        assert ops_test.model.applications[app_name].units[0].workload_status == "active"
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    assert ops_test.model.applications[app_name].units[0].workload_status == "active"
 
     assert await is_loki_up(ops_test, app_name)
 
@@ -42,10 +41,7 @@ async def test_deploy_charms(ops_test, loki_charm, loki_tester_charm):
     # form a relation between loki and the app that provides rules
     await ops_test.model.add_relation(app_name, rules_app)
 
-    async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(
-            apps=[app_name, rules_app], status="active", timeout=1000
-        )
+    await ops_test.model.wait_for_idle(apps=[app_name, rules_app], status="active", timeout=1000)
 
     # verify setup is complete and as expected
     rules = await loki_rules(ops_test, app_name)
@@ -58,8 +54,9 @@ async def test_rule_files_are_retained_after_pod_upgraded(ops_test, loki_charm):
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
 
-    async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=[app_name], status="active", timeout=1000, idle_period=60
+    )
 
     assert await is_loki_up(ops_test, app_name)
     rules_after_upgrade = await loki_rules(ops_test, app_name)

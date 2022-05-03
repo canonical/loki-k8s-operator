@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, is_loki_up, loki_rules
+from helpers import is_loki_up, loki_rules
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,8 @@ async def test_deploy(ops_test, loki_charm):
     """
     await ops_test.model.deploy(loki_charm, resources=resources, application_name=app_name)
 
-    async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-        assert ops_test.model.applications[app_name].units[0].workload_status == "active"
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    assert ops_test.model.applications[app_name].units[0].workload_status == "active"
 
     assert await is_loki_up(ops_test, app_name)
 
@@ -52,10 +51,7 @@ async def test_first_relation_one_alert_rule(ops_test, loki_tester_charm):
     # form a relation between loki and the app that provides rules
     await ops_test.model.add_relation(app_name, rules_app)
 
-    async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(
-            apps=[app_name, rules_app], status="active", timeout=1000
-        )
+    await ops_test.model.wait_for_idle(apps=[app_name, rules_app], status="active", timeout=1000)
     global rules_after_relation
     rules_after_relation = await loki_rules(ops_test, app_name)
     assert len(rules_after_relation) == 1
@@ -73,10 +69,7 @@ async def test_second_relation_second_alert_rule(ops_test, loki_tester_charm):
     # form a relation between loki and the app that provides rules
     await ops_test.model.add_relation(app_name, rules_app2)
 
-    async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(
-            apps=[app_name, rules_app2], status="active", timeout=1000
-        )
+    await ops_test.model.wait_for_idle(apps=[app_name, rules_app2], status="active", timeout=1000)
 
     rules_after_relation2 = await loki_rules(ops_test, app_name)
     assert len(rules_after_relation2) == 2
@@ -126,5 +119,4 @@ async def test_wrong_alert_rule(ops_test, faulty_loki_tester_charm):
     # form a relation between loki and the app that provides rules
     await ops_test.model.add_relation(app_name, rules_app3)
 
-    async with IPAddressWorkaround(ops_test):
-        await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
+    await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, is_loki_up
+from helpers import is_loki_up
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -34,20 +34,20 @@ async def test_setup_env(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
-    async with IPAddressWorkaround(ops_test):
-        logger.debug("deploy charm from charmhub")
-        await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
-        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    logger.debug("deploy charm from charmhub")
+    await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
-        logger.debug("upgrade deployed charm with local charm %s", loki_charm)
-        await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
-        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-        assert await is_loki_up(ops_test, app_name)
+    logger.debug("upgrade deployed charm with local charm %s", loki_charm)
+    await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    assert await is_loki_up(ops_test, app_name)
 
 
 @pytest.mark.abort_on_fail
 async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm):
     # Deploy related apps
+    app_names = [app_name, "am", "grafana"]
     await asyncio.gather(
         ops_test.model.deploy("ch:alertmanager-k8s", application_name="am", channel="edge"),
         ops_test.model.deploy("ch:grafana-k8s", application_name="grafana", channel="edge"),
@@ -58,24 +58,29 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
         ops_test.model.add_relation(app_name, "am"),
         ops_test.model.add_relation(app_name, "grafana"),
     )
-    await ops_test.model.wait_for_idle(
-        apps=[app_name, "am", "grafana"], status="active", timeout=1000
-    )
+    await ops_test.model.wait_for_idle(apps=app_names, status="active", timeout=1000)
 
     # Refresh from path
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=app_names, status="active", timeout=1000, idle_period=60
+    )
     assert await is_loki_up(ops_test, app_name)
 
 
 @pytest.mark.abort_on_fail
 async def test_upgrade_with_multiple_units(ops_test: OpsTest, loki_charm):
+    app_names = [app_name, "am", "grafana"]
     # Add unit
     await ops_test.model.applications[app_name].scale(scale_change=1)
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=app_names, status="active", timeout=1000, idle_period=60
+    )
 
     # Refresh from path
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=app_names, status="active", timeout=1000, idle_period=60
+    )
 
     assert await is_loki_up(ops_test, app_name, num_units=2)
