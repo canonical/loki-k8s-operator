@@ -77,28 +77,31 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #           CHARM HOOKS HANDLERS             #
     ##############################################
-    def _on_config_changed(self, event):
-        self._configure(event)
+    def _on_config_changed(self, _):
+        self._configure()
 
-    def _on_upgrade_charm(self, event):
-        self._configure(event)
+    def _on_upgrade_charm(self, _):
+        self._configure()
 
-    def _on_loki_pebble_ready(self, event):
-        self._configure(event)
+    def _on_loki_pebble_ready(self, _):
+        self._configure()
 
-    def _on_alertmanager_change(self, event):
-        self._configure(event)
+    def _on_alertmanager_change(self, _):
+        self._configure()
 
     def _loki_push_api_alert_rules_changed(self, event):
-        self._configure(event)
+        if isinstance(event, LokiPushApiAlertRulesChanged):
+            if event.error:
+                self.unit.status = BlockedStatus(event.message)
+                return
+            elif isinstance(self.unit.status, BlockedStatus) and not event.error:
+                self.unit.status = ActiveStatus()
+                logger.info("Clearing blocked status with successful alert rule check")
+        self._configure()
 
-    def _configure(self, event):
+    def _configure(self):
         """Configure Loki charm."""
         restart = False
-
-        if isinstance(event, LokiPushApiAlertRulesChanged) and event.error:
-            self.unit.status = BlockedStatus(event.message)
-            return
 
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
@@ -115,7 +118,7 @@ class LokiOperatorCharm(CharmBase):
         try:
             if yaml.safe_load(self._stored.config) != config:
                 config_as_yaml = yaml.safe_dump(config)
-                self._container.push(LOKI_CONFIG, config_as_yaml)
+                self._container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
                 logger.info("Pushed new configuration")
                 self._stored.config = config_as_yaml
                 restart = True
@@ -130,6 +133,14 @@ class LokiOperatorCharm(CharmBase):
             self._container.add_layer(self._name, new_layer, combine=True)
             self._container.restart(self._name)
             logger.info("Loki (re)started")
+
+        # Don't clear alert error states on reconfigure
+        # but let errors connecting clear after a restart
+        if (
+            isinstance(self.unit.status, BlockedStatus)
+            and "Errors in alert rule" in self.unit.status.message
+        ):
+            return
 
         self.unit.status = ActiveStatus()
 
