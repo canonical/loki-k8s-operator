@@ -8,6 +8,7 @@ from unittest.mock import PropertyMock, patch
 
 import ops
 import yaml
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiAlertRulesChanged
 from helpers import patch_network_get, tautology
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
@@ -196,4 +197,67 @@ class TestDelayedPebbleReady(unittest.TestCase):
 
         # AND app status is "Active" after pebble-ready
         self.harness.container_pebble_ready("loki")
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+
+class TestAlertRuleBlockedStatus(unittest.TestCase):
+    """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
+
+    @patch_network_get(private_address="1.1.1.1")
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    def setUp(self):
+        # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
+        self.check_alert_rules_patcher = patch(
+            "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules",
+            new=tautology,
+        )
+        self.check_alert_rules_patcher.start()
+
+        self.harness = Harness(LokiOperatorCharm)
+        self.harness.set_leader(True)
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("loki")
+
+    def tearDown(self):
+        self.check_alert_rules_patcher.stop()
+
+    def test__alert_rule_errors_appropriately_set_state(self):
+        self.harness.charm.on.config_changed.emit()
+
+        self.harness.charm._loki_push_api_alert_rules_changed(
+            LokiPushApiAlertRulesChanged(
+                None, error=True, message="Errors in alert rule groups: fubar!"
+            )
+        )
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status.message, "Errors in alert rule groups: fubar!"
+        )
+
+        # Emit another config changed to make sure we stay blocked
+        self.harness.charm.on.config_changed.emit()
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status.message, "Errors in alert rule groups: fubar!"
+        )
+
+        self.harness.charm._loki_push_api_alert_rules_changed(
+            LokiPushApiAlertRulesChanged(None, error=False)
+        )
+
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+    def test__loki_connection_errors_on_lifecycle_events_appropriately_clear(self):
+        self.harness.charm._loki_push_api_alert_rules_changed(
+            LokiPushApiAlertRulesChanged(
+                None, error=True, message="Error connecting to Loki: fubar!"
+            )
+        )
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status.message, "Error connecting to Loki: fubar!"
+        )
+
+        # Emit another config changed to make sure we unblock
+        self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)

@@ -1362,14 +1362,14 @@ class LokiPushApiProvider(RelationManagerBase):
             logger.error("Checking alert rules: %s", e.reason)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
             return False
         except Exception as e:
             logger.error("Checking alert rules: %s", e)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
             return False
         else:
@@ -1532,12 +1532,10 @@ class ConsumerBase(RelationManagerBase):
         if not self._charm.unit.is_leader():
             return
 
-        logger.debug("Handling alert rules")
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
 
-        logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         relation.data[self._charm.app]["alert_rules"] = json.dumps(
             alert_rules_as_dict,
