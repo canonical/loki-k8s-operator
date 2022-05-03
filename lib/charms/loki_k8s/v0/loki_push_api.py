@@ -1039,7 +1039,7 @@ class AlertRules:
         elif path.is_file():
             self.alert_groups.extend(self._from_file(path.parent, path))
         else:
-            logger.warning("path does not exist: %s", path)
+            logger.debug("The alerts file does not exist: %s", path)
 
     def as_dict(self) -> dict:
         """Return standard alert rules file in dict representation.
@@ -1113,21 +1113,6 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         super().__init__(self.message)
 
 
-class RelationManagerBase(Object):
-    """Base class that represents relation ends ("provides" and "requires").
-
-    :class:`RelationManagerBase` is used to create a relation manager. This is done by inheriting
-    from :class:`RelationManagerBase` and customising the sub class as required.
-
-    Attributes:
-        name (str): consumer's relation name
-    """
-
-    def __init__(self, charm: CharmBase, relation_name):
-        super().__init__(charm, relation_name)
-        self.name = relation_name
-
-
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -1162,7 +1147,7 @@ class LokiPushApiEvents(ObjectEvents):
     loki_push_api_alert_rules_changed = EventSource(LokiPushApiAlertRulesChanged)
 
 
-class LokiPushApiProvider(RelationManagerBase):
+class LokiPushApiProvider(Object):
     """A LokiPushApiProvider class."""
 
     on = LokiPushApiEvents()
@@ -1296,87 +1281,12 @@ class LokiPushApiProvider(RelationManagerBase):
             str(self._charm.model.get_binding(relation).network.bind_address) or ""
         )
         self._update_relation_data(relation)
-        self._update_alert_rules(relation)
         self._check_alert_rules()
 
     def _update_relation_data(self, relation):
         if self._charm.unit.is_leader():
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
-            logger.debug("Saved endpoints in relation data")
-
-    def _update_alert_rules(self, relation):
-        if relation.data.get(relation.app).get("alert_rules"):
-            self._regenerate_alert_rules()
-
-    def _regenerate_alert_rules(self):
-        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
-        self._remove_alert_rules_files(self.container)
-        self._generate_alert_rules_files(self.container)
-        logger.debug("Saved alerts rules to disk")
-
-    def _endpoints(self) -> List[dict]:
-        """Return a list of Loki Push Api endpoints."""
-        return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
-
-    def _url(self, unit_number) -> str:
-        """Get the url for a given unit."""
-        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
-            self._charm.app.name,
-            unit_number,
-            self._charm.app.name,
-            self._charm.model.name,
-            self.port,
-        )
-
-    # FIXME: we're returning a bool just for unit testing? See test_dashboard_provider in Grafana
-    # we should just listen to events
-    def _check_alert_rules(self) -> bool:
-        """Check alert rules using Loki API.
-
-        Returns: bool
-
-        Emits:
-            loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
-        """
-        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
-        req = request.Request(url)
-        try:
-            request.urlopen(req, timeout=2.0)
-        except HTTPError as e:
-            msg = e.read().decode("utf-8")
-
-            if e.code == 404 and "no rule groups found" in msg:
-                log_msg = "Checking alert rules: No rule groups found"
-                logger.debug(log_msg)
-                self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-                return False
-
-            message = "{} - {}".format(e.code, e.msg)  # type: ignore
-            logger.error("Checking alert rules: %s", message)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
-            )
-            return False
-        except URLError as e:
-            logger.error("Checking alert rules: %s", e.reason)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Error connecting to Loki. Check juju debug-log.",
-            )
-            return False
-        except Exception as e:
-            logger.error("Checking alert rules: %s", e)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Error connecting to Loki. Check juju debug-log.",
-            )
-            return False
-        else:
-            log_msg = "Checking alert rules: Ok"
-            logger.debug(log_msg)
-            self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-            return True
+        self._update_alert_rules(relation)
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -1396,20 +1306,28 @@ class LokiPushApiProvider(RelationManagerBase):
         logger.warning("No address found")
         return ""
 
-    def _remove_alert_rules_files(self, container: Container) -> None:
-        """Remove alert rules files from workload container.
+    def _endpoints(self) -> List[dict]:
+        """Return a list of Loki Push Api endpoints."""
+        return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
 
-        Args:
-            container: Container which has alert rules files to be deleted
-        """
-        if not container.can_connect():
-            return
+    def _url(self, unit_number) -> str:
+        """Get the url for a given unit."""
+        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
+            self._charm.app.name,
+            unit_number,
+            self._charm.app.name,
+            self._charm.model.name,
+            self.port,
+        )
 
-        files = container.list_files(self._rules_dir)
-        logger.debug("Previous Alert rules files deleted")
-        for f in files:
-            logger.debug("Removing file... %s", f.path)
-            container.remove_path(f.path)
+    def _regenerate_alert_rules(self):
+        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
+        self._remove_alert_rules_files(self.container)
+        self._generate_alert_rules_files(self.container)
+
+    def _update_alert_rules(self, relation):
+        if relation.data.get(relation.app).get("alert_rules"):
+            self._regenerate_alert_rules()
 
     def _generate_alert_rules_files(self, container: Container) -> None:
         """Generate and upload alert rules files.
@@ -1417,17 +1335,86 @@ class LokiPushApiProvider(RelationManagerBase):
         Args:
             container: Container into which alert rules files are going to be uploaded
         """
+        file_mappings = {}
+
+        for identifier, alert_rules in self.alerts.items():
+            rules = yaml.dump({"groups": alert_rules["groups"]})
+            file_mappings["{}_alert.rules".format(identifier)] = rules
+
         if not container.can_connect():
+            logger.debug("Cannot connect to container to refresh alert rule files!")
             return
 
-        logger.debug("Generating alert rules files")
-        for identifier, alert_rules in self.alerts().items():
-            filename = "{}_alert.rules".format(identifier)
-            path = os.path.join(self._rules_dir, filename)
-            rules = yaml.dump({"groups": alert_rules["groups"]})
-            container.push(path, rules, make_dirs=True)
-            logger.debug("Updated alert rules file %s", filename)
+        self._remove_alert_rules_files(container)
 
+        for filename, content in file_mappings.items():
+            path = os.path.join(self._rules_dir, filename)
+            container.push(path, content, make_dirs=True)
+        logger.debug("Saved alert rules to disk")
+
+    def _remove_alert_rules_files(self, container: Container) -> None:
+        """Remove alert rules files from workload container.
+
+        Args:
+            container: Container which has alert rules files to be deleted
+        """
+        if not container.can_connect():
+            logger.debug("Cannot connect to container to remove alert rule files!")
+            return
+
+        files = container.list_files(self._rules_dir)
+        for f in files:
+            container.remove_path(f.path)
+
+    def _check_alert_rules(self):
+        """Check alert rules using Loki API.
+
+        Returns: bool
+
+        Emits:
+            loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
+        """
+        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
+        req = request.Request(url)
+        try:
+            request.urlopen(req, timeout=2.0)
+        except HTTPError as e:
+            msg = e.read().decode("utf-8")
+
+            if e.code == 404 and "no rule groups found" in msg:
+                log_msg = "Checking alert rules: No rule groups found"
+                logger.debug(log_msg)
+                self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
+                return
+
+            message = "{} - {}".format(e.code, e.msg)  # type: ignore
+            logger.error("Checking alert rules: %s", message)
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Errors in alert rule groups. Check juju debug-log.",
+            )
+            return
+        except URLError as e:
+            logger.error("Checking alert rules: %s", e.reason)
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Error connecting to Loki. Check juju debug-log.",
+            )
+            return
+        except Exception as e:
+            logger.error("Checking alert rules: %s", e)
+            self.on.loki_push_api_alert_rules_changed.emit(
+                error=True,
+                message="Error connecting to Loki. Check juju debug-log.",
+            )
+            return
+        else:
+            log_msg = "Checking alert rules: Ok"
+            logger.debug(log_msg)
+            self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
+            return
+
+    @property
     def alerts(self) -> dict:
         """Fetch alerts for all relations.
 
@@ -1501,7 +1488,7 @@ class LokiPushApiProvider(RelationManagerBase):
         return alerts
 
 
-class ConsumerBase(RelationManagerBase):
+class ConsumerBase(Object):
     """Consumer's base class."""
 
     def __init__(
@@ -1519,7 +1506,7 @@ class ConsumerBase(RelationManagerBase):
         try:
             alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
         except InvalidAlertRulePathError as e:
-            logger.warning(
+            logger.debug(
                 "Invalid Loki alert rules folder at %s: %s",
                 e.alert_rules_absolute_path,
                 e.message,
@@ -1658,6 +1645,10 @@ class LokiPushApiConsumer(ConsumerBase):
         """Reloads alert rules and updates all relations."""
         for relation in self._charm.model.relations[self._relation_name]:
             self._handle_alert_rules(relation)
+
+    def _process_logging_relation_changed(self, relation: Relation):
+        self._handle_alert_rules(relation)
+        self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.
