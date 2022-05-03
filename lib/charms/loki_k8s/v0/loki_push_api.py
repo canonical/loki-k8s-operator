@@ -982,7 +982,7 @@ class AlertRules:
 
         path_str = ""
         if not rel_path == Path("."):
-            # Get rid of leaving / and optionally drive letters so they don't muck up
+            # Get rid of leading / and optionally drive letters so they don't muck up
             # the template later, since Path.parts returns them. The 'if relpath.is_absolute ...'
             # isn't even needed since re.sub doesn't throw exceptions if it doesn't match, so it's
             # optional, but it makes it clear what we're doing.
