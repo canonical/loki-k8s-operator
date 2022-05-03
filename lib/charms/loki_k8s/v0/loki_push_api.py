@@ -1425,9 +1425,9 @@ class LokiPushApiProvider(RelationManagerBase):
 
         if bind_address:
             return str(bind_address)
-        else:
-            logger.warning("No address found")
-            return ""
+
+        logger.warning("No address found")
+        return ""
 
     def _remove_alert_rules_files(self, container: Container) -> None:
         """Remove alert rules files from workload container.
