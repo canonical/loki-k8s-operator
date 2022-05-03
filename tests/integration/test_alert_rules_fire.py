@@ -69,18 +69,10 @@ async def test_loki_scales_up(ops_test):
     assert await is_loki_up(ops_test, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on
-
-    await asyncio.gather(
-        ops_test.model.applications[tester_app_name]
-        .units[0]
-        .run_action("log-error", message="Error logged!"),
-        ops_test.model.applications[tester_app_name]
-        .units[1]
-        .run_action("log-error", message="Error logged!"),
-        ops_test.model.applications[tester_app_name]
-        .units[2]
-        .run_action("log-error", message="Error logged!"),
+    await ops_test.model.applications[tester_app_name].units[0].run_action(
+        "log-error", message="Error logged!"
     )
+
     alerts_per_unit = await asyncio.gather(
         loki_alerts(ops_test, "loki", unit_num=0),
         loki_alerts(ops_test, "loki", unit_num=1),
