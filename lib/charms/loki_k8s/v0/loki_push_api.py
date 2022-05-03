@@ -2042,6 +2042,8 @@ class LogProxyConsumer(ConsumerBase):
                 outfile.write(decompressed_file.read())
                 logger.debug("Promtail binary file has been downloaded.")
 
+        self._push_binary_to_workload()
+
     @property
     def _cli_args(self) -> str:
         """Return the cli arguments to pass to promtail.
