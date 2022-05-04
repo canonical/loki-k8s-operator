@@ -440,8 +440,8 @@ import logging
 import os
 import platform
 import re
-import typing
 import socket
+import typing
 from collections import OrderedDict
 from copy import deepcopy
 from gzip import GzipFile
