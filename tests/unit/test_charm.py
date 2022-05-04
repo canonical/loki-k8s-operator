@@ -115,10 +115,10 @@ class TestCharm(unittest.TestCase):
             self.harness.charm._alerting_config()
             self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
 
-    @patch("ops.model.Container.can_connect", MagicMock(return_value=False))
     @patch("charm.LokiOperatorCharm._loki_config")
     def test__on_config_cannot_connect(self, mock_loki_config):
         self.harness.set_leader(True)
+        self.harness.set_can_connect("loki", False)
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
 
         # Since harness was not started with begin_with_initial_hooks(), this must
