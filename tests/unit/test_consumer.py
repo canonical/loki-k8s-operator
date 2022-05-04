@@ -5,7 +5,6 @@ import json
 import os
 import textwrap
 import unittest
-from unittest.mock import patch
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
@@ -128,10 +127,10 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.assertEqual(len(self.harness.charm.loki_consumer.loki_endpoints), 3)
 
         # Check each endpoint is a dict, has a "url" key and starts with "http://"
-        for endpoint in self.harness.charm.loki_consumer.loki_endpoints:
-            self.assertIsInstance(endpoint, dict)
-            self.assertTrue(list(endpoint.keys())[0], "url")
-            self.assertTrue(endpoint["url"].startswith("http://"))
+        for endpoint_dict in self.harness.charm.loki_consumer.loki_endpoints:
+            self.assertIsInstance(endpoint_dict, dict)
+            self.assertTrue(list(endpoint_dict.keys())[0], "url")
+            self.assertTrue(endpoint_dict["url"].startswith("http://"))
 
         # Remove Loki units
         for i in range(3):
