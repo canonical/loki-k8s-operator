@@ -118,5 +118,4 @@ async def test_wrong_alert_rule(ops_test, faulty_loki_tester_charm):
 
     # form a relation between loki and the app that provides rules
     await ops_test.model.add_relation(app_name, rules_app3)
-
     await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
