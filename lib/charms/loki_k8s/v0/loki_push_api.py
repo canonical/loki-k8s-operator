@@ -1232,7 +1232,7 @@ class LokiPushApiProvider(Object):
             should_update = should_update or self._process_logging_relation_changed(relation)
         if should_update:
             # We don't have an event, so build it up by hand
-            first_rel = self._charm.model.relations[0]
+            first_rel = self._charm.model.relations[self._relation_name][0]
             self.on.loki_push_api_alert_rules_changed.emit(
                 relation=first_rel,
                 relation_id=first_rel.id,
