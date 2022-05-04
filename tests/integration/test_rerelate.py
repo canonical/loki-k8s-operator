@@ -27,19 +27,6 @@ app_name = METADATA["name"]
 resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
 
 
-class RelatedApp:
-    def __init__(self, name: str, src: str, relname: str, config: dict):
-        self.name = name
-        self.src = src
-        self.relname = relname
-        self.config = config
-
-    async def deploy(self, ops_test: OpsTest):
-        await ops_test.model.deploy(
-            self.src, application_name=self.name, channel="edge", config=self.config
-        )
-
-
 async def test_setup_env(ops_test: OpsTest):
     await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
