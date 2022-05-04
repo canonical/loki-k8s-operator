@@ -7,13 +7,11 @@ import json
 import unittest
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
-import hypothesis.strategies as st
 import ops
 import ops.testing
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiAlertRulesChanged
 from helpers import patch_network_get, tautology
-from hypothesis import given
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
@@ -282,11 +280,10 @@ class TestPebblePlan(unittest.TestCase):
 
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @patch_network_get(private_address="1.1.1.1")
-    @given(st.booleans(), st.integers(1, 3), st.integers(0, 3))
-    def test_loki_starts_when_cluster_deployed_without_any_relations(
-        self, is_leader, num_units, num_consumer_apps
-    ):
+    def test_loki_starts_when_cluster_deployed_without_any_relations(self):
         """Scenario: A loki cluster is deployed without any relations."""
+        is_leader = True
+        num_consumer_apps = 3
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
 
