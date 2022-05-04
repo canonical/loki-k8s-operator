@@ -5,7 +5,6 @@ import json
 import os
 import textwrap
 import unittest
-from unittest.mock import patch
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer

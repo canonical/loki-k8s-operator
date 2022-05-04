@@ -310,7 +310,7 @@ resources:
   promtail-bin:
       type: file
       description: Promtail binary for logging
-      filename: promtail-linux-amd64
+      filename: promtail-linux
 ```
 
 Which would then allow operators to deploy the charm this way:
@@ -429,6 +429,7 @@ key.
 import json
 import logging
 import os
+import platform
 import socket
 from collections import OrderedDict
 from copy import deepcopy
@@ -474,22 +475,24 @@ DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
 DEFAULT_LOG_PROXY_RELATION_NAME = "log-proxy"
 
-PROMTAIL_BINARY_GZIP_URL = "https://github.com/canonical/loki-k8s-operator/releases/download/promtail-v2.5.0/promtail-static-amd64.gz"
-
+PROMTAIL_BASE_URL = "https://github.com/canonical/loki-k8s-operator/releases/download"
+# To update Promtail version you only need to change the PROMTAIL_VERSION and
+# update all sha256 sums in PROMTAIL_BINARIES. To support a new architecture
+# you only need to add a new key value pair for the architecture in PROMTAIL_BINARIES.
+PROMTAIL_VERSION = "v2.5.0"
+PROMTAIL_BINARIES = {
+    "amd64": {
+        "filename": "promtail-static-amd64",
+        "zipsha": "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d",
+        "binsha": "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9",
+    },
+}
 
 # Paths in `charm` container
 BINARY_DIR = "/tmp"
-BINARY_GZIP_FILE_NAME = "promtail-static-amd64.gz"
-BINARY_GZIP_PATH = "{}/{}".format(BINARY_DIR, BINARY_GZIP_FILE_NAME)
-BINARY_FILE_NAME = "promtail-static"
-BINARY_PATH = "{}/{}".format(BINARY_DIR, BINARY_FILE_NAME)
-BINARY_GZIP_SHA256SUM = "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d"
-BINARY_SHA256SUM = "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9"
 
 # Paths in `workload` container
 WORKLOAD_BINARY_DIR = "/opt/promtail"
-WORKLOAD_BINARY_FILE_NAME = "promtail-static"
-WORKLOAD_BINARY_PATH = "{}/{}".format(WORKLOAD_BINARY_DIR, WORKLOAD_BINARY_FILE_NAME)
 WORKLOAD_CONFIG_DIR = "/etc/promtail"
 WORKLOAD_CONFIG_FILE_NAME = "promtail_config.yaml"
 WORKLOAD_CONFIG_PATH = "{}/{}".format(WORKLOAD_CONFIG_DIR, WORKLOAD_CONFIG_FILE_NAME)
@@ -1336,7 +1339,13 @@ class LokiPushApiProvider(Object):
     @property
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
-        return {"promtail_binary_zip_url": PROMTAIL_BINARY_GZIP_URL}
+        # construct promtail binary url paths from parts
+        for arch, info in PROMTAIL_BINARIES.items():
+            info["url"] = "{}/promtail-{}/{}.gz".format(
+                PROMTAIL_BASE_URL, PROMTAIL_VERSION, info["filename"]
+            )
+
+        return {"promtail_binary_zip_url": json.dumps(info)}
 
     @property
     def unit_ip(self) -> str:
@@ -1787,6 +1796,10 @@ class LogProxyConsumer(ConsumerBase):
         self._is_syslog = enable_syslog
         self.topology = ProviderTopology.from_charm(charm)
 
+        # architechure used for promtail binary
+        arch = platform.processor()
+        self._arch = "amd64" if arch == "x86_64" else arch
+
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_created, self._on_relation_created)
         self.framework.observe(events.relation_changed, self._on_relation_changed)
@@ -1800,15 +1813,14 @@ class LogProxyConsumer(ConsumerBase):
 
     def _on_pebble_ready(self, _: WorkloadEvent):
         """Event handler for `pebble_ready`."""
-        if self.model.relations[self._relation_name] and not self._is_promtail_installed():
+        if self.model.relations[self._relation_name]:
             self._setup_promtail()
 
     def _on_relation_created(self, _: RelationCreatedEvent) -> None:
         """Event handler for `relation_created`."""
         if not self._container.can_connect():
             return
-        if not self._is_promtail_installed():
-            self._setup_promtail()
+        self._setup_promtail()
 
     def _on_relation_changed(self, event: RelationEvent) -> None:
         """Event handler for `relation_changed`.
@@ -1820,7 +1832,7 @@ class LogProxyConsumer(ConsumerBase):
 
         if not self._container.can_connect():
             return
-        if self.model.relations[self._relation_name] and not self._is_promtail_installed():
+        if self.model.relations[self._relation_name]:
             self._setup_promtail()
         else:
             new_config = self._promtail_config
@@ -1909,8 +1921,12 @@ class LogProxyConsumer(ConsumerBase):
 
         return container_name
 
-    def _add_pebble_layer(self) -> None:
-        """Adds Pebble layer that manages Promtail service in Workload container."""
+    def _add_pebble_layer(self, workload_binary_path: str) -> None:
+        """Adds Pebble layer that manages Promtail service in Workload container.
+
+        Args:
+            workload_binary_path: string providing path to promtail binary in workload container.
+        """
         pebble_layer = {
             "summary": "promtail layer",
             "description": "pebble config layer for promtail",
@@ -1918,7 +1934,7 @@ class LogProxyConsumer(ConsumerBase):
                 WORKLOAD_SERVICE_NAME: {
                     "override": "replace",
                     "summary": WORKLOAD_SERVICE_NAME,
-                    "command": "{} {}".format(WORKLOAD_BINARY_PATH, self._cli_args),
+                    "command": "{} {}".format(workload_binary_path, self._cli_args),
                     "startup": "disabled",
                 }
             },
@@ -1930,23 +1946,43 @@ class LogProxyConsumer(ConsumerBase):
         self._container.make_dir(path=WORKLOAD_BINARY_DIR, make_parents=True)
         self._container.make_dir(path=WORKLOAD_CONFIG_DIR, make_parents=True)
 
-    def _obtain_promtail(self) -> None:
-        """Obtain promtail binary from an attached resource or download it."""
-        if self._is_promtail_attached():
+    def _obtain_promtail(self, promtail_info: dict) -> None:
+        """Obtain promtail binary from an attached resource or download it.
+
+        Args:
+            promtail_info: dictionary containing information about promtail binary
+               that must be used. The dictionary must have three keys
+               - "filename": filename of promtail binary
+               - "zipsha": sha256 sum of zip file of promtail binary
+               - "binsha": sha256 sum of unpacked promtail binary
+        """
+        workload_binary_path = os.path.join(WORKLOAD_BINARY_DIR, promtail_info["filename"])
+        if self._is_promtail_attached(workload_binary_path):
             return
 
-        if self._promtail_must_be_downloaded():
-            self._download_and_push_promtail_to_workload()
+        if self._promtail_must_be_downloaded(promtail_info):
+            self._download_and_push_promtail_to_workload(promtail_info)
         else:
-            self._push_binary_to_workload()
+            binary_path = os.path.join(BINARY_DIR, promtail_info["filename"])
+            self._push_binary_to_workload(binary_path, workload_binary_path)
 
-    def _push_binary_to_workload(self, resource_path: str = BINARY_PATH) -> None:
-        with open(resource_path, "rb") as f:
-            self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
+    def _push_binary_to_workload(self, binary_path: str, workload_binary_path: str) -> None:
+        """Push promtail binary into workload container.
+
+        Args:
+            binary_path: path in charm container from which promtail binary is read.
+            workload_binary_path: path in workload container to which promtail binary is pushed.
+        """
+        with open(binary_path, "rb") as f:
+            self._container.push(workload_binary_path, f, permissions=0o755, make_dirs=True)
             logger.debug("The promtail binary file has been pushed to the workload container.")
 
-    def _is_promtail_attached(self) -> bool:
+    def _is_promtail_attached(self, workload_binary_path: str) -> bool:
         """Checks whether Promtail binary is attached to the charm or not.
+
+        Args:
+            workload_binary_path: string specifying expected path of promtail
+                in workload container
 
         Returns:
             a boolean representing whether Promtail binary is attached or not.
@@ -1962,19 +1998,27 @@ class LogProxyConsumer(ConsumerBase):
                 raise
 
         logger.info("Promtail binary file has been obtained from an attached resource.")
-        self._push_binary_to_workload(resource_path)
+        self._push_binary_to_workload(resource_path, workload_binary_path)
         return True
 
-    def _promtail_must_be_downloaded(self) -> bool:
+    def _promtail_must_be_downloaded(self, promtail_info: dict) -> bool:
         """Checks whether promtail binary must be downloaded or not.
+
+        Args:
+            promtail_info: dictionary containing information about promtail binary
+               that must be used. The dictionary must have three keys
+               - "filename": filename of promtail binary
+               - "zipsha": sha256 sum of zip file of promtail binary
+               - "binsha": sha256 sum of unpacked promtail binary
 
         Returns:
             a boolean representing whether Promtail binary must be downloaded or not.
         """
-        if not self._is_promtail_binary_in_charm():
+        binary_path = os.path.join(BINARY_DIR, promtail_info["filename"])
+        if not self._is_promtail_binary_in_charm(binary_path):
             return True
 
-        if not self._sha256sums_matches(BINARY_PATH, BINARY_SHA256SUM):
+        if not self._sha256sums_matches(binary_path, promtail_info["binsha"]):
             return True
 
         logger.debug("Promtail binary file is already in the the charm container.")
@@ -2009,41 +2053,45 @@ class LogProxyConsumer(ConsumerBase):
             logger.error(msg)
             return False
 
-    def _is_promtail_binary_in_charm(self) -> bool:
+    def _is_promtail_binary_in_charm(self, binary_path: str) -> bool:
         """Check if Promtail binary is already stored in charm container.
+
+        Args:
+            binary_path: string path of promtail binary to check
 
         Returns:
             a boolean representing whether Promtail is present or not.
         """
-        return True if Path(BINARY_PATH).is_file() else False
+        return True if Path(binary_path).is_file() else False
 
-    def _download_and_push_promtail_to_workload(self) -> None:
-        """Downloads a Promtail zip file and pushes the binary to the workload."""
-        # Use the first
-        relations = self._charm.model.relations[self._relation_name]
-        if len(relations) > 1:
-            logger.debug(
-                "Multiple log_proxy relations. Getting Promtail from application {}".format(
-                    relations[0].app.name
-                )
-            )
-        url = relations[0].data[relations[0].app].get("promtail_binary_zip_url")
+    def _download_and_push_promtail_to_workload(self, promtail_info: dict) -> None:
+        """Downloads a Promtail zip file and pushes the binary to the workload.
 
-        with request.urlopen(url) as r:
+        Args:
+            promtail_info: dictionary containing information about promtail binary
+               that must be used. The dictionary must have three keys
+               - "filename": filename of promtail binary
+               - "zipsha": sha256 sum of zip file of promtail binary
+               - "binsha": sha256 sum of unpacked promtail binary
+        """
+        with request.urlopen(promtail_info["url"]) as r:
             file_bytes = r.read()
-            with open(BINARY_GZIP_PATH, "wb") as f:
+            file_path = os.path.join(BINARY_DIR, promtail_info["filename"] + ".gz")
+            with open(file_path, "wb") as f:
                 f.write(file_bytes)
                 logger.info(
                     "Promtail binary zip file has been downloaded and stored in: %s",
-                    BINARY_GZIP_PATH,
+                    file_path,
                 )
 
             decompressed_file = GzipFile(fileobj=BytesIO(file_bytes))
-            with open(BINARY_PATH, "wb") as outfile:
+            binary_path = os.path.join(BINARY_DIR, promtail_info["filename"])
+            with open(binary_path, "wb") as outfile:
                 outfile.write(decompressed_file.read())
                 logger.debug("Promtail binary file has been downloaded.")
 
-        self._push_binary_to_workload()
+        workload_binary_path = os.path.join(WORKLOAD_BINARY_DIR, promtail_info["filename"])
+        self._push_binary_to_workload(binary_path, workload_binary_path)
 
     @property
     def _cli_args(self) -> str:
@@ -2165,20 +2213,41 @@ class LogProxyConsumer(ConsumerBase):
         return static_configs
 
     def _setup_promtail(self) -> None:
-        relation = self._charm.model.relations[self._relation_name][0]
-        if relation.data[relation.app].get("promtail_binary_zip_url", None) is None:
+        # Use the first
+        relations = self._charm.model.relations[self._relation_name]
+        if len(relations) > 1:
+            logger.debug(
+                "Multiple log_proxy relations. Getting Promtail from application {}".format(
+                    relations[0].app.name
+                )
+            )
+        relation = relations[0]
+        promtail_binaries = json.loads(
+            relation.data[relation.app].get("promtail_binary_zip_url", "{}")
+        )
+        if promtail_binaries is None:
             return
+
+        if self._is_promtail_installed(promtail_binaries[self._arch]):
+            return
+
         self._create_directories()
         self._container.push(
             WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._promtail_config), make_dirs=True
         )
-        self._add_pebble_layer()
+
         try:
-            self._obtain_promtail()
+            self._obtain_promtail(promtail_binaries[self._arch])
         except HTTPError as e:
             msg = "Promtail binary couldn't be download - {}".format(str(e))
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
+
+        workload_binary_path = os.path.join(
+            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
+        )
+        self._add_pebble_layer(workload_binary_path)
+
         if self._current_config["clients"]:
             try:
                 self._container.restart(WORKLOAD_SERVICE_NAME)
@@ -2187,10 +2256,17 @@ class LogProxyConsumer(ConsumerBase):
             else:
                 self.on.log_proxy_endpoint_joined.emit()
 
-    def _is_promtail_installed(self) -> bool:
-        """Determine if promtail has already been installed to the container."""
+    def _is_promtail_installed(self, promtail_info: dict) -> bool:
+        """Determine if promtail has already been installed to the container.
+
+        Args:
+            promtail_info: dictionary containing information about promtail binary
+               that must be used. The dictionary must at least contain a key
+               "filename" giving the name of promtail binary
+        """
+        workload_binary_path = "{}/{}".format(WORKLOAD_BINARY_DIR, promtail_info["filename"])
         try:
-            self._container.list_files(WORKLOAD_BINARY_PATH)
+            self._container.list_files(workload_binary_path)
         except (APIError, FileNotFoundError):
             return False
         return True

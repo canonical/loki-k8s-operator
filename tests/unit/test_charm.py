@@ -6,7 +6,7 @@
 import json
 import unittest
 from io import BytesIO
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 
 import ops
@@ -378,7 +378,7 @@ class TestAppRelationData(unittest.TestCase):
         self.assertIn("promtail_binary_zip_url", rel_data)
 
         # The value must be a url
-        url = rel_data["promtail_binary_zip_url"]
+        url = json.loads(rel_data["promtail_binary_zip_url"])["url"]
         self.assertTrue(url.startswith("http"))
 
 
