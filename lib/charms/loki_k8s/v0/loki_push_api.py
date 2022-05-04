@@ -438,9 +438,9 @@ key.
 import json
 import logging
 import os
+import platform
 import re
 import typing
-import platform
 from collections import OrderedDict
 from copy import deepcopy
 from gzip import GzipFile
