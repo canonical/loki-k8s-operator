@@ -441,15 +441,17 @@ import os
 import platform
 import re
 import typing
+import socket
 from collections import OrderedDict
 from copy import deepcopy
 from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, List, Optional, cast
+from typing import Dict, List, Optional, Union, cast
 from urllib import request
 from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin
 
 import yaml
 from ops.charm import (
@@ -1190,8 +1192,11 @@ class LokiPushApiProvider(Object):
         charm,
         relation_name: str = DEFAULT_RELATION_NAME,
         *,
-        port: int = 3100,
+        port: Union[str, int] = 3100,
         rules_dir="/loki/rules",
+        scheme: str = "http",
+        address: str = "localhost",
+        path: str = "loki/api/v1/push",
     ):
         """A Loki service provider.
 
@@ -1222,8 +1227,11 @@ class LokiPushApiProvider(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self.port = port
+        self.port = int(port)
         self.container = self._charm._container
+        self.scheme = scheme
+        self.address = address
+        self.path = path
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
@@ -1313,25 +1321,21 @@ class LokiPushApiProvider(Object):
         relation.data[self._charm.unit]["public_address"] = (
             str(self._charm.model.get_binding(relation).network.bind_address) or ""
         )
-        self._update_relation_data(relation)
-        self._check_alert_rules()
-
-    def _update_relation_data(self, relation):
-        if self._charm.unit.is_leader():
-            relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
+        self.update_endpoint(relation=relation)
         self._update_alert_rules(relation)
+        self._check_alert_rules()
 
     @property
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
         # construct promtail binary url paths from parts
-        promtail_binaries = {}  # type: Dict[str, dict]
+
         for arch, info in PROMTAIL_BINARIES.items():
             info["url"] = "{}/promtail-{}/{}.gz".format(
                 PROMTAIL_BASE_URL, PROMTAIL_VERSION, info["filename"]
             )
 
-        return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
+        return {"promtail_binary_zip_url": json.dumps(info)}
 
     @property
     def unit_ip(self) -> str:
@@ -1346,19 +1350,48 @@ class LokiPushApiProvider(Object):
         logger.warning("No address found")
         return ""
 
-    def _endpoints(self) -> List[dict]:
-        """Return a list of Loki Push Api endpoints."""
-        return [{"url": self._url(unit_number=i)} for i in range(self._charm.app.planned_units())]
+    def update_endpoint(self, url: str = None, relation: Relation = None) -> None:
+        """Triggers programmatically the update of endpoint in unit relation data.
 
-    def _url(self, unit_number) -> str:
-        """Get the url for a given unit."""
-        return "http://{}-{}.{}-endpoints.{}.svc.cluster.local:{}/loki/api/v1/push".format(
-            self._charm.app.name,
-            unit_number,
-            self._charm.app.name,
-            self._charm.model.name,
-            self.port,
-        )
+        This method should be used when the charm relying on this library needs
+        to update the relation data in response to something occurring outside
+        of the `logging` relation lifecycle, e.g., in case of a
+        host address change because the charmed operator becomes connected to an
+        Ingress after the `logging` relation is established.
+
+        Args:
+            url: An optional url value to update relation data.
+            relation: An optional instance of `class:ops.model.Relation` to update.
+        """
+        if not relation:
+            if not self._charm.model.get_relation(self._relation_name):
+                return
+
+            relation = self._charm.model.get_relation(self._relation_name)
+
+        endpoint = self._endpoint(url or self._url)
+
+        relation.data[self._charm.unit].update({"endpoint": json.dumps(endpoint)})
+        logger.debug("Saved endpoint in unit relation data")
+
+    @property
+    def _url(self) -> str:
+        """Get local Loki Push API url.
+
+        Return url to loki, including port number, but without the endpoint subpath.
+        """
+        return "http://{}:{}".format(socket.getfqdn(), self.port)
+
+    def _endpoint(self, url) -> dict:
+        """Get Loki push API endpoint for a given url.
+
+        Args:
+            url: A loki unit URL.
+
+        Returns: str
+        """
+        endpoint = "/loki/api/v1/push"
+        return {"url": urljoin(url, endpoint)}
 
     def _regenerate_alert_rules(self):
         """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
@@ -1706,11 +1739,25 @@ class LokiPushApiConsumer(ConsumerBase):
         """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
 
         Returns:
-            A list with Loki Push API endpoints.
+            A list of dictionaries with Loki Push API endpoints, for instance:
+            [
+                {"url": "http://loki1:3100/loki/api/v1/push"},
+                {"url": "http://loki2:3100/loki/api/v1/push"},
+            ]
         """
         endpoints = []  # type: list
+
         for relation in self._charm.model.relations[self._relation_name]:
-            endpoints = endpoints + json.loads(relation.data[relation.app].get("endpoints", "[]"))
+            for unit in relation.units:
+                if unit.app is self._charm.app:
+                    # This is a peer unit
+                    continue
+
+                endpoint = relation.data[unit].get("endpoint")
+                if endpoint:
+                    deserialized_endpoint = json.loads(endpoint)
+                    endpoints.append(deserialized_endpoint)
+
         return endpoints
 
 

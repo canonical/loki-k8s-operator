@@ -85,7 +85,13 @@ class FakeLokiCharm(CharmBase):
             },
         )
         with patch("ops.testing._TestingPebbleClient.make_dir"):
-            self.loki_provider = LokiPushApiProvider(self, "logging")
+            self.loki_provider = LokiPushApiProvider(
+                self,
+                address="10.0.0.1",
+                port=3100,
+                scheme="http",
+                path="/loki/api/v1/push",
+            )
 
         self.framework.observe(
             self.loki_provider.on.loki_push_api_alert_rules_changed, self.alert_events
@@ -102,9 +108,14 @@ class FakeLokiCharm(CharmBase):
         return json.dumps(data)
 
     @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        return "10.1.2.3"
+    def hostname(self) -> str:
+        """Unit's hostname."""
+        return "{}-{}.{}-endpoints.{}.svc.cluster.local".format(
+            self.app.name,
+            self.unit.name.split("/")[-1],
+            self.app.name,
+            self.model.name,
+        )
 
 
 class TestLokiPushApiProvider(unittest.TestCase):
@@ -116,12 +127,13 @@ class TestLokiPushApiProvider(unittest.TestCase):
 
     def test_relation_data(self):
         self.harness.charm.app.name = "loki"
-        expected_value = [
-            {
-                "url": "http://loki-0.loki-endpoints.None.svc.cluster.local:3100/loki/api/v1/push",
-            }
-        ]
-        self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoints())
+        base_url = "http://loki-0.loki-endpoints.None.svc.cluster.local"
+        port = "3100"
+        url = "{}:{}".format(base_url, port)
+        path = "/loki/api/v1/push"
+        endpoint = "{}{}".format(url, path)
+        expected_value = {"url": endpoint}
+        self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoint(url))
 
     @patch("ops.testing._TestingModelBackend.network_get")
     def test__on_logging_relation_changed(self, mock_unit_ip):
@@ -141,7 +153,6 @@ class TestLokiPushApiProvider(unittest.TestCase):
             self.harness.update_relation_data(
                 rel_id, "promtail", {"alert_rules": json.dumps(ALERT_RULES)}
             )
-            print(logger.output)
             self.assertTrue(
                 any(
                     [

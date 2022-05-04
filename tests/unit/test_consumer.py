@@ -114,24 +114,37 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             None,
         )
 
-    @patch("charms.loki_k8s.v0.loki_push_api.AlertRules.add_path")
-    @patch("charms.loki_k8s.v0.loki_push_api.AlertRules.as_dict", new=lambda *a, **kw: {})
-    def test__on_logging_relation_changed(self, mock_as_dict):
-        mock_as_dict.return_value = (LABELED_ALERT_RULES, {})
-        loki_push_api = "http://10.1.2.3:3100/loki/api/v1/push"
-        self.harness.set_leader(True)
-        rel_id = self.harness.add_relation("logging", "promtail")
-        self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.harness.update_relation_data(
-            rel_id,
-            "promtail",
-            {"endpoints": '[{"url": "http://10.1.2.3:3100/loki/api/v1/push"}]'},
-        )
+    def test_3_provider_units_related_scaled_down_to_0(self):
+        rel_id = self.harness.add_relation("logging", "loki")
 
-        self.assertEqual(
-            self.harness.charm.loki_consumer.loki_endpoints[0]["url"],
-            loki_push_api,
-        )
+        # Add 3 Loki units
+        for i in range(3):
+            loki_unit = f"loki/{i}"
+            endpoint = f"http://loki-{i}:3100/loki/api/v1/push"
+            data = json.dumps({"url": f"{endpoint}"})
+            self.harness.add_relation_unit(rel_id, loki_unit)
+            self.harness.update_relation_data(
+                rel_id,
+                loki_unit,
+                {"endpoint": data},
+            )
+
+        # Check we have 3 Loki endpoints
+        self.assertEqual(len(self.harness.charm.loki_consumer.loki_endpoints), 3)
+
+        # Check each endpoint is a dict, has a "url" key and starts with "http://"
+        for endpoint_dict in self.harness.charm.loki_consumer.loki_endpoints:
+            self.assertIsInstance(endpoint_dict, dict)
+            self.assertTrue(list(endpoint_dict.keys())[0], "url")
+            self.assertTrue(endpoint_dict["url"].startswith("http://"))
+
+        # Remove Loki units
+        for i in range(3):
+            loki_unit = f"loki/{i}"
+            self.harness.remove_relation_unit(rel_id, loki_unit)
+
+        # Check we have no more endpoint
+        self.assertAlmostEqual(len(self.harness.charm.loki_consumer.loki_endpoints), 0)
 
     def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self):
         self.harness.set_leader(True)
