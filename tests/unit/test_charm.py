@@ -166,6 +166,7 @@ class TestCharm(unittest.TestCase):
 class TestWorkloadUnavailable(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
+        self.container_name: str = "loki"
         version_patcher = patch(
             "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
         )
@@ -176,6 +177,53 @@ class TestWorkloadUnavailable(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
+        self.harness.charm._stored.config = LOKI_CONFIG
+
+    def test__alerting_config(self):
+        self.harness.charm.alertmanager_consumer = Mock()
+        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = [
+            "10.1.2.52",
+            "10.1.3.52",
+        ]
+        expected_value = "http://10.1.2.52,http://10.1.3.52"
+        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
+
+        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = []
+        expected_value = ""
+        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
+
+        with self.assertLogs(level="DEBUG") as logger:
+            self.harness.charm._alerting_config()
+            self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
+
+    @patch("charm.LokiOperatorCharm._loki_config")
+    def test__on_config_cannot_connect(self, mock_loki_config):
+        self.harness.set_leader(True)
+        self.harness.set_can_connect("loki", False)
+        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
+
+        # Since harness was not started with begin_with_initial_hooks(), this must
+        # be emitted by hand to actually trigger _configure()
+        self.harness.charm.on.config_changed.emit()
+        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+
+    @patch("charm.LokiOperatorCharm._loki_config")
+    def test__on_config_can_connect(self, mock_loki_config):
+        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
+        self.harness.set_leader(True)
+
+        # Since harness was not started with begin_with_initial_hooks(), this must
+        # be emitted by hand to actually trigger _configure()
+        self.harness.charm.on.config_changed.emit()
+        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+    def test__provide_loki(self):
+        with self.assertLogs(level="DEBUG") as logger:
+            self.harness.charm._provide_loki()
+            self.assertEqual(
+                sorted(logger.output),
+                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
+            )
 
     def test__provide_loki_not_ready(self):
         self.mock_version.side_effect = LokiServerNotReadyError
@@ -186,6 +234,14 @@ class TestWorkloadUnavailable(unittest.TestCase):
         self.mock_version.side_effect = LokiServerError
         self.harness.charm._provide_loki()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+
+    def test__loki_config(self):
+        with self.assertLogs(level="DEBUG") as logger:
+            self.harness.charm._provide_loki()
+            self.assertEqual(
+                sorted(logger.output),
+                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
+            )
 
 
 class TestConfigFile(unittest.TestCase):
@@ -268,6 +324,48 @@ class TestConfigFile(unittest.TestCase):
         # THEN the `instance_addr` property has the first unit's bind address
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
         self.assertEqual(config["common"]["ring"]["instance_addr"], "1.1.1.1")
+
+
+class TestPebblePlan(unittest.TestCase):
+    """Feature: Multi-unit loki deployments.
+
+    Background: TODO
+    """
+
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch_network_get(private_address="1.1.1.1")
+    def test_loki_starts_when_cluster_deployed_without_any_relations(self):
+        """Scenario: A loki cluster is deployed without any relations."""
+        is_leader = True
+        num_consumer_apps = 3
+        self.harness = Harness(LokiOperatorCharm)
+        self.addCleanup(self.harness.cleanup)
+
+        # WHEN the unit is started as either a leader or not
+        self.harness.set_leader(is_leader)
+
+        # AND potentially some logging relations join
+        for i in range(num_consumer_apps):
+            self.log_rel_id = self.harness.add_relation("logging", f"consumer-app-{i}")
+            # Add two units per consumer app
+            for u in range(2):
+                self.harness.add_relation_unit(self.log_rel_id, f"consumer-app-{i}/{u}")
+
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("loki")
+
+        # THEN a pebble service is created for this unit
+        plan = self.harness.get_container_pebble_plan("loki")
+        self.assertIn("loki", plan.services)
+
+        # AND the command includes a config file
+        command = plan.services["loki"].command
+        self.assertIn("-config.file=", command)
+
+        # AND the service is running
+        container = self.harness.charm.unit.get_container("loki")
+        service = container.get_service("loki")
+        self.assertTrue(service.is_running())
 
 
 class TestDelayedPebbleReady(unittest.TestCase):
@@ -412,7 +510,6 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
             hdrs=None,  # type: ignore
         )
         self.harness.charm._loki_push_api_alert_rules_changed(None)
-        print("CALLED! {}".format(self.mock_request.call_count))
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
             self.harness.charm.unit.status.message,
