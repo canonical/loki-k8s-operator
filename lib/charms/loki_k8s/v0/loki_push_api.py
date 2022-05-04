@@ -319,7 +319,7 @@ resources:
   promtail-bin:
       type: file
       description: Promtail binary for logging
-      filename: promtail-linux-amd64
+      filename: promtail-linux
 ```
 
 Which would then allow operators to deploy the charm this way:
@@ -440,15 +440,16 @@ import logging
 import os
 import re
 import typing
+import platform
 from collections import OrderedDict
 from copy import deepcopy
+from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional, cast
 from urllib import request
 from urllib.error import HTTPError, URLError
-from zipfile import ZipFile
 
 import yaml
 from ops.charm import (
@@ -483,24 +484,24 @@ DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
 DEFAULT_LOG_PROXY_RELATION_NAME = "log-proxy"
 
-PROMTAIL_BINARY_ZIP_URL = (
-    "https://github.com/grafana/loki/releases/download/v2.4.1/promtail-linux-amd64.zip"
-)
-
+PROMTAIL_BASE_URL = "https://github.com/canonical/loki-k8s-operator/releases/download"
+# To update Promtail version you only need to change the PROMTAIL_VERSION and
+# update all sha256 sums in PROMTAIL_BINARIES. To support a new architecture
+# you only need to add a new key value pair for the architecture in PROMTAIL_BINARIES.
+PROMTAIL_VERSION = "v2.5.0"
+PROMTAIL_BINARIES = {
+    "amd64": {
+        "filename": "promtail-static-amd64",
+        "zipsha": "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d",
+        "binsha": "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9",
+    },
+}
 
 # Paths in `charm` container
 BINARY_DIR = "/tmp"
-BINARY_ZIP_FILE_NAME = "promtail-linux-amd64.zip"
-BINARY_ZIP_PATH = "{}/{}".format(BINARY_DIR, BINARY_ZIP_FILE_NAME)
-BINARY_FILE_NAME = "promtail-linux-amd64"
-BINARY_PATH = "{}/{}".format(BINARY_DIR, BINARY_FILE_NAME)
-BINARY_ZIP_SHA256SUM = "978391a174e71cfef444ab9dc012f95d5d7eae0d682eaf1da2ea18f793452031"
-BINARY_SHA256SUM = "00ed6a4b899698abc97d471c483a6a7e7c95e761714f872eb8d6ffd45f3d32e6"
 
 # Paths in `workload` container
 WORKLOAD_BINARY_DIR = "/opt/promtail"
-WORKLOAD_BINARY_FILE_NAME = "promtail-linux-amd64"
-WORKLOAD_BINARY_PATH = "{}/{}".format(WORKLOAD_BINARY_DIR, WORKLOAD_BINARY_FILE_NAME)
 WORKLOAD_CONFIG_DIR = "/etc/promtail"
 WORKLOAD_CONFIG_FILE_NAME = "promtail_config.yaml"
 WORKLOAD_CONFIG_PATH = "{}/{}".format(WORKLOAD_CONFIG_DIR, WORKLOAD_CONFIG_FILE_NAME)
@@ -1071,7 +1072,7 @@ class AlertRules:
         elif path.is_file():
             self.alert_groups.extend(self._from_file(path.parent, path))
         else:
-            logger.warning("path does not exist: %s", path)
+            logger.debug("The alerts file does not exist: %s", path)
 
     def as_dict(self) -> dict:
         """Return standard alert rules file in dict representation.
@@ -1145,21 +1146,6 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         super().__init__(self.message)
 
 
-class RelationManagerBase(Object):
-    """Base class that represents relation ends ("provides" and "requires").
-
-    :class:`RelationManagerBase` is used to create a relation manager. This is done by inheriting
-    from :class:`RelationManagerBase` and customising the sub class as required.
-
-    Attributes:
-        name (str): consumer's relation name
-    """
-
-    def __init__(self, charm: CharmBase, relation_name):
-        super().__init__(charm, relation_name)
-        self.name = relation_name
-
-
 class LokiPushApiEndpointDeparted(EventBase):
     """Event emitted when Loki departed."""
 
@@ -1194,7 +1180,7 @@ class LokiPushApiEvents(ObjectEvents):
     loki_push_api_alert_rules_changed = EventSource(LokiPushApiAlertRulesChanged)
 
 
-class LokiPushApiProvider(RelationManagerBase):
+class LokiPushApiProvider(Object):
     """A LokiPushApiProvider class."""
 
     on = LokiPushApiEvents()
@@ -1328,23 +1314,37 @@ class LokiPushApiProvider(RelationManagerBase):
             str(self._charm.model.get_binding(relation).network.bind_address) or ""
         )
         self._update_relation_data(relation)
-        self._update_alert_rules(relation)
         self._check_alert_rules()
 
     def _update_relation_data(self, relation):
         if self._charm.unit.is_leader():
             relation.data[self._charm.app]["endpoints"] = json.dumps(self._endpoints())
-            logger.debug("Saved endpoints in relation data")
+        self._update_alert_rules(relation)
 
-    def _update_alert_rules(self, relation):
-        if relation.data.get(relation.app).get("alert_rules"):
-            self._regenerate_alert_rules()
+    @property
+    def _promtail_binary_url(self) -> dict:
+        """URL from which Promtail binary can be downloaded."""
+        # construct promtail binary url paths from parts
+        promtail_binaries = {}  # type: Dict[str, dict]
+        for arch, info in PROMTAIL_BINARIES.items():
+            info["url"] = "{}/promtail-{}/{}.gz".format(
+                PROMTAIL_BASE_URL, PROMTAIL_VERSION, info["filename"]
+            )
 
-    def _regenerate_alert_rules(self):
-        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
-        self._remove_alert_rules_files(self.container)
-        self._generate_alert_rules_files(self.container)
-        logger.debug("Saved alerts rules to disk")
+        return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
+
+    @property
+    def unit_ip(self) -> str:
+        """Returns unit's IP."""
+        bind_address = ""
+        if self._charm.model.relations[self._relation_name]:
+            relation = self._charm.model.relations[self._relation_name][0]
+            bind_address = relation.data[self._charm.unit].get("public_address", "")
+
+        if bind_address:
+            return str(bind_address)
+        logger.warning("No address found")
+        return ""
 
     def _endpoints(self) -> List[dict]:
         """Return a list of Loki Push Api endpoints."""
@@ -1360,9 +1360,53 @@ class LokiPushApiProvider(RelationManagerBase):
             self.port,
         )
 
-    # FIXME: we're returning a bool just for unit testing? See test_dashboard_provider in Grafana
-    # we should just listen to events
-    def _check_alert_rules(self) -> bool:
+    def _regenerate_alert_rules(self):
+        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
+        self._remove_alert_rules_files(self.container)
+        self._generate_alert_rules_files(self.container)
+
+    def _update_alert_rules(self, relation):
+        if relation.data.get(relation.app).get("alert_rules"):
+            self._regenerate_alert_rules()
+
+    def _generate_alert_rules_files(self, container: Container) -> None:
+        """Generate and upload alert rules files.
+
+        Args:
+            container: Container into which alert rules files are going to be uploaded
+        """
+        file_mappings = {}
+
+        for identifier, alert_rules in self.alerts.items():
+            rules = yaml.dump({"groups": alert_rules["groups"]})
+            file_mappings["{}_alert.rules".format(identifier)] = rules
+
+        if not container.can_connect():
+            logger.debug("Cannot connect to container to refresh alert rule files!")
+            return
+
+        self._remove_alert_rules_files(container)
+
+        for filename, content in file_mappings.items():
+            path = os.path.join(self._rules_dir, filename)
+            container.push(path, content, make_dirs=True)
+        logger.debug("Saved alert rules to disk")
+
+    def _remove_alert_rules_files(self, container: Container) -> None:
+        """Remove alert rules files from workload container.
+
+        Args:
+            container: Container which has alert rules files to be deleted
+        """
+        if not container.can_connect():
+            logger.debug("Cannot connect to container to remove alert rule files!")
+            return
+
+        files = container.list_files(self._rules_dir)
+        for f in files:
+            container.remove_path(f.path)
+
+    def _check_alert_rules(self):
         """Check alert rules using Loki API.
 
         Returns: bool
@@ -1381,7 +1425,7 @@ class LokiPushApiProvider(RelationManagerBase):
                 log_msg = "Checking alert rules: No rule groups found"
                 logger.debug(log_msg)
                 self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-                return False
+                return
 
             message = "{} - {}".format(e.code, e.msg)  # type: ignore
             logger.error("Checking alert rules: %s", message)
@@ -1389,77 +1433,28 @@ class LokiPushApiProvider(RelationManagerBase):
                 error=True,
                 message="Errors in alert rule groups. Check juju debug-log.",
             )
-            return False
+            return
         except URLError as e:
             logger.error("Checking alert rules: %s", e.reason)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
-            return False
+            return
         except Exception as e:
             logger.error("Checking alert rules: %s", e)
             self.on.loki_push_api_alert_rules_changed.emit(
                 error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
+                message="Error connecting to Loki. Check juju debug-log.",
             )
-            return False
+            return
         else:
             log_msg = "Checking alert rules: Ok"
             logger.debug(log_msg)
             self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-            return True
-
-    @property
-    def _promtail_binary_url(self) -> dict:
-        """URL from which Promtail binary can be downloaded."""
-        return {"promtail_binary_zip_url": PROMTAIL_BINARY_ZIP_URL}
-
-    @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        bind_address = ""
-        if self._charm.model.relations[self._relation_name]:
-            relation = self._charm.model.relations[self._relation_name][0]
-            bind_address = relation.data[self._charm.unit].get("public_address", "")
-
-        if bind_address:
-            return str(bind_address)
-        logger.warning("No address found")
-        return ""
-
-    def _remove_alert_rules_files(self, container: Container) -> None:
-        """Remove alert rules files from workload container.
-
-        Args:
-            container: Container which has alert rules files to be deleted
-        """
-        if not container.can_connect():
             return
 
-        files = container.list_files(self._rules_dir)
-        logger.debug("Previous Alert rules files deleted")
-        for f in files:
-            logger.debug("Removing file... %s", f.path)
-            container.remove_path(f.path)
-
-    def _generate_alert_rules_files(self, container: Container) -> None:
-        """Generate and upload alert rules files.
-
-        Args:
-            container: Container into which alert rules files are going to be uploaded
-        """
-        if not container.can_connect():
-            return
-
-        logger.debug("Generating alert rules files")
-        for identifier, alert_rules in self.alerts().items():
-            filename = "{}_alert.rules".format(identifier)
-            path = os.path.join(self._rules_dir, filename)
-            rules = yaml.dump({"groups": alert_rules["groups"]})
-            container.push(path, rules, make_dirs=True)
-            logger.debug("Updated alert rules file %s", filename)
-
+    @property
     def alerts(self) -> dict:
         """Fetch alerts for all relations.
 
@@ -1533,7 +1528,7 @@ class LokiPushApiProvider(RelationManagerBase):
         return alerts
 
 
-class ConsumerBase(RelationManagerBase):
+class ConsumerBase(Object):
     """Consumer's base class."""
 
     def __init__(
@@ -1551,7 +1546,7 @@ class ConsumerBase(RelationManagerBase):
         try:
             alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
         except InvalidAlertRulePathError as e:
-            logger.warning(
+            logger.debug(
                 "Invalid Loki alert rules folder at %s: %s",
                 e.alert_rules_absolute_path,
                 e.message,
@@ -1564,12 +1559,10 @@ class ConsumerBase(RelationManagerBase):
         if not self._charm.unit.is_leader():
             return
 
-        logger.debug("Handling alert rules")
         alert_rules = AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
 
-        logger.debug("Setting alert rules")
         relation.data[self._charm.app]["metadata"] = json.dumps(self.topology.as_dict())
         relation.data[self._charm.app]["alert_rules"] = json.dumps(
             alert_rules_as_dict,
@@ -1692,6 +1685,10 @@ class LokiPushApiConsumer(ConsumerBase):
         """Reloads alert rules and updates all relations."""
         for relation in self._charm.model.relations[self._relation_name]:
             self._handle_alert_rules(relation)
+
+    def _process_logging_relation_changed(self, relation: Relation):
+        self._handle_alert_rules(relation)
+        self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_departed(self, _: RelationEvent):
         """Handle departures in related providers.
@@ -1836,6 +1833,10 @@ class LogProxyConsumer(ConsumerBase):
         self._is_syslog = enable_syslog
         self.topology = ProviderTopology.from_charm(charm)
 
+        # architechure used for promtail binary
+        arch = platform.processor()
+        self._arch = "amd64" if arch == "x86_64" else arch
+
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_created, self._on_relation_created)
         self.framework.observe(events.relation_changed, self._on_relation_changed)
@@ -1849,15 +1850,14 @@ class LogProxyConsumer(ConsumerBase):
 
     def _on_pebble_ready(self, _: WorkloadEvent):
         """Event handler for `pebble_ready`."""
-        if self.model.relations[self._relation_name] and not self._is_promtail_installed():
+        if self.model.relations[self._relation_name]:
             self._setup_promtail()
 
     def _on_relation_created(self, _: RelationCreatedEvent) -> None:
         """Event handler for `relation_created`."""
         if not self._container.can_connect():
             return
-        if not self._is_promtail_installed():
-            self._setup_promtail()
+        self._setup_promtail()
 
     def _on_relation_changed(self, event: RelationEvent) -> None:
         """Event handler for `relation_changed`.
@@ -1869,7 +1869,7 @@ class LogProxyConsumer(ConsumerBase):
 
         if not self._container.can_connect():
             return
-        if self.model.relations[self._relation_name] and not self._is_promtail_installed():
+        if self.model.relations[self._relation_name]:
             self._setup_promtail()
         else:
             new_config = self._promtail_config
@@ -1958,8 +1958,12 @@ class LogProxyConsumer(ConsumerBase):
 
         return container_name
 
-    def _add_pebble_layer(self) -> None:
-        """Adds Pebble layer that manages Promtail service in Workload container."""
+    def _add_pebble_layer(self, workload_binary_path: str) -> None:
+        """Adds Pebble layer that manages Promtail service in Workload container.
+
+        Args:
+            workload_binary_path: string providing path to promtail binary in workload container.
+        """
         pebble_layer = {
             "summary": "promtail layer",
             "description": "pebble config layer for promtail",
@@ -1967,7 +1971,7 @@ class LogProxyConsumer(ConsumerBase):
                 WORKLOAD_SERVICE_NAME: {
                     "override": "replace",
                     "summary": WORKLOAD_SERVICE_NAME,
-                    "command": "{} {}".format(WORKLOAD_BINARY_PATH, self._cli_args),
+                    "command": "{} {}".format(workload_binary_path, self._cli_args),
                     "startup": "disabled",
                 }
             },
@@ -1979,23 +1983,43 @@ class LogProxyConsumer(ConsumerBase):
         self._container.make_dir(path=WORKLOAD_BINARY_DIR, make_parents=True)
         self._container.make_dir(path=WORKLOAD_CONFIG_DIR, make_parents=True)
 
-    def _obtain_promtail(self) -> None:
-        """Obtain promtail binary from an attached resource or download it."""
-        if self._is_promtail_attached():
+    def _obtain_promtail(self, promtail_info: dict) -> None:
+        """Obtain promtail binary from an attached resource or download it.
+
+        Args:
+            promtail_info: dictionary containing information about promtail binary
+               that must be used. The dictionary must have three keys
+               - "filename": filename of promtail binary
+               - "zipsha": sha256 sum of zip file of promtail binary
+               - "binsha": sha256 sum of unpacked promtail binary
+        """
+        workload_binary_path = os.path.join(WORKLOAD_BINARY_DIR, promtail_info["filename"])
+        if self._is_promtail_attached(workload_binary_path):
             return
 
-        if self._promtail_must_be_downloaded():
-            self._download_and_push_promtail_to_workload()
+        if self._promtail_must_be_downloaded(promtail_info):
+            self._download_and_push_promtail_to_workload(promtail_info)
         else:
-            self._push_binary_to_workload()
+            binary_path = os.path.join(BINARY_DIR, promtail_info["filename"])
+            self._push_binary_to_workload(binary_path, workload_binary_path)
 
-    def _push_binary_to_workload(self, resource_path: str = BINARY_PATH) -> None:
-        with open(resource_path, "rb") as f:
-            self._container.push(WORKLOAD_BINARY_PATH, f, permissions=0o755, make_dirs=True)
+    def _push_binary_to_workload(self, binary_path: str, workload_binary_path: str) -> None:
+        """Push promtail binary into workload container.
+
+        Args:
+            binary_path: path in charm container from which promtail binary is read.
+            workload_binary_path: path in workload container to which promtail binary is pushed.
+        """
+        with open(binary_path, "rb") as f:
+            self._container.push(workload_binary_path, f, permissions=0o755, make_dirs=True)
             logger.debug("The promtail binary file has been pushed to the workload container.")
 
-    def _is_promtail_attached(self) -> bool:
+    def _is_promtail_attached(self, workload_binary_path: str) -> bool:
         """Checks whether Promtail binary is attached to the charm or not.
+
+        Args:
+            workload_binary_path: string specifying expected path of promtail
+                in workload container
 
         Returns:
             a boolean representing whether Promtail binary is attached or not.
@@ -2011,19 +2035,27 @@ class LogProxyConsumer(ConsumerBase):
                 raise
 
         logger.info("Promtail binary file has been obtained from an attached resource.")
-        self._push_binary_to_workload(resource_path)
+        self._push_binary_to_workload(resource_path, workload_binary_path)
         return True
 
-    def _promtail_must_be_downloaded(self) -> bool:
+    def _promtail_must_be_downloaded(self, promtail_info: dict) -> bool:
         """Checks whether promtail binary must be downloaded or not.
+
+        Args:
+            promtail_info: dictionary containing information about promtail binary
+               that must be used. The dictionary must have three keys
+               - "filename": filename of promtail binary
+               - "zipsha": sha256 sum of zip file of promtail binary
+               - "binsha": sha256 sum of unpacked promtail binary
 
         Returns:
             a boolean representing whether Promtail binary must be downloaded or not.
         """
-        if not self._is_promtail_binary_in_charm():
+        binary_path = os.path.join(BINARY_DIR, promtail_info["filename"])
+        if not self._is_promtail_binary_in_charm(binary_path):
             return True
 
-        if not self._sha256sums_matches(BINARY_PATH, BINARY_SHA256SUM):
+        if not self._sha256sums_matches(binary_path, promtail_info["binsha"]):
             return True
 
         logger.debug("Promtail binary file is already in the the charm container.")
@@ -2058,39 +2090,45 @@ class LogProxyConsumer(ConsumerBase):
             logger.error(msg)
             return False
 
-    def _is_promtail_binary_in_charm(self) -> bool:
+    def _is_promtail_binary_in_charm(self, binary_path: str) -> bool:
         """Check if Promtail binary is already stored in charm container.
+
+        Args:
+            binary_path: string path of promtail binary to check
 
         Returns:
             a boolean representing whether Promtail is present or not.
         """
-        return True if Path(BINARY_PATH).is_file() else False
+        return True if Path(binary_path).is_file() else False
 
-    def _download_and_push_promtail_to_workload(self) -> None:
-        """Downloads a Promtail zip file and pushes the binary to the workload."""
-        # Use the first
-        relations = self._charm.model.relations[self._relation_name]
-        if len(relations) > 1:
-            logger.debug(
-                "Multiple log_proxy relations. Getting Promtail from application {}".format(
-                    relations[0].app.name
-                )
-            )
-        url = relations[0].data[relations[0].app].get("promtail_binary_zip_url")
+    def _download_and_push_promtail_to_workload(self, promtail_info: dict) -> None:
+        """Downloads a Promtail zip file and pushes the binary to the workload.
 
-        with request.urlopen(url) as r:
+        Args:
+            promtail_info: dictionary containing information about promtail binary
+               that must be used. The dictionary must have three keys
+               - "filename": filename of promtail binary
+               - "zipsha": sha256 sum of zip file of promtail binary
+               - "binsha": sha256 sum of unpacked promtail binary
+        """
+        with request.urlopen(promtail_info["url"]) as r:
             file_bytes = r.read()
-            with open(BINARY_ZIP_PATH, "wb") as f:
+            file_path = os.path.join(BINARY_DIR, promtail_info["filename"] + ".gz")
+            with open(file_path, "wb") as f:
                 f.write(file_bytes)
                 logger.info(
                     "Promtail binary zip file has been downloaded and stored in: %s",
-                    BINARY_ZIP_PATH,
+                    file_path,
                 )
 
-            ZipFile(BytesIO(file_bytes)).extractall(BINARY_DIR)
-            logger.debug("Promtail binary file has been downloaded.")
+            decompressed_file = GzipFile(fileobj=BytesIO(file_bytes))
+            binary_path = os.path.join(BINARY_DIR, promtail_info["filename"])
+            with open(binary_path, "wb") as outfile:
+                outfile.write(decompressed_file.read())
+                logger.debug("Promtail binary file has been downloaded.")
 
-        self._push_binary_to_workload()
+        workload_binary_path = os.path.join(WORKLOAD_BINARY_DIR, promtail_info["filename"])
+        self._push_binary_to_workload(binary_path, workload_binary_path)
 
     @property
     def _cli_args(self) -> str:
@@ -2212,20 +2250,41 @@ class LogProxyConsumer(ConsumerBase):
         return static_configs
 
     def _setup_promtail(self) -> None:
-        relation = self._charm.model.relations[self._relation_name][0]
-        if relation.data[relation.app].get("promtail_binary_zip_url", None) is None:
+        # Use the first
+        relations = self._charm.model.relations[self._relation_name]
+        if len(relations) > 1:
+            logger.debug(
+                "Multiple log_proxy relations. Getting Promtail from application {}".format(
+                    relations[0].app.name
+                )
+            )
+        relation = relations[0]
+        promtail_binaries = json.loads(
+            relation.data[relation.app].get("promtail_binary_zip_url", "{}")
+        )
+        if promtail_binaries is None:
             return
+
+        if self._is_promtail_installed(promtail_binaries[self._arch]):
+            return
+
         self._create_directories()
         self._container.push(
             WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._promtail_config), make_dirs=True
         )
-        self._add_pebble_layer()
+
         try:
-            self._obtain_promtail()
+            self._obtain_promtail(promtail_binaries[self._arch])
         except HTTPError as e:
             msg = "Promtail binary couldn't be download - {}".format(str(e))
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
+
+        workload_binary_path = os.path.join(
+            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
+        )
+        self._add_pebble_layer(workload_binary_path)
+
         if self._current_config["clients"]:
             try:
                 self._container.restart(WORKLOAD_SERVICE_NAME)
@@ -2234,10 +2293,17 @@ class LogProxyConsumer(ConsumerBase):
             else:
                 self.on.log_proxy_endpoint_joined.emit()
 
-    def _is_promtail_installed(self) -> bool:
-        """Determine if promtail has already been installed to the container."""
+    def _is_promtail_installed(self, promtail_info: dict) -> bool:
+        """Determine if promtail has already been installed to the container.
+
+        Args:
+            promtail_info: dictionary containing information about promtail binary
+               that must be used. The dictionary must at least contain a key
+               "filename" giving the name of promtail binary
+        """
+        workload_binary_path = "{}/{}".format(WORKLOAD_BINARY_DIR, promtail_info["filename"])
         try:
-            self._container.list_files(WORKLOAD_BINARY_PATH)
+            self._container.list_files(workload_binary_path)
         except (APIError, FileNotFoundError):
             return False
         return True
