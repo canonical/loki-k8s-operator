@@ -438,8 +438,8 @@ key.
 import json
 import logging
 import os
-import socket
 import platform
+import socket
 from collections import OrderedDict
 from copy import deepcopy
 from gzip import GzipFile
