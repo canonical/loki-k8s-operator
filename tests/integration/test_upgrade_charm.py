@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, is_loki_up
+from helpers import is_loki_up
 from pytest_operator.plugin import OpsTest
 from tenacity import Retrying, stop_after_attempt, wait_exponential
 
@@ -35,15 +35,14 @@ async def test_setup_env(ops_test: OpsTest):
 @pytest.mark.abort_on_fail
 async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
-    async with IPAddressWorkaround(ops_test):
-        logger.debug("deploy charm from charmhub")
-        await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
-        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    logger.debug("deploy charm from charmhub")
+    await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
-        logger.debug("upgrade deployed charm with local charm %s", loki_charm)
-        await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
-        await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-        assert await is_loki_up(ops_test, app_name)
+    logger.debug("upgrade deployed charm with local charm %s", loki_charm)
+    await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    assert await is_loki_up(ops_test, app_name)
 
 
 @pytest.mark.abort_on_fail
