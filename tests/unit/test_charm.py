@@ -426,7 +426,7 @@ class TestAppRelationData(unittest.TestCase):
         self.assertIn("promtail_binary_zip_url", rel_data)
 
         # The value must be a url
-        url = rel_data["promtail_binary_zip_url"]
+        url = json.loads(rel_data["promtail_binary_zip_url"])["url"]
         self.assertTrue(url.startswith("http"))
 
 

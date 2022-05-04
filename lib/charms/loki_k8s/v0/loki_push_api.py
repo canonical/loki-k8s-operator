@@ -1297,13 +1297,13 @@ class LokiPushApiProvider(Object):
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
         # construct promtail binary url paths from parts
-        promtail_binaries = {}  # type: Dict[str, dict]
+
         for arch, info in PROMTAIL_BINARIES.items():
             info["url"] = "{}/promtail-{}/{}.gz".format(
                 PROMTAIL_BASE_URL, PROMTAIL_VERSION, info["filename"]
             )
 
-        return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
+        return {"promtail_binary_zip_url": json.dumps(info)}
 
     @property
     def unit_ip(self) -> str:
