@@ -148,15 +148,6 @@ This events should be observed in the charm that uses `LokiPushApiProvider`:
             self.loki_provider.on.loki_push_api_alert_rules_changed,
             self._loki_push_api_alert_rules_changed,
         )
-
-    def _loki_push_api_alert_rules_changed(self, event):
-        if event.error:
-            self.unit.status = BlockedStatus(event.message)
-            return False
-
-        ...
-
-        self.unit.status = ActiveStatus()
 ```
 
 
@@ -447,7 +438,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional, Union, cast
 from urllib import request
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.parse import urljoin
 
 import yaml
@@ -464,7 +455,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
-from ops.pebble import APIError, ChangeError, PathError, ProtocolError
+from ops.pebble import APIError, ChangeError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -1122,21 +1113,52 @@ class LokiPushApiEndpointJoined(EventBase):
 
 
 class LokiPushApiAlertRulesChanged(EventBase):
-    """Event emitted if there is an error with Alert Rules."""
+    """Event emitted if there is a change in the alert rules."""
 
-    def __init__(self, handle, error: bool = False, message: str = ""):
+    def __init__(self, handle, relation, relation_id, app=None, unit=None):
+        """Pretend we are almost like a RelationEvent.
+
+        Fields to serialize:
+            {
+                "relation_name": <a relation name as a string>,
+                "relation_id": <a relation id, optional>,
+                "app_name": <app name as a string>,
+                "unit_name": <unit name as a string>
+            }
+
+        In this way, we can transparently use `RelationEvent.snapshot()` to pass
+        it back if we need to log it.
+        """
         super().__init__(handle)
-        self.message = message
-        self.error = error
+        self.relation = relation
+        self.relation_id = relation_id
+        self.app = app
+        self.unit = unit
 
     def snapshot(self) -> Dict:
-        """Save grafana source information."""
-        return {"error": self.error, "message": self.message}
+        """Save event information."""
+        snapshot = {"relation_name": self.relation.name, "relation_id": self.relation.id}
+        if self.app:
+            snapshot["app_name"] = self.app.name
+        if self.unit:
+            snapshot["unit_name"] = self.unit.name
+        return snapshot
 
-    def restore(self, snapshot):
-        """Restore grafana source information."""
-        self.message = snapshot["message"]
-        self.error = snapshot["error"]
+    def restore(self, snapshot: dict):
+        """Restore event information."""
+        self.relation = self.framework.model.get_relation(
+            snapshot["relation_name"], snapshot["relation_id"]
+        )
+        app_name = snapshot.get("app_name")
+        if app_name:
+            self.app = self.framework.model.get_app(app_name)
+        else:
+            self.app = None
+        unit_name = snapshot.get("unit_name")
+        if unit_name:
+            self.unit = self.framework.model.get_unit(unit_name)
+        else:
+            self.unit = None
 
 
 class LokiPushApiEvents(ObjectEvents):
@@ -1158,7 +1180,6 @@ class LokiPushApiProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         *,
         port: Union[str, int] = 3100,
-        rules_dir="/loki/rules",
         scheme: str = "http",
         address: str = "localhost",
         path: str = "loki/api/v1/push",
@@ -1173,8 +1194,6 @@ class LokiPushApiProvider(Object):
                 It is strongly advised not to change the default, so that people
                 deploying your charm will have a consistent experience with all
                 other charms that consume metrics endpoints.
-
-            rules_dir: path in workload container where rule files are to be stored.
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1198,21 +1217,6 @@ class LokiPushApiProvider(Object):
         self.address = address
         self.path = path
 
-        # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
-        # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
-        # https://grafana.com/docs/loki/latest/rules/#ruler-storage
-        tenant_id = "fake"
-        self._rules_dir = os.path.join(rules_dir, tenant_id)
-        # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
-        # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
-        if self.container.can_connect():
-            try:
-                self.container.make_dir(self._rules_dir, make_parents=True)
-            except (FileNotFoundError, ProtocolError, PathError):
-                logger.debug("Could not create loki directory.")
-            except Exception as e:
-                logger.debug("Could create loki directory: %s", e)
-
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
         self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
@@ -1222,8 +1226,17 @@ class LokiPushApiProvider(Object):
 
     def _on_lifecycle_event(self, _):
         # Upgrade event or other charm-level event
+        should_update = False
         for relation in self._charm.model.relations[self._relation_name]:
-            self._process_logging_relation_changed(relation)
+            # Don't accidentally flip a True result back.
+            should_update = should_update or self._process_logging_relation_changed(relation)
+        if should_update:
+            # We don't have an event, so build it up by hand
+            first_rel = self._charm.model.relations[0]
+            self.on.loki_push_api_alert_rules_changed.emit(
+                relation=first_rel,
+                relation_id=first_rel.id,
+            )
 
     def _on_logging_relation_joined(self, event: RelationJoinedEvent):
         """Set basic data on relation joins.
@@ -1249,7 +1262,14 @@ class LokiPushApiProvider(Object):
             event: a `CharmEvent` in response to which the consumer
                 charm must update its relation data.
         """
-        self._process_logging_relation_changed(event.relation)
+        should_update = self._process_logging_relation_changed(event.relation)
+        if should_update:
+            self.on.loki_push_api_alert_rules_changed.emit(
+                relation=event.relation,
+                relation_id=event.relation.id,
+                app=self._charm.app,
+                unit=self._charm.unit,
+            )
 
     def _on_logging_relation_broken(self, event: RelationBrokenEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
@@ -1258,8 +1278,12 @@ class LokiPushApiProvider(Object):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        self._regenerate_alert_rules()
-        self._check_alert_rules()
+        self.on.loki_push_api_alert_rules_changed.emit(
+            relation=event.relation,
+            relation_id=event.relation.id,
+            app=self._charm.app,
+            unit=self._charm.unit,
+        )
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
         """Removes alert rules files when consumer charms left the relation with Loki.
@@ -1268,27 +1292,46 @@ class LokiPushApiProvider(Object):
             event: a `CharmEvent` in response to which the Loki
                 charm must update its relation data.
         """
-        self._update_alert_rules(event.relation)
-        self._check_alert_rules()
+        self.on.loki_push_api_alert_rules_changed.emit(
+            relation=event.relation,
+            relation_id=event.relation.id,
+            app=self._charm.app,
+            unit=self._charm.unit,
+        )
 
-    def _process_logging_relation_changed(self, relation: Relation):
+    def _should_update_alert_rules(self, relation) -> bool:
+        """Determine whether alert rules should be regenerated.
+
+        If there are alert rules in the relation data bag, tell the charm
+        whether or not to regenerate them based on the boolean returned here.
+        """
+        if relation.data.get(relation.app).get("alert_rules"):
+            return True
+        return False
+
+    def _process_logging_relation_changed(self, relation: Relation) -> bool:
         """Handle changes in related consumers.
 
         Anytime there are changes in relations between Loki
         and its consumers charms, Loki set the `loki_push_api`
-        into the relation data.
+        into the relation data. Set the endpoint building
+        appropriately, and if there are alert rules present in
+        the relation, let the caller know.
         Besides Loki generates alert rules files based what
         consumer charms forwards,
 
         Args:
             relation: the `Relation` instance to update.
+
+        Returns:
+            A boolean indicating whether an event should be emitted so we
+            only emit one on lifecycle events
         """
         relation.data[self._charm.unit]["public_address"] = (
             str(self._charm.model.get_binding(relation).network.bind_address) or ""
         )
         self.update_endpoint(relation=relation)
-        self._update_alert_rules(relation)
-        self._check_alert_rules()
+        return self._should_update_alert_rules(relation)
 
     @property
     def _promtail_binary_url(self) -> dict:
@@ -1350,100 +1393,6 @@ class LokiPushApiProvider(Object):
         """
         endpoint = "/loki/api/v1/push"
         return {"url": urljoin(url, endpoint)}
-
-    def _regenerate_alert_rules(self):
-        """Recreate all alert rules on relation-broken or on a RelationEvent with valid rules."""
-        self._remove_alert_rules_files(self.container)
-        self._generate_alert_rules_files(self.container)
-
-    def _update_alert_rules(self, relation):
-        if relation.data.get(relation.app).get("alert_rules"):
-            self._regenerate_alert_rules()
-
-    def _generate_alert_rules_files(self, container: Container) -> None:
-        """Generate and upload alert rules files.
-
-        Args:
-            container: Container into which alert rules files are going to be uploaded
-        """
-        file_mappings = {}
-
-        for identifier, alert_rules in self.alerts.items():
-            rules = yaml.dump({"groups": alert_rules["groups"]})
-            file_mappings["{}_alert.rules".format(identifier)] = rules
-
-        if not container.can_connect():
-            logger.debug("Cannot connect to container to refresh alert rule files!")
-            return
-
-        self._remove_alert_rules_files(container)
-
-        for filename, content in file_mappings.items():
-            path = os.path.join(self._rules_dir, filename)
-            container.push(path, content, make_dirs=True)
-        logger.debug("Saved alert rules to disk")
-
-    def _remove_alert_rules_files(self, container: Container) -> None:
-        """Remove alert rules files from workload container.
-
-        Args:
-            container: Container which has alert rules files to be deleted
-        """
-        if not container.can_connect():
-            logger.debug("Cannot connect to container to remove alert rule files!")
-            return
-
-        files = container.list_files(self._rules_dir)
-        for f in files:
-            container.remove_path(f.path)
-
-    def _check_alert_rules(self):
-        """Check alert rules using Loki API.
-
-        Returns: bool
-
-        Emits:
-            loki_push_api_alert_rules_changed: This event is emitted when alert rules are checked.
-        """
-        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.port)
-        req = request.Request(url)
-        try:
-            request.urlopen(req, timeout=2.0)
-        except HTTPError as e:
-            msg = e.read().decode("utf-8")
-
-            if e.code == 404 and "no rule groups found" in msg:
-                log_msg = "Checking alert rules: No rule groups found"
-                logger.debug(log_msg)
-                self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-                return
-
-            message = "{} - {}".format(e.code, e.msg)  # type: ignore
-            logger.error("Checking alert rules: %s", message)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Errors in alert rule groups. Check juju debug-log.",
-            )
-            return
-        except URLError as e:
-            logger.error("Checking alert rules: %s", e.reason)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Error connecting to Loki. Check juju debug-log.",
-            )
-            return
-        except Exception as e:
-            logger.error("Checking alert rules: %s", e)
-            self.on.loki_push_api_alert_rules_changed.emit(
-                error=True,
-                message="Error connecting to Loki. Check juju debug-log.",
-            )
-            return
-        else:
-            log_msg = "Checking alert rules: Ok"
-            logger.debug(log_msg)
-            self.on.loki_push_api_alert_rules_changed.emit(message=log_msg)
-            return
 
     @property
     def alerts(self) -> dict:

@@ -5,15 +5,14 @@
 
 import json
 import unittest
+from io import BytesIO
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from urllib.error import HTTPError, URLError
 
-import hypothesis.strategies as st
 import ops
 import ops.testing
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiAlertRulesChanged
-from helpers import patch_network_get, tautology
-from hypothesis import given
+from helpers import patch_network_get
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
@@ -167,7 +166,6 @@ class TestCharm(unittest.TestCase):
 class TestWorkloadUnavailable(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
-        self.container_name: str = "loki"
         version_patcher = patch(
             "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
         )
@@ -198,12 +196,13 @@ class TestConfigFile(unittest.TestCase):
     def setUp(self):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
-            "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules",
-            new=tautology,
+            "charm.LokiOperatorCharm._check_alert_rules",
+            new=lambda x: True,
         )
         self.check_alert_rules_patcher.start()
 
         self.harness = Harness(LokiOperatorCharm)
+        self.addCleanup(self.harness.cleanup)
 
         # GIVEN this unit is the leader
         self.harness.set_leader(True)
@@ -257,7 +256,6 @@ class TestConfigFile(unittest.TestCase):
         self.assertEqual(config["common"]["ring"]["instance_addr"], None)
 
         # WHEN logging units join
-        # (FIXME) https://github.com/canonical/loki-k8s-operator/issues/159
         self.log_rel_id = self.harness.add_relation("logging", "logging-app")
         self.harness.add_relation_unit(self.log_rel_id, "logging-app/0")
         self.harness.add_relation_unit(self.log_rel_id, "logging-app/1")
@@ -265,56 +263,11 @@ class TestConfigFile(unittest.TestCase):
             self.log_rel_id, "logging-app/0", {"something": "just to trigger rel-changed event"}
         )
 
-        # Must emit this, otherwise config file is not regenerated.
-        # (FIXME) https://github.com/canonical/loki-k8s-operator/issues/159
-        self.harness.charm.loki_provider.on.loki_push_api_alert_rules_changed.emit()
+        self.harness.charm.on.config_changed.emit()
 
         # THEN the `instance_addr` property has the first unit's bind address
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
         self.assertEqual(config["common"]["ring"]["instance_addr"], "1.1.1.1")
-
-
-class TestPebblePlan(unittest.TestCase):
-    """Feature: Multi-unit loki deployments.
-
-    Background: TODO
-    """
-
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    @patch_network_get(private_address="1.1.1.1")
-    @given(st.booleans(), st.integers(1, 3), st.integers(0, 3))
-    def test_loki_starts_when_cluster_deployed_without_any_relations(
-        self, is_leader, num_units, num_consumer_apps
-    ):
-        """Scenario: A loki cluster is deployed without any relations."""
-        self.harness = Harness(LokiOperatorCharm)
-        self.addCleanup(self.harness.cleanup)
-
-        # WHEN the unit is started as either a leader or not
-        self.harness.set_leader(is_leader)
-
-        # AND potentially some logging relations join
-        for i in range(num_consumer_apps):
-            self.log_rel_id = self.harness.add_relation("logging", f"consumer-app-{i}")
-            # Add two units per consumer app
-            for u in range(2):
-                self.harness.add_relation_unit(self.log_rel_id, f"consumer-app-{i}/{u}")
-
-        self.harness.begin_with_initial_hooks()
-        self.harness.container_pebble_ready("loki")
-
-        # THEN a pebble service is created for this unit
-        plan = self.harness.get_container_pebble_plan("loki")
-        self.assertIn("loki", plan.services)
-
-        # AND the command includes a config file
-        command = plan.services["loki"].command
-        self.assertIn("-config.file=", command)
-
-        # AND the service is running
-        container = self.harness.charm.unit.get_container("loki")
-        service = container.get_service("loki")
-        self.assertTrue(service.is_running())
 
 
 class TestDelayedPebbleReady(unittest.TestCase):
@@ -325,20 +278,20 @@ class TestDelayedPebbleReady(unittest.TestCase):
     def setUp(self):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
-            "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules",
-            new=tautology,
+            "charm.LokiOperatorCharm._check_alert_rules",
+            new=lambda x: True,
         )
         self.check_alert_rules_patcher.start()
-        self.harness = Harness(LokiOperatorCharm)
 
-        # GIVEN this unit is the leader
+        self.harness = Harness(LokiOperatorCharm)
+        self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
+        self.harness.begin_with_initial_hooks()
 
         # AND a "logging" app joins with several units
         self.log_rel_id = self.harness.add_relation("logging", "consumer-app")
         self.harness.add_relation_unit(self.log_rel_id, "consumer-app/0")
         self.harness.add_relation_unit(self.log_rel_id, "consumer-app/1")
-        self.harness.begin_with_initial_hooks()
         self.harness.update_relation_data(
             self.log_rel_id,
             "consumer-app",
@@ -354,7 +307,6 @@ class TestDelayedPebbleReady(unittest.TestCase):
     def test_pebble_ready_changes_status_from_waiting_to_active(self):
         """Scenario: a pebble-ready event is delayed."""
         # WHEN all startup hooks except pebble-ready finished
-
         # THEN app status is "Waiting" before pebble-ready
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
@@ -437,57 +389,62 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
-        self.check_alert_rules_patcher = patch(
-            "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._check_alert_rules",
-            new=tautology,
-        )
-        self.check_alert_rules_patcher.start()
+        self.patcher = patch("urllib.request.urlopen", new=Mock())
+        self.mock_request = self.patcher.start()
+        self.addCleanup(self.mock_request.stop)
 
         self.harness = Harness(LokiOperatorCharm)
+        self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
     def tearDown(self):
-        self.check_alert_rules_patcher.stop()
+        self.mock_request.stop()
 
     def test__alert_rule_errors_appropriately_set_state(self):
         self.harness.charm.on.config_changed.emit()
-
-        self.harness.charm._loki_push_api_alert_rules_changed(
-            LokiPushApiAlertRulesChanged(
-                None, error=True, message="Errors in alert rule groups: fubar!"
-            )
+        self.mock_request.side_effect = HTTPError(
+            url="http://example.com",
+            code=404,
+            msg="fubar!",
+            fp=BytesIO(initial_bytes="fubar!".encode()),
+            hdrs=None,  # type: ignore
         )
+        self.harness.charm._loki_push_api_alert_rules_changed(None)
+        print("CALLED! {}".format(self.mock_request.call_count))
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
-            self.harness.charm.unit.status.message, "Errors in alert rule groups: fubar!"
+            self.harness.charm.unit.status.message,
+            "Errors in alert rule groups. Check juju debug-log",
         )
 
         # Emit another config changed to make sure we stay blocked
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
-            self.harness.charm.unit.status.message, "Errors in alert rule groups: fubar!"
+            self.harness.charm.unit.status.message,
+            "Errors in alert rule groups. Check juju debug-log",
         )
 
-        self.harness.charm._loki_push_api_alert_rules_changed(
-            LokiPushApiAlertRulesChanged(None, error=False)
-        )
+        self.mock_request.side_effect = None
+        self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
 
+        self.harness.charm._loki_push_api_alert_rules_changed(None)
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     def test__loki_connection_errors_on_lifecycle_events_appropriately_clear(self):
-        self.harness.charm._loki_push_api_alert_rules_changed(
-            LokiPushApiAlertRulesChanged(
-                None, error=True, message="Error connecting to Loki: fubar!"
-            )
-        )
+        self.harness.charm.on.config_changed.emit()
+        self.mock_request.side_effect = URLError(reason="fubar!")
+        self.harness.charm._loki_push_api_alert_rules_changed(None)
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
-            self.harness.charm.unit.status.message, "Error connecting to Loki: fubar!"
+            self.harness.charm.unit.status.message,
+            "Error connecting to Loki. Check juju debug-log",
         )
 
         # Emit another config changed to make sure we unblock
         self.harness.charm.on.config_changed.emit()
+        self.mock_request.side_effect = None
+        self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
