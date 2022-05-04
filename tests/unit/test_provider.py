@@ -153,7 +153,6 @@ class TestLokiPushApiProvider(unittest.TestCase):
             self.harness.update_relation_data(
                 rel_id, "promtail", {"alert_rules": json.dumps(ALERT_RULES)}
             )
-            print(logger.output)
             self.assertTrue(
                 any(
                     [
