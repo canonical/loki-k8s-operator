@@ -123,40 +123,6 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
-
-    def test_loki_not_ready(self):
-        self.mock_version.side_effect = LokiServerNotReadyError
-        self.harness.charm._loki_ready()
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
-
-    def test__loki_ready_server_error(self):
-        self.mock_version.side_effect = LokiServerError
-        self.harness.charm._loki_ready()
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-
-    def test__loki_config(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._loki_ready()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
-
-
-class TestWorkloadUnavailable(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def setUp(self):
-        self.container_name: str = "loki"
-        version_patcher = patch(
-            "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
-        )
-        self.mock_version = version_patcher.start()
-        self.harness = Harness(LokiOperatorCharm)
-        self.addCleanup(self.harness.cleanup)
-        self.addCleanup(version_patcher.stop)
-        self.harness.set_leader(True)
-        self.harness.begin_with_initial_hooks()
-        self.harness.container_pebble_ready("loki")
         self.harness.charm._stored.config = LOKI_CONFIG
 
     def test__alerting_config(self):
@@ -196,6 +162,59 @@ class TestWorkloadUnavailable(unittest.TestCase):
         # be emitted by hand to actually trigger _configure()
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+    def test__loki_ready(self):
+        with self.assertLogs(level="DEBUG") as logger:
+            self.harness.charm._loki_ready()
+            self.assertEqual(
+                sorted(logger.output),
+                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
+            )
+
+    def test__loki_ready_not_ready(self):
+        self.mock_version.side_effect = LokiServerNotReadyError
+        self.harness.charm._loki_ready()
+        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+
+    def test__loki_ready_server_error(self):
+        self.mock_version.side_effect = LokiServerError
+        self.harness.charm._loki_ready()
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+
+    def test__loki_config(self):
+        with self.assertLogs(level="DEBUG") as logger:
+            self.harness.charm._loki_ready()
+            self.assertEqual(
+                sorted(logger.output),
+                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
+            )
+
+
+class TestWorkloadUnavailable(unittest.TestCase):
+    @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    def setUp(self):
+        self.container_name: str = "loki"
+        version_patcher = patch(
+            "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
+        )
+        self.mock_version = version_patcher.start()
+        self.harness = Harness(LokiOperatorCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.addCleanup(version_patcher.stop)
+        self.harness.set_leader(True)
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("loki")
+
+    def test_loki_not_ready(self):
+        self.mock_version.side_effect = LokiServerNotReadyError
+        self.harness.charm._loki_ready()
+        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+
+    def test_loki_server_error(self):
+        self.mock_version.side_effect = LokiServerError
+        self.harness.charm._loki_ready()
+        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+
 
 class TestConfigFile(unittest.TestCase):
     """Feature: Loki config file in the workload container is rendered by the charm."""
