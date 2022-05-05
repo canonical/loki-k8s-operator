@@ -123,53 +123,6 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
-        self.harness.charm._stored.config = LOKI_CONFIG
-
-    def test__alerting_config(self):
-        self.harness.charm.alertmanager_consumer = Mock()
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = [
-            "10.1.2.52",
-            "10.1.3.52",
-        ]
-        expected_value = "http://10.1.2.52,http://10.1.3.52"
-        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
-
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = []
-        expected_value = ""
-        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
-
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._alerting_config()
-            self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
-
-    @patch("charm.LokiOperatorCharm._loki_config")
-    def test__on_config_cannot_connect(self, mock_loki_config):
-        self.harness.set_leader(True)
-        self.harness.set_can_connect("loki", False)
-        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
-
-        # Since harness was not started with begin_with_initial_hooks(), this must
-        # be emitted by hand to actually trigger _configure()
-        self.harness.charm.on.config_changed.emit()
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
-
-    @patch("charm.LokiOperatorCharm._loki_config")
-    def test__on_config_can_connect(self, mock_loki_config):
-        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
-        self.harness.set_leader(True)
-
-        # Since harness was not started with begin_with_initial_hooks(), this must
-        # be emitted by hand to actually trigger _configure()
-        self.harness.charm.on.config_changed.emit()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
-
-    def test__provide_loki(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._provide_loki()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
 
     def test__provide_loki_not_ready(self):
         self.mock_version.side_effect = LokiServerNotReadyError
@@ -180,14 +133,6 @@ class TestCharm(unittest.TestCase):
         self.mock_version.side_effect = LokiServerError
         self.harness.charm._provide_loki()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-
-    def test__loki_config(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._provide_loki()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
 
 
 class TestWorkloadUnavailable(unittest.TestCase):

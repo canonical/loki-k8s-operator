@@ -133,9 +133,8 @@ Once these alert rules are sent over relation data, the `LokiPushApiProvider` ob
 stores these files in the directory `/loki/rules` inside the Loki charm container. After
 storing alert rules files, the object will check alert rules by querying Loki API
 endpoint: [`loki/api/v1/rules`](https://grafana.com/docs/loki/latest/api/#list-rule-groups).
-If there are errors with alert rules a `loki_push_api_alert_rules_changed` event will
-be emitted with `event.error=True`, in the other hand if there are no error a
-`loki_push_api_alert_rules_changed` event will be emitted with `event.error=False`
+If there are changes in the alert rules a `loki_push_api_alert_rules_changed` event will
+be emitted with details about the `RelationEvent` which triggered it.
 
 This events should be observed in the charm that uses `LokiPushApiProvider`:
 
@@ -1234,7 +1233,7 @@ class LokiPushApiProvider(Object):
             # Don't accidentally flip a True result back.
             should_update = should_update or self._process_logging_relation_changed(relation)
         if should_update:
-            # We don't have an event, so build it up by hand
+            # We don't have a RelationEvent, so build it up by hand
             first_rel = self._charm.model.relations[self._relation_name][0]
             self.on.loki_push_api_alert_rules_changed.emit(
                 relation=first_rel,
@@ -1308,7 +1307,7 @@ class LokiPushApiProvider(Object):
         If there are alert rules in the relation data bag, tell the charm
         whether or not to regenerate them based on the boolean returned here.
         """
-        if relation.data.get(relation.app).get("alert_rules"):
+        if relation.data.get(relation.app).get("alert_rules", None) is not None:
             return True
         return False
 
