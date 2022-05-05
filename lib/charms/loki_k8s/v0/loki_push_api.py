@@ -69,10 +69,10 @@ and three optional arguments.
           def __init__(self, *args):
               super().__init__(*args)
               ...
-              self._provide_loki()
+              self._loki_ready()
               ...
 
-          def _provide_loki(self):
+          def _loki_ready(self):
               try:
                   version = self._loki_server.version
                   self.loki_provider = LokiPushApiProvider(self)
@@ -429,7 +429,9 @@ import json
 import logging
 import os
 import platform
+import re
 import socket
+import typing
 from collections import OrderedDict
 from copy import deepcopy
 from gzip import GzipFile
@@ -455,7 +457,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.model import Container, ModelError, Relation
-from ops.pebble import APIError, ChangeError
+from ops.pebble import APIError, ChangeError, PathError, ProtocolError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -945,7 +947,12 @@ class AlertRules:
 
             return alert_groups
 
-    def _group_name(self, root_path: str, file_path: str, group_name: str) -> str:
+    def _group_name(
+        self,
+        root_path: typing.Union[Path, str],
+        file_path: typing.Union[Path, str],
+        group_name: str,
+    ) -> str:
         """Generate group name from path and topology.
 
         The group name is made up of the relative path between the root dir_path, the file path,
@@ -959,16 +966,41 @@ class AlertRules:
         Returns:
             New group name, augmented by juju topology and relative path.
         """
-        rel_path = os.path.relpath(os.path.dirname(file_path), root_path)
-        rel_path = "" if rel_path == "." else rel_path.replace(os.path.sep, "_")
+        file_path = Path(file_path) if not isinstance(file_path, Path) else file_path
+        root_path = Path(root_path) if not isinstance(root_path, Path) else root_path
+        rel_path = file_path.parent.relative_to(root_path.as_posix())
+
+        # We should account for both absolute paths and Windows paths. Convert it to a POSIX
+        # string, strip off any leading /, then join it
+
+        path_str = ""
+        if not rel_path == Path("."):
+            # Get rid of leading / and optionally drive letters so they don't muck up
+            # the template later, since Path.parts returns them. The 'if relpath.is_absolute ...'
+            # isn't even needed since re.sub doesn't throw exceptions if it doesn't match, so it's
+            # optional, but it makes it clear what we're doing.
+
+            # Note that Path doesn't actually care whether the path is valid just to instantiate
+            # the object, so we can happily strip that stuff out to make templating nicer
+            rel_path = Path(
+                re.sub(r"^([A-Za-z]+:)?/", "", rel_path.as_posix())
+                if rel_path.is_absolute()
+                else str(rel_path)
+            )
+
+            # Get rid of relative path characters in the middle which both os.path and pathlib
+            # leave hanging around. We could use path.resolve(), but that would lead to very
+            # long template strings when rules come from pods and/or other deeply nested charm
+            # paths
+            path_str = "_".join(filter(lambda x: x not in ["..", "/"], rel_path.parts))
 
         # Generate group name:
         #  - name, from juju topology
         #  - suffix, from the relative path of the rule file;
         group_name_parts = [self.topology.identifier] if self.topology else []
-        group_name_parts.extend([rel_path, group_name, "alerts"])
+        group_name_parts.extend([path_str, group_name, "alerts"])
         # filter to remove empty strings
-        return "_".join(filter(None, group_name_parts))
+        return "_".join(filter(lambda x: x, group_name_parts))
 
     @classmethod
     def _multi_suffix_glob(
@@ -1339,12 +1371,14 @@ class LokiPushApiProvider(Object):
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
         # construct promtail binary url paths from parts
+        promtail_binaries = {}
         for arch, info in PROMTAIL_BINARIES.items():
             info["url"] = "{}/promtail-{}/{}.gz".format(
                 PROMTAIL_BASE_URL, PROMTAIL_VERSION, info["filename"]
             )
+            promtail_binaries[arch] = info
 
-        return {"promtail_binary_zip_url": json.dumps(info)}
+        return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
 
     @property
     def unit_ip(self) -> str:
@@ -1517,6 +1551,32 @@ class ConsumerBase(Object):
             sort_keys=True,  # sort, to prevent unnecessary relation_changed events
         )
 
+    @property
+    def loki_endpoints(self) -> List[dict]:
+        """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
+
+        Returns:
+            A list of dictionaries with Loki Push API endpoints, for instance:
+            [
+                {"url": "http://loki1:3100/loki/api/v1/push"},
+                {"url": "http://loki2:3100/loki/api/v1/push"},
+            ]
+        """
+        endpoints = []  # type: list
+
+        for relation in self._charm.model.relations[self._relation_name]:
+            for unit in relation.units:
+                if unit.app is self._charm.app:
+                    # This is a peer unit
+                    continue
+
+                endpoint = relation.data[unit].get("endpoint")
+                if endpoint:
+                    deserialized_endpoint = json.loads(endpoint)
+                    endpoints.append(deserialized_endpoint)
+
+        return endpoints
+
 
 class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
@@ -1589,8 +1649,7 @@ class LokiPushApiConsumer(ConsumerBase):
                 charm must update its relation data.
         """
         # Upgrade event or other charm-level event
-        # nothing needed for now other than possible telling consumers
-        # to check for new endpoints
+        self._reinitialize_alert_rules()
         self.on.loki_push_api_endpoint_joined.emit()
 
     def _on_logging_relation_joined(self, event: RelationJoinedEvent):
@@ -1612,7 +1671,7 @@ class LokiPushApiConsumer(ConsumerBase):
         self._handle_alert_rules(event.relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _on_logging_relation_changed(self, _: HookEvent):
+    def _on_logging_relation_changed(self, _: RelationEvent):
         """Handle changes in related consumers.
 
         Anytime there are changes in the relation between Loki
@@ -1648,32 +1707,6 @@ class LokiPushApiConsumer(ConsumerBase):
         # Provide default to avoid throwing, as in some complicated scenarios with
         # upgrades and hook failures we might not have data in the storage
         self.on.loki_push_api_endpoint_departed.emit()
-
-    @property
-    def loki_endpoints(self) -> List[dict]:
-        """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
-
-        Returns:
-            A list of dictionaries with Loki Push API endpoints, for instance:
-            [
-                {"url": "http://loki1:3100/loki/api/v1/push"},
-                {"url": "http://loki2:3100/loki/api/v1/push"},
-            ]
-        """
-        endpoints = []  # type: list
-
-        for relation in self._charm.model.relations[self._relation_name]:
-            for unit in relation.units:
-                if unit.app is self._charm.app:
-                    # This is a peer unit
-                    continue
-
-                endpoint = relation.data[unit].get("endpoint")
-                if endpoint:
-                    deserialized_endpoint = json.loads(endpoint)
-                    endpoints.append(deserialized_endpoint)
-
-        return endpoints
 
 
 class ContainerNotFoundError(Exception):
@@ -2108,9 +2141,19 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             A dict containing Promtail configuration.
         """
-        raw_current = self._container.pull(WORKLOAD_CONFIG_PATH).read()
-        current_config = yaml.safe_load(raw_current)
-        return current_config
+        if not self._container.can_connect():
+            logger.debug("Could not connect to promtail container!")
+            return {}
+        try:
+            raw_current = self._container.pull(WORKLOAD_CONFIG_PATH).read()
+            return yaml.safe_load(raw_current)
+        except (ProtocolError, PathError) as e:
+            logger.warning(
+                "Could not check the current promtail configuration due to "
+                "a failure in retrieving the file: %s",
+                e,
+            )
+            return {}
 
     @property
     def _promtail_config(self) -> dict:
@@ -2127,12 +2170,7 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             A list of endpoints
         """
-        clients = []  # type: list
-        for relation in self._charm.model.relations.get(self._relation_name, []):
-            endpoints = json.loads(relation.data[relation.app].get("endpoints", ""))
-            if endpoints:
-                clients += endpoints
-        return clients
+        return self.loki_endpoints
 
     def _server_config(self) -> dict:
         """Generates the server section of the Promtail config file.
@@ -2224,7 +2262,7 @@ class LogProxyConsumer(ConsumerBase):
         promtail_binaries = json.loads(
             relation.data[relation.app].get("promtail_binary_zip_url", "{}")
         )
-        if promtail_binaries is None:
+        if not promtail_binaries:
             return
 
         if self._is_promtail_installed(promtail_binaries[self._arch]):
@@ -2247,7 +2285,7 @@ class LogProxyConsumer(ConsumerBase):
         )
         self._add_pebble_layer(workload_binary_path)
 
-        if self._current_config["clients"]:
+        if self._current_config.get("clients"):
             try:
                 self._container.restart(WORKLOAD_SERVICE_NAME)
             except ChangeError as e:

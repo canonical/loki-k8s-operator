@@ -54,7 +54,9 @@ async def test_rule_files_are_retained_after_pod_upgraded(ops_test, loki_charm):
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
 
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=[app_name], status="active", timeout=1000, idle_period=60
+    )
 
     assert await is_loki_up(ops_test, app_name)
     rules_after_upgrade = await loki_rules(ops_test, app_name)

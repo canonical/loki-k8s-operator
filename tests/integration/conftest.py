@@ -51,11 +51,13 @@ def timed_memoizer(func):
 
 
 @pytest.fixture(scope="module", autouse=True)
-def copy_loki_library_into_tester_charm(ops_test):
+def copy_loki_library_into_test_charms(ops_test):
     """Ensure that the tester charm uses the current Prometheus library."""
     library_path = "lib/charms/loki_k8s/v0/loki_push_api.py"
-    install_path = "tests/integration/loki-tester/" + library_path
-    shutil.copyfile(library_path, install_path)
+    for tester in ["loki-tester", "log-proxy-tester"]:
+        install_path = "tests/integration/{}/{}".format(tester, library_path)
+        os.makedirs(os.path.dirname(install_path), exist_ok=True)
+        shutil.copyfile(library_path, install_path)
 
 
 @pytest.fixture(scope="module")
@@ -100,4 +102,15 @@ async def faulty_loki_tester_charm(ops_test):
     except FileNotFoundError:
         logger.warning("Failed to delete bad alert rule file")
 
+    return charm
+
+
+@pytest.fixture(scope="module")
+@timed_memoizer
+async def log_proxy_tester_charm(ops_test):
+    """A charm for integration test of Promtail."""
+    charm_path = "tests/integration/log-proxy-tester"
+    clean_cmd = ["charmcraft", "clean", "-p", charm_path]
+    await ops_test.run(*clean_cmd)
+    charm = await ops_test.build_charm(charm_path)
     return charm

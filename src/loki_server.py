@@ -13,6 +13,9 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# Squash annoying debug logs from requests and urllib
+logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+
 
 class LokiServerError(Exception):
     """Custom exception to indicate Loki server is not."""

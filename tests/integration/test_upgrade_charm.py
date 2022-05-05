@@ -19,7 +19,6 @@ import pytest
 import yaml
 from helpers import is_loki_up
 from pytest_operator.plugin import OpsTest
-from tenacity import Retrying, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +47,7 @@ async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_char
 @pytest.mark.abort_on_fail
 async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm):
     # Deploy related apps
+    app_names = [app_name, "am", "grafana"]
     await asyncio.gather(
         ops_test.model.deploy("ch:alertmanager-k8s", application_name="am", channel="edge"),
         ops_test.model.deploy("ch:grafana-k8s", application_name="grafana", channel="edge"),
@@ -59,32 +59,30 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
         ops_test.model.add_relation(app_name, "grafana"),
     )
     await ops_test.model.wait_for_idle(
-        apps=[app_name, "am", "grafana"], status="active", timeout=1000
+        apps=app_names, status="active", timeout=1000, idle_period=60
     )
 
     # Refresh from path
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
-    for attempt in Retrying(
-        wait=wait_exponential(multiplier=1.1, min=5, max=30), stop=stop_after_attempt(10)
-    ):
-        with attempt:
-            assert await is_loki_up(ops_test, app_name)
+    await ops_test.model.wait_for_idle(
+        apps=app_names, status="active", timeout=1000, idle_period=60
+    )
+    assert await is_loki_up(ops_test, app_name)
 
 
 @pytest.mark.abort_on_fail
 async def test_upgrade_with_multiple_units(ops_test: OpsTest, loki_charm):
+    app_names = [app_name, "am", "grafana"]
     # Add unit
     await ops_test.model.applications[app_name].scale(scale_change=1)
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=app_names, status="active", timeout=1000, idle_period=60
+    )
 
     # Refresh from path
     await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
-    await ops_test.model.wait_for_idle(status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(
+        apps=app_names, status="active", timeout=1000, idle_period=60
+    )
 
-    # is_loki_up times out here for some reason - using tenacity
-    for attempt in Retrying(
-        wait=wait_exponential(multiplier=1.1, min=5, max=30), stop=stop_after_attempt(10)
-    ):
-        with attempt:
-            assert await is_loki_up(ops_test, app_name, num_units=2)
+    assert await is_loki_up(ops_test, app_name, num_units=2)

@@ -5,9 +5,14 @@ import json
 import os
 import textwrap
 import unittest
+from pathlib import Path
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import (
+    AlertRules,
+    LokiPushApiConsumer,
+    ProviderTopology,
+)
 from fs.tempfs import TempFS
 from helpers import TempFolderSandbox
 from ops.charm import CharmBase
@@ -298,6 +303,39 @@ class TestReloadAlertRules(unittest.TestCase):
         # THEN relation data is empty again
         relation = self.harness.charm.model.get_relation("logging")
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+
+
+class TestAlertRuleNaming(unittest.TestCase):
+    """AlertRules should return sanitized names for any given relative path.
+
+    It is potentially risky to include any characters which may be path separators, drive
+    separators on Windows, or `..|...` in names, since the behavior of Pebble pushing or
+    otherwise writing is not predicatable, and we can mitigate side_channel attacks.
+    """
+
+    PATHS = {
+        r"src/alert_rules/foo.rule": "testing_1234-5678-dead-beef_tester_render_alerts",
+        r"src/alert_rules/a/foo.rule": "testing_1234-5678-dead-beef_tester_a_render_alerts",
+        r"src/alert_rules/a/b/foo.rule": "testing_1234-5678-dead-beef_tester_a_b_render_alerts",
+        r"src/alert_rules/../../proc/cpuinfo": "testing_1234-5678-dead-beef_tester_proc_render_alerts",
+        r"src/alert_rules/../../../sys/class/net": "testing_1234-5678-dead-beef_tester_sys_class_render_alerts",
+    }
+
+    def test_path_transformation(self):
+        topology = ProviderTopology.from_relation_data(
+            {
+                "model": "testing",
+                "model_uuid": "1234-5678-dead-beef",
+                "application": "tester",
+                "unit": "tester/0",
+            }
+        )
+
+        ar = AlertRules(topology)
+
+        for path, rename in self.PATHS.items():
+            val = ar._group_name(Path("src/alert_rules"), path, "render")
+            self.assertEqual(val, rename)
 
 
 class TestAlertRuleFormat(unittest.TestCase):

@@ -124,15 +124,23 @@ class TestCharm(unittest.TestCase):
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
-    def test__provide_loki_not_ready(self):
+    def test_loki_not_ready(self):
         self.mock_version.side_effect = LokiServerNotReadyError
-        self.harness.charm._provide_loki()
+        self.harness.charm._loki_ready()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
-    def test__provide_loki_server_error(self):
+    def test__loki_ready_server_error(self):
         self.mock_version.side_effect = LokiServerError
-        self.harness.charm._provide_loki()
+        self.harness.charm._loki_ready()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+
+    def test__loki_config(self):
+        with self.assertLogs(level="DEBUG") as logger:
+            self.harness.charm._loki_ready()
+            self.assertEqual(
+                sorted(logger.output),
+                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
+            )
 
 
 class TestWorkloadUnavailable(unittest.TestCase):
@@ -188,33 +196,6 @@ class TestWorkloadUnavailable(unittest.TestCase):
         # be emitted by hand to actually trigger _configure()
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
-
-    def test__provide_loki(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._provide_loki()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
-
-    def test__provide_loki_not_ready(self):
-        self.mock_version.side_effect = LokiServerNotReadyError
-        self.harness.charm._provide_loki()
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
-
-    def test__provide_loki_server_error(self):
-        self.mock_version.side_effect = LokiServerError
-        self.harness.charm._provide_loki()
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-
-    def test__loki_config(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._provide_loki()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
-
 
 class TestConfigFile(unittest.TestCase):
     """Feature: Loki config file in the workload container is rendered by the charm."""
@@ -352,6 +333,11 @@ class TestDelayedPebbleReady(unittest.TestCase):
             new=lambda x: True,
         )
         self.check_alert_rules_patcher.start()
+        self.version_patcher = patch(
+            "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
+        )
+        self.version_patcher.start()
+        self.harness = Harness(LokiOperatorCharm)
 
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
@@ -373,6 +359,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
 
     def tearDown(self):
         self.check_alert_rules_patcher.stop()
+        self.version_patcher.stop()
 
     def test_pebble_ready_changes_status_from_waiting_to_active(self):
         """Scenario: a pebble-ready event is delayed."""
@@ -448,7 +435,8 @@ class TestAppRelationData(unittest.TestCase):
         self.assertIn("promtail_binary_zip_url", rel_data)
 
         # The value must be a url
-        url = json.loads(rel_data["promtail_binary_zip_url"])["url"]
+        promtail_binaries = json.loads(rel_data["promtail_binary_zip_url"])
+        url = promtail_binaries["amd64"]["url"]
         self.assertTrue(url.startswith("http"))
 
 
