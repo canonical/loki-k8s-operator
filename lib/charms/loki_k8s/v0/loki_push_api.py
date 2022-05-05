@@ -1329,13 +1329,14 @@ class LokiPushApiProvider(Object):
     def _promtail_binary_url(self) -> dict:
         """URL from which Promtail binary can be downloaded."""
         # construct promtail binary url paths from parts
-
+        promtail_binaries = {}
         for arch, info in PROMTAIL_BINARIES.items():
             info["url"] = "{}/promtail-{}/{}.gz".format(
                 PROMTAIL_BASE_URL, PROMTAIL_VERSION, info["filename"]
             )
+            promtail_binaries[arch] = info
 
-        return {"promtail_binary_zip_url": json.dumps(info)}
+        return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
 
     @property
     def unit_ip(self) -> str:
@@ -1602,6 +1603,32 @@ class ConsumerBase(Object):
             sort_keys=True,  # sort, to prevent unnecessary relation_changed events
         )
 
+    @property
+    def loki_endpoints(self) -> List[dict]:
+        """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
+
+        Returns:
+            A list of dictionaries with Loki Push API endpoints, for instance:
+            [
+                {"url": "http://loki1:3100/loki/api/v1/push"},
+                {"url": "http://loki2:3100/loki/api/v1/push"},
+            ]
+        """
+        endpoints = []  # type: list
+
+        for relation in self._charm.model.relations[self._relation_name]:
+            for unit in relation.units:
+                if unit.app is self._charm.app:
+                    # This is a peer unit
+                    continue
+
+                endpoint = relation.data[unit].get("endpoint")
+                if endpoint:
+                    deserialized_endpoint = json.loads(endpoint)
+                    endpoints.append(deserialized_endpoint)
+
+        return endpoints
+
 
 class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
@@ -1733,32 +1760,6 @@ class LokiPushApiConsumer(ConsumerBase):
         # Provide default to avoid throwing, as in some complicated scenarios with
         # upgrades and hook failures we might not have data in the storage
         self.on.loki_push_api_endpoint_departed.emit()
-
-    @property
-    def loki_endpoints(self) -> List[dict]:
-        """Fetch Loki Push API endpoints sent from LokiPushApiProvider through relation data.
-
-        Returns:
-            A list of dictionaries with Loki Push API endpoints, for instance:
-            [
-                {"url": "http://loki1:3100/loki/api/v1/push"},
-                {"url": "http://loki2:3100/loki/api/v1/push"},
-            ]
-        """
-        endpoints = []  # type: list
-
-        for relation in self._charm.model.relations[self._relation_name]:
-            for unit in relation.units:
-                if unit.app is self._charm.app:
-                    # This is a peer unit
-                    continue
-
-                endpoint = relation.data[unit].get("endpoint")
-                if endpoint:
-                    deserialized_endpoint = json.loads(endpoint)
-                    endpoints.append(deserialized_endpoint)
-
-        return endpoints
 
 
 class ContainerNotFoundError(Exception):
@@ -2212,12 +2213,7 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             A list of endpoints
         """
-        clients = []  # type: list
-        for relation in self._charm.model.relations.get(self._relation_name, []):
-            endpoints = json.loads(relation.data[relation.app].get("endpoints", ""))
-            if endpoints:
-                clients += endpoints
-        return clients
+        return self.loki_endpoints
 
     def _server_config(self) -> dict:
         """Generates the server section of the Promtail config file.
@@ -2309,7 +2305,7 @@ class LogProxyConsumer(ConsumerBase):
         promtail_binaries = json.loads(
             relation.data[relation.app].get("promtail_binary_zip_url", "{}")
         )
-        if promtail_binaries is None:
+        if not promtail_binaries:
             return
 
         if self._is_promtail_installed(promtail_binaries[self._arch]):
