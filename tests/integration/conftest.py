@@ -56,6 +56,7 @@ def copy_loki_library_into_test_charms(ops_test):
     library_path = "lib/charms/loki_k8s/v0/loki_push_api.py"
     for tester in ["loki-tester", "log-proxy-tester"]:
         install_path = "tests/integration/{}/{}".format(tester, library_path)
+        os.makedirs(os.path.dirname(install_path), exist_ok=True)
         shutil.copyfile(library_path, install_path)
 
 
