@@ -1,6 +1,7 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import json
 import textwrap
 import unittest
 from hashlib import sha256
@@ -71,7 +72,7 @@ class ConsumerCharm(CharmBase):
           promtail:
             resource: promtail-image
         requires:
-          log_proxy:
+          log-proxy:
             interface: loki_push_api
             optional: true
         """
@@ -161,13 +162,17 @@ class TestLogProxyConsumer(unittest.TestCase):
         rel_id = self.harness.add_relation("log-proxy", "agent")
         self.harness.add_relation_unit(rel_id, "agent/0")
         self.harness.add_relation_unit(rel_id, "agent/1")
-        self.harness.update_relation_data(
-            rel_id,
-            "agent",
-            {
-                "endpoints": '[{"url": "http://10.20.30.1:3500/loki/api/v1/push"}, {"url": "http://10.20.30.2:3500/loki/api/v1/push"}]'
-            },
-        )
+
+        for i in range(2):
+            unit = f"agent/{i}"
+            endpoint = f"http://10.20.30.{i+1}:3500/loki/api/v1/push"
+            data = json.dumps({"url": f"{endpoint}"})
+            self.harness.add_relation_unit(rel_id, unit)
+            self.harness.update_relation_data(
+                rel_id,
+                unit,
+                {"endpoint": data},
+            )
         self.assertEqual(
             {x["url"] for x in self.harness.charm._log_proxy._clients_list()}, expected_clients
         )

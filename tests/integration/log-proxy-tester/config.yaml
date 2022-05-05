@@ -1,0 +1,13 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+#
+# Learn more about config at: https://juju.is/docs/sdk/config
+
+options:
+  rate:
+    default: 1
+    description: Number of logs per second to generate.
+    type: int
+  rotate:
+    description: Rotate log after x logs.
+    type: int
