@@ -69,10 +69,10 @@ and three optional arguments.
           def __init__(self, *args):
               super().__init__(*args)
               ...
-              self._provide_loki()
+              self._loki_ready()
               ...
 
-          def _provide_loki(self):
+          def _loki_ready(self):
               try:
                   version = self._loki_server.version
                   self.loki_provider = LokiPushApiProvider(self)

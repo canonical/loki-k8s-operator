@@ -177,14 +177,14 @@ class TestWorkloadUnavailable(unittest.TestCase):
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
-    def test__provide_loki_not_ready(self):
+    def test_loki_not_ready(self):
         self.mock_version.side_effect = LokiServerNotReadyError
-        self.harness.charm._provide_loki()
+        self.harness.charm._loki_ready()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
-    def test__provide_loki_server_error(self):
+    def test_loki_server_error(self):
         self.mock_version.side_effect = LokiServerError
-        self.harness.charm._provide_loki()
+        self.harness.charm._loki_ready()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
 
@@ -326,6 +326,10 @@ class TestDelayedPebbleReady(unittest.TestCase):
             new=tautology,
         )
         self.check_alert_rules_patcher.start()
+        self.version_patcher = patch(
+            "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
+        )
+        self.version_patcher.start()
         self.harness = Harness(LokiOperatorCharm)
 
         # GIVEN this unit is the leader
@@ -347,6 +351,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
 
     def tearDown(self):
         self.check_alert_rules_patcher.stop()
+        self.version_patcher.stop()
 
     def test_pebble_ready_changes_status_from_waiting_to_active(self):
         """Scenario: a pebble-ready event is delayed."""
