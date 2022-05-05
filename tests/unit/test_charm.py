@@ -22,6 +22,33 @@ from loki_server import LokiServerError, LokiServerNotReadyError
 
 ops.testing.SIMULATE_CAN_CONNECT = True
 
+METADATA = {
+    "model": "consumer-model",
+    "model_uuid": "qwerty-1234",
+    "application": "promtail",
+    "charm_name": "charm-k8s",
+}
+
+ALERT_RULES = {
+    "groups": [
+        {
+            "name": "None_f2c1b2a6-e006-11eb-ba80-0242ac130004_consumer-tester_alerts",
+            "rules": [
+                {
+                    "alert": "HighPercentageError",
+                    "expr": "sum(rate({%%juju_topology%%} |= 'error' [5m])) by (job)",
+                    "for": "0m",
+                    "labels": {
+                        "severity": "Low",
+                    },
+                    "annotations": {
+                        "summary": "High request latency",
+                    },
+                },
+            ],
+        }
+    ]
+}
 
 LOKI_CONFIG = """
 auth_enabled: false
@@ -500,6 +527,26 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
     def tearDown(self):
         self.mock_request.stop()
 
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def _add_alerting_relation(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
+        rel_id = self.harness.add_relation("logging", "tester")
+        self.harness.add_relation_unit(rel_id, "tester/0")
+
+        self.harness.update_relation_data(
+            rel_id,
+            "tester",
+            {"metadata": json.dumps(METADATA), "alert_rules": json.dumps(ALERT_RULES)},
+        )
+
     def test__alert_rule_errors_appropriately_set_state(self):
         self.harness.charm.on.config_changed.emit()
         self.mock_request.side_effect = HTTPError(
@@ -509,7 +556,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
             fp=BytesIO(initial_bytes="fubar!".encode()),
             hdrs=None,  # type: ignore
         )
-        self.harness.charm._loki_push_api_alert_rules_changed(None)
+        self._add_alerting_relation()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
             self.harness.charm.unit.status.message,
@@ -533,7 +580,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
     def test__loki_connection_errors_on_lifecycle_events_appropriately_clear(self):
         self.harness.charm.on.config_changed.emit()
         self.mock_request.side_effect = URLError(reason="fubar!")
-        self.harness.charm._loki_push_api_alert_rules_changed(None)
+        self._add_alerting_relation()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
             self.harness.charm.unit.status.message,
