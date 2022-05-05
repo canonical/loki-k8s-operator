@@ -281,8 +281,10 @@ class LokiOperatorCharm(CharmBase):
     def _regenerate_alert_rules(self):
         """Recreate all alert rules."""
         self._remove_alert_rules_files()
-        self._generate_alert_rules_files()
-        self._check_alert_rules()
+        # If there aren't any alerts, we can just clean it and move on
+        if self.loki_provider.alerts:
+            self._generate_alert_rules_files()
+            self._check_alert_rules()
 
     def _generate_alert_rules_files(self) -> None:
         """Generate and upload alert rules files.
