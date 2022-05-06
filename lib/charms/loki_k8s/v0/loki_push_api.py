@@ -320,6 +320,9 @@ juju deploy \
     --resource promtail-bin=/tmp/promtail-linux-amd64
 ```
 
+If a different resource name is used, it can be specified with the `promtail_resource_name`
+argument to the `LogProxyConsumer` constructor.
+
 The object can emit a `PromtailDigestError` event:
 
 - Promtail binary cannot be downloaded.
@@ -1793,6 +1796,8 @@ class LogProxyConsumer(ConsumerBase):
             The alert rules are automatically updated on charm upgrade.
         recursive: Whether to scan for rule files recursively.
         container_name: An optional container name to inject the payload into.
+        promtail_resource_name: An optional promtail resource name from metadata
+            if it has been modified and attached
 
     Raises:
         RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1816,7 +1821,8 @@ class LogProxyConsumer(ConsumerBase):
         syslog_port: int = 1514,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = False,
-        container_name: Optional[str] = None,
+        container_name: str = "",
+        promtail_resource_name: Optional[str] = None,
     ):
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._charm = charm
@@ -1827,6 +1833,7 @@ class LogProxyConsumer(ConsumerBase):
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = ProviderTopology.from_charm(charm)
+        self._promtail_resource_name = promtail_resource_name or "promtail-bin"
 
         # architechure used for promtail binary
         arch = platform.processor()
@@ -1897,7 +1904,7 @@ class LogProxyConsumer(ConsumerBase):
             self._container.stop(WORKLOAD_SERVICE_NAME)
         self.on.log_proxy_endpoint_departed.emit()
 
-    def _get_container(self, container_name: str = None) -> Container:
+    def _get_container(self, container_name: str = "") -> Container:
         """Gets a single container by name or using the only container running in the Pod.
 
         If there is more than one container in the Pod a `PromtailDigestError` is emitted.
@@ -1989,7 +1996,8 @@ class LogProxyConsumer(ConsumerBase):
                - "binsha": sha256 sum of unpacked promtail binary
         """
         workload_binary_path = os.path.join(WORKLOAD_BINARY_DIR, promtail_info["filename"])
-        if self._is_promtail_attached(workload_binary_path):
+        if self._promtail_attached_as_resource:
+            self._push_promtail_if_attached(workload_binary_path)
             return
 
         if self._promtail_must_be_downloaded(promtail_info):
@@ -2009,7 +2017,25 @@ class LogProxyConsumer(ConsumerBase):
             self._container.push(workload_binary_path, f, permissions=0o755, make_dirs=True)
             logger.debug("The promtail binary file has been pushed to the workload container.")
 
-    def _is_promtail_attached(self, workload_binary_path: str) -> bool:
+    @property
+    def _promtail_attached_as_resource(self) -> bool:
+        """Checks whether Promtail binary is attached to the charm or not.
+
+        Returns:
+            a boolean representing whether Promtail binary is attached as a resource or not.
+        """
+        try:
+            self._charm.model.resources.fetch(self._promtail_resource_name)
+            return True
+        except ModelError:
+            return False
+        except NameError as e:
+            if "invalid resource name" in str(e):
+                return False
+            else:
+                raise
+
+    def _push_promtail_if_attached(self, workload_binary_path: str) -> bool:
         """Checks whether Promtail binary is attached to the charm or not.
 
         Args:
@@ -2019,17 +2045,8 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             a boolean representing whether Promtail binary is attached or not.
         """
-        try:
-            resource_path = self._charm.model.resources.fetch("promtail-bin")
-        except ModelError:
-            return False
-        except NameError as e:
-            if "invalid resource name" in str(e):
-                return False
-            else:
-                raise
-
         logger.info("Promtail binary file has been obtained from an attached resource.")
+        resource_path = self._charm.model.resources.fetch(self._promtail_resource_name)
         self._push_binary_to_workload(resource_path, workload_binary_path)
         return True
 
@@ -2106,6 +2123,7 @@ class LogProxyConsumer(ConsumerBase):
                - "zipsha": sha256 sum of zip file of promtail binary
                - "binsha": sha256 sum of unpacked promtail binary
         """
+        print("---------- CALL ---------------")
         with request.urlopen(promtail_info["url"]) as r:
             file_bytes = r.read()
             file_path = os.path.join(BINARY_DIR, promtail_info["filename"] + ".gz")

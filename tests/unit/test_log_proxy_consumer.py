@@ -2,18 +2,23 @@
 # See LICENSE file for licensing details.
 
 import json
+import os
 import textwrap
 import unittest
-from hashlib import sha256
-from unittest.mock import MagicMock, mock_open, patch
+from pathlib import Path
+from tempfile import mkdtemp
+from unittest.mock import mock_open, patch
 
+import ops
+from charms.loki_k8s.v0 import loki_push_api
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
-from ops.charm import CharmBase
+from ops.charm import CharmBase, ResourceMeta
 from ops.framework import StoredState
 from ops.model import Container
 from ops.pebble import PathError
 from ops.testing import Harness
 
+ops.testing.SIMULATE_CAN_CONNECT = True
 LOG_FILES = ["/var/log/apache2/access.log", "/var/log/alternatives.log", "/var/log/test.log"]
 
 HTTP_LISTEN_PORT = 9080
@@ -83,12 +88,12 @@ class ConsumerCharm(CharmBase):
         super().__init__(*args)
         self._port = 3100
         self._stored.set_default(invalid_events=0)
-        self._log_proxy = LogProxyConsumer(
+        self.log_proxy = LogProxyConsumer(
             charm=self, container_name="loki", log_files=LOG_FILES, enable_syslog=True
         )
 
         self.framework.observe(
-            self._log_proxy.on.promtail_digest_error, self._register_promtail_error
+            self.log_proxy.on.promtail_digest_error, self._register_promtail_error
         )
 
     def _register_promtail_error(self, _):
@@ -99,7 +104,7 @@ class ConsumerCharmSyslogDisabled(ConsumerCharm):
     def __init__(self, *args, **kwargs):
         super(ConsumerCharm, self).__init__(*args)
         self._port = 3100
-        self._log_proxy = LogProxyConsumer(
+        self.log_proxy = LogProxyConsumer(
             charm=self, container_name="loki", log_files=LOG_FILES, enable_syslog=False
         )
 
@@ -111,27 +116,34 @@ class TestLogProxyConsumer(unittest.TestCase):
         self.harness.set_model_info(name="MODEL", uuid="123456")
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
-        self.harness.begin()
+        self.harness.begin_with_initial_hooks()
+
+    def _add_client(self):
+        rel_id = self.harness.add_relation("log-proxy", "agent")
+        self.harness.add_relation_unit(rel_id, "agent/0")
+        self.harness.update_relation_data(
+            rel_id, "agent/0", {"endpoint": "http://10.20.30.1:3500/loki/api/v1/push"}
+        )
 
     def test__cli_args_with_config_file_parameter(self):
-        self.assertIn("-config.file=", self.harness.charm._log_proxy._cli_args)
+        self.assertIn("-config.file=", self.harness.charm.log_proxy._cli_args)
 
-    def test__initial_config_sections(self):
+    def test__config_sections_match_expected(self):
         expected_sections = {"clients", "positions", "scrape_configs", "server"}
-        self.assertEqual(set(self.harness.charm._log_proxy._promtail_config), expected_sections)
+        self.assertEqual(set(self.harness.charm.log_proxy._promtail_config), expected_sections)
 
-    def test__initial_config_jobs(self):
+    def test__config_jobs_match_expected(self):
         expected_jobs = {"system", "syslog"}
         self.assertEqual(
             {
                 x["job_name"]
-                for x in self.harness.charm._log_proxy._promtail_config["scrape_configs"]
+                for x in self.harness.charm.log_proxy._promtail_config["scrape_configs"]
             },
             expected_jobs,
         )
 
-    def test__initial_config_labels(self):
-        for job in self.harness.charm._log_proxy._promtail_config["scrape_configs"]:
+    def test__config_labels_match_expected(self):
+        for job in self.harness.charm.log_proxy._promtail_config["scrape_configs"]:
             if job["job_name"] == "system":
                 expected = {
                     "__path__",
@@ -144,6 +156,9 @@ class TestLogProxyConsumer(unittest.TestCase):
                 }
                 for static_config in job["static_configs"]:
                     self.assertEqual(set(static_config["labels"]), expected)
+
+    def test__config_syslog_labels_match_expected(self):
+        for job in self.harness.charm.log_proxy._promtail_config["scrape_configs"]:
             if job["job_name"] == "syslog":
                 expected = {
                     "job",
@@ -155,7 +170,7 @@ class TestLogProxyConsumer(unittest.TestCase):
                 }
                 self.assertEqual(set(job["syslog"]["labels"]), expected)
 
-    def test__add_client(self):
+    def test__client_list_matches_expected(self):
         expected_clients = {
             "http://10.20.30.1:3500/loki/api/v1/push",
             "http://10.20.30.2:3500/loki/api/v1/push",
@@ -175,132 +190,93 @@ class TestLogProxyConsumer(unittest.TestCase):
                 {"endpoint": data},
             )
         self.assertEqual(
-            {x["url"] for x in self.harness.charm._log_proxy._clients_list()}, expected_clients
+            {x["url"] for x in self.harness.charm.log_proxy._clients_list()}, expected_clients
         )
 
-    def test__get_container_container_name_not_exist(self):
-        # Container does not exist
-        container_name = "loki_container"
-        self.harness.charm._log_proxy._get_container(container_name)
-
+    def test__invalid_container_name_fails(self):
+        self.harness.charm.log_proxy._get_container("not_present")
         self.assertEqual(self.harness.charm._stored.invalid_events, 1)
 
-    def test__get_container_container_name_exist(self):
-        # Container exist
+    def test__valid_container_name_works(self):
         container_name = "loki"
-        self.assertIs(
-            type(self.harness.charm._log_proxy._get_container(container_name)), Container
-        )
+        self.assertIs(type(self.harness.charm.log_proxy._get_container(container_name)), Container)
 
-    def test__get_container_more_than_one_container(self):
-        # More than 1 container in Pod
-        container_name = ""
+    def test__empty_lookup_with_more_than_one_container_fails(self):
+        # More than 1 container in Pod and the name is not specified
+        self.harness.charm.log_proxy._get_container()
+        self.assertEqual(self.harness.charm._stored.invalid_events, 1)
 
-        before = self.harness.charm._stored.invalid_events
-        self.harness.charm._log_proxy._get_container(container_name)
-        after = self.harness.charm._stored.invalid_events
-
-        self.assertGreater(after, before)
-
-    def test__sha256sums_matches_match(self):
-        read_data = str.encode("Bytes in the file")
-        sha256sum = sha256(read_data).hexdigest()
-        mocked_open = mock_open(read_data=read_data)
-
-        with patch("builtins.open", mocked_open, create=True):
-            self.assertTrue(self.harness.charm._log_proxy._sha256sums_matches("file", sha256sum))
-
-    def test__sha256sums_matches_do_not_match(self):
-        read_data = str.encode("Bytes in the file")
-        sha256sum = "qwertyfakesha256"
-        mocked_open = mock_open(read_data=read_data)
-
-        with patch("builtins.open", mocked_open, create=True):
-            self.assertFalse(self.harness.charm._log_proxy._sha256sums_matches("file", sha256sum))
-
-    def test__sha256sums_matches_file_not_found(self):
-        read_data = str.encode("Bytes in the file")
-        sha256sum = sha256(read_data).hexdigest()
-        mocked_open = mock_open(read_data=read_data)
+    def test__sha256sum_is_false_with_file_not_found(self):
+        mocked_open = mock_open()
         mocked_open.side_effect = FileNotFoundError
 
-        with patch("builtins.open", mocked_open, create=True):
-            self.assertFalse(self.harness.charm._log_proxy._sha256sums_matches("file", sha256sum))
+        with patch("builtins.open", mocked_open):
+            self.assertFalse(self.harness.charm.log_proxy._sha256sums_matches("file", "foo"))
 
-    @patch("pathlib.Path.is_file")
-    def test__is_promtail_binary_in_charm_not(self, mock_is_file):
-        mock_is_file.return_value = False
-        self.assertFalse(self.harness.charm._log_proxy._is_promtail_binary_in_charm("promtail"))
+    def test__fetch_promtail_from_attached_resource(self):
+        # Make sure the default case (promtail resource not attached/present) is false
+        # "promtail-bin" is the resource name hardcoded in the lib
+        self.assertFalse("promtail-bin" in self.harness.charm.meta.resources)
+        self.assertFalse(self.harness.charm.log_proxy._promtail_attached_as_resource)
 
-    @patch("pathlib.Path.is_file")
-    def test__is_promtail_binary_in_workload_yes(self, mock_is_file):
-        mock_is_file.return_value = True
-        self.assertTrue(self.harness.charm._log_proxy._is_promtail_binary_in_charm("promtail"))
-
-    def test__is_promtail_attached_name_error(self):
-        self.harness.charm._log_proxy._charm.model.resources.fetch = MagicMock(
-            side_effect=NameError("invalid resource name")
+        # Pretend we initialized the charm with a resources key for it and a resource attached
+        # We don't necessarily need it in all these dicts (only the last one), but the framework
+        # runs through these in order, so it's here for completeness
+        self.harness.charm.meta.resources["promtail-bin"] = ResourceMeta(
+            "promtail-bin", {"type": "file"}
         )
-        self.assertFalse(self.harness.charm._log_proxy._is_promtail_attached("promtail"))
-
-    def test__is_promtail_attached_model(self):
-        self.harness.charm._log_proxy._charm.model.resources.fetch = MagicMock(
-            return_value="promtail"
+        self.harness._meta.resources["promtail-bin"] = ResourceMeta(
+            "promtail-bin", {"type": "file"}
         )
-        self.harness.charm._log_proxy._container = MagicMock(return_value=True)
-        mocked_open = mock_open()
+        self.harness.charm.model.resources._paths["promtail-bin"] = None
+        self.harness.add_resource("promtail-bin", "somecontent")
 
-        with patch("builtins.open", mocked_open, create=True):
-            self.assertTrue(self.harness.charm._log_proxy._is_promtail_attached("promtail"))
+        self.assertTrue(self.harness.charm.log_proxy._promtail_attached_as_resource)
 
-            with self.assertLogs(level="INFO") as logger:
-                self.harness.charm._log_proxy._is_promtail_attached("promtail")
-                self.assertEqual(
-                    sorted(logger.output),
-                    [
-                        "INFO:charms.loki_k8s.v0.loki_push_api:Promtail binary file has been obtained from an attached resource."
-                    ],
-                )
-
-    def test__promtail_must_be_downloaded_not_in_workload(self):
-        self.harness.charm._log_proxy._is_promtail_binary_in_charm = MagicMock(return_value=False)
-        self.assertTrue(self.harness.charm._log_proxy._promtail_must_be_downloaded(PROMTAIL_INFO))
-
-    def test__promtail_must_be_downloaded_in_workload_sha256_dont_match(self):
-        self.harness.charm._log_proxy._is_promtail_binary_in_workload = MagicMock(
-            return_value=True
-        )
-        self.harness.charm._log_proxy._get_promtail_bin_from_workload = MagicMock(
-            return_value=True
-        )
-        self.harness.charm._log_proxy._sha256sums_matches = MagicMock(return_value=False)
-        self.assertTrue(self.harness.charm._log_proxy._promtail_must_be_downloaded(PROMTAIL_INFO))
-
-    def test__promtail_must_be_downloaded_in_workload_sha256_match(self):
-        self.harness.charm._log_proxy._is_promtail_binary_in_charm = MagicMock(return_value=True)
-        self.harness.charm._log_proxy._sha256sums_matches = MagicMock(return_value=True)
-
-        with self.assertLogs(level="DEBUG") as logger:
-            self.assertFalse(
-                self.harness.charm._log_proxy._promtail_must_be_downloaded(PROMTAIL_INFO)
-            )
+        self.harness.set_can_connect("loki", True)
+        with self.assertLogs(level="INFO") as logger:
+            binary_path = os.path.join("/tmp", PROMTAIL_INFO["filename"])
+            self.harness.charm.log_proxy._push_promtail_if_attached(binary_path)
             self.assertEqual(
                 sorted(logger.output),
                 [
-                    "DEBUG:charms.loki_k8s.v0.loki_push_api:Promtail binary file is already in the the charm container."
+                    "INFO:charms.loki_k8s.v0.loki_push_api:Promtail binary file has been obtained from an attached resource."
                 ],
+            )
+
+    @patch("charms.loki_k8s.v0.loki_push_api.BINARY_DIR", mkdtemp(prefix="logproxy-unittest"))
+    @patch(
+        "charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._download_and_push_promtail_to_workload"
+    )
+    def test__promtail_sha256sum_mismatch_downloads_new(self, mock_download):
+        # To correctly patch out a constant, we had to import the whole module and patch
+        # as above. A MagicMock() or Mock() doesn't otherwise work for a bare variable.
+        #
+        # The alternative is to put this entire test in a `with:` block
+        tmpdir = loki_push_api.BINARY_DIR
+
+        # Set up an initial state with a sum that won't match
+        fake_promtail = os.path.join(tmpdir, PROMTAIL_INFO["filename"])
+        fake_content = "dummy_data".encode()
+        Path(fake_promtail).write_bytes(fake_content)
+
+        with self.assertLogs(level="DEBUG") as logger:
+            self.harness.charm.log_proxy._obtain_promtail(PROMTAIL_INFO)
+            self.assertTrue(any(["File sha256sum mismatch" in line for line in logger.output]))
+
+            # Don't actually download, but make sure we would
+            self.assertTrue(
+                self.harness.charm.log_proxy._download_and_push_promtail_to_workload.called
             )
 
     @patch("ops.model.Container.pull")
     def test__promtail_can_handle_missing_configuration(self, mock_pull):
         mock_pull.side_effect = PathError(None, "irrelevant")
-        self.assertEqual(self.harness.charm._log_proxy._current_config, {})
+        self.assertEqual(self.harness.charm.log_proxy._current_config, {})
 
 
 class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
-    @patch("charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._get_container")
-    def setUp(self, mock_container):
-        mock_container.return_value = True
+    def setUp(self):
 
         self.harness = Harness(ConsumerCharmSyslogDisabled, meta=ConsumerCharm.metadata_yaml)
         self.harness.set_model_info(name="MODEL", uuid="123456")
@@ -313,6 +289,6 @@ class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
             "syslog"
             not in {
                 x["job_name"]
-                for x in self.harness.charm._log_proxy._promtail_config["scrape_configs"]
+                for x in self.harness.charm.log_proxy._promtail_config["scrape_configs"]
             }
         )
