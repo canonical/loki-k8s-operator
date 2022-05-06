@@ -118,13 +118,6 @@ class TestLogProxyConsumer(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
 
-    def _add_client(self):
-        rel_id = self.harness.add_relation("log-proxy", "agent")
-        self.harness.add_relation_unit(rel_id, "agent/0")
-        self.harness.update_relation_data(
-            rel_id, "agent/0", {"endpoint": "http://10.20.30.1:3500/loki/api/v1/push"}
-        )
-
     def test__cli_args_with_config_file_parameter(self):
         self.assertIn("-config.file=", self.harness.charm.log_proxy._cli_args)
 
