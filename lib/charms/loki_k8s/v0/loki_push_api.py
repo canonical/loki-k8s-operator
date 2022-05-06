@@ -2123,7 +2123,6 @@ class LogProxyConsumer(ConsumerBase):
                - "zipsha": sha256 sum of zip file of promtail binary
                - "binsha": sha256 sum of unpacked promtail binary
         """
-        print("---------- CALL ---------------")
         with request.urlopen(promtail_info["url"]) as r:
             file_bytes = r.read()
             file_path = os.path.join(BINARY_DIR, promtail_info["filename"] + ".gz")

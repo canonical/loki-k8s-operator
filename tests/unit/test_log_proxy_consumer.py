@@ -12,7 +12,7 @@ from unittest.mock import mock_open, patch
 import ops
 from charms.loki_k8s.v0 import loki_push_api
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
-from ops.charm import CharmBase, ResourceMeta
+from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.model import Container
 from ops.pebble import PathError
@@ -106,6 +106,37 @@ class ConsumerCharmSyslogDisabled(ConsumerCharm):
         self._port = 3100
         self.log_proxy = LogProxyConsumer(
             charm=self, container_name="loki", log_files=LOG_FILES, enable_syslog=False
+        )
+
+
+class ConsumerCharmWithPromtailResource(CharmBase):
+    _stored = StoredState()
+    metadata_yaml = textwrap.dedent(
+        """
+        name: loki-k8s
+        containers:
+          loki:
+            resource: loki-image
+          promtail:
+            resource: promtail-image
+        requires:
+          log-proxy:
+            interface: loki_push_api
+            optional: true
+        resources:
+          promtail-bin:
+            type: file
+            description: promtail binary
+            filename: promtail-linux-amd64
+        """
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+        self._port = 3100
+        self._stored.set_default(invalid_events=0)
+        self.log_proxy = LogProxyConsumer(
+            charm=self, container_name="loki", log_files=LOG_FILES, enable_syslog=True
         )
 
 
@@ -206,37 +237,6 @@ class TestLogProxyConsumer(unittest.TestCase):
         with patch("builtins.open", mocked_open):
             self.assertFalse(self.harness.charm.log_proxy._sha256sums_matches("file", "foo"))
 
-    def test__fetch_promtail_from_attached_resource(self):
-        # Make sure the default case (promtail resource not attached/present) is false
-        # "promtail-bin" is the resource name hardcoded in the lib
-        self.assertFalse("promtail-bin" in self.harness.charm.meta.resources)
-        self.assertFalse(self.harness.charm.log_proxy._promtail_attached_as_resource)
-
-        # Pretend we initialized the charm with a resources key for it and a resource attached
-        # We don't necessarily need it in all these dicts (only the last one), but the framework
-        # runs through these in order, so it's here for completeness
-        self.harness.charm.meta.resources["promtail-bin"] = ResourceMeta(
-            "promtail-bin", {"type": "file"}
-        )
-        self.harness._meta.resources["promtail-bin"] = ResourceMeta(
-            "promtail-bin", {"type": "file"}
-        )
-        self.harness.charm.model.resources._paths["promtail-bin"] = None
-        self.harness.add_resource("promtail-bin", "somecontent")
-
-        self.assertTrue(self.harness.charm.log_proxy._promtail_attached_as_resource)
-
-        self.harness.set_can_connect("loki", True)
-        with self.assertLogs(level="INFO") as logger:
-            binary_path = os.path.join("/tmp", PROMTAIL_INFO["filename"])
-            self.harness.charm.log_proxy._push_promtail_if_attached(binary_path)
-            self.assertEqual(
-                sorted(logger.output),
-                [
-                    "INFO:charms.loki_k8s.v0.loki_push_api:Promtail binary file has been obtained from an attached resource."
-                ],
-            )
-
     @patch("charms.loki_k8s.v0.loki_push_api.BINARY_DIR", mkdtemp(prefix="logproxy-unittest"))
     @patch(
         "charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._download_and_push_promtail_to_workload"
@@ -285,3 +285,35 @@ class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
                 for x in self.harness.charm.log_proxy._promtail_config["scrape_configs"]
             }
         )
+
+
+class TestLogProxyConsumerWithPromtailResource(unittest.TestCase):
+    def setUp(self):
+
+        self.harness = Harness(
+            ConsumerCharmWithPromtailResource, meta=ConsumerCharmWithPromtailResource.metadata_yaml
+        )
+        self.harness.set_model_info(name="MODEL", uuid="123456")
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+        self.harness.begin_with_initial_hooks()
+
+    def test__fetch_promtail_from_attached_resource(self):
+        # "promtail-bin" is the resource name hardcoded in the lib
+        self.assertFalse(self.harness.charm.log_proxy._promtail_attached_as_resource)
+
+        self.harness.charm.model.resources._paths["promtail-bin"] = None
+        self.harness.add_resource("promtail-bin", "somecontent")
+
+        self.assertTrue(self.harness.charm.log_proxy._promtail_attached_as_resource)
+
+        self.harness.set_can_connect("loki", True)
+        with self.assertLogs(level="INFO") as logger:
+            binary_path = os.path.join("/tmp", PROMTAIL_INFO["filename"])
+            self.harness.charm.log_proxy._push_promtail_if_attached(binary_path)
+            self.assertEqual(
+                sorted(logger.output),
+                [
+                    "INFO:charms.loki_k8s.v0.loki_push_api:Promtail binary file has been obtained from an attached resource."
+                ],
+            )
