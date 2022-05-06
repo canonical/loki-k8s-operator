@@ -358,7 +358,6 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.version_patcher.start()
         self.harness = Harness(LokiOperatorCharm)
 
-        self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
