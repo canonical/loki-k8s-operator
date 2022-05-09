@@ -15,6 +15,8 @@ develop a new k8s charm using the Operator Framework:
 import logging
 import os
 import textwrap
+from urllib import request
+from urllib.error import HTTPError, URLError
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
@@ -51,7 +53,15 @@ class LokiOperatorCharm(CharmBase):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
         self._stored.set_default(k8s_service_patched=False, config="")
+
+        # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
+        # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
+        # https://grafana.com/docs/loki/latest/rules/#ruler-storage
+        tenant_id = "fake"
+        self._rules_dir = os.path.join(RULES_DIR, tenant_id)
+
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
+
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
@@ -86,16 +96,6 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_alertmanager_change(self, _):
-        self._configure()
-
-    def _loki_push_api_alert_rules_changed(self, event):
-        if isinstance(event, LokiPushApiAlertRulesChanged):
-            if event.error:
-                self.unit.status = BlockedStatus(event.message)
-                return
-            elif isinstance(self.unit.status, BlockedStatus) and not event.error:
-                self.unit.status = ActiveStatus()
-                logger.info("Clearing blocked status with successful alert rule check")
         self._configure()
 
     def _configure(self):
@@ -254,6 +254,102 @@ class LokiOperatorCharm(CharmBase):
         """
         )
         return yaml.safe_load(config)
+
+    def _loki_push_api_alert_rules_changed(self, _: LokiPushApiAlertRulesChanged) -> None:
+        """Perform all operations needed to keep alert rules in the right status."""
+        if self._ensure_alert_rules_path():
+            self._regenerate_alert_rules()
+
+            # Don't try to configure if checking the rules left us in BlockedStatus
+            if isinstance(self.unit.status, ActiveStatus):
+                self._configure()
+
+    def _ensure_alert_rules_path(self) -> bool:
+        """Ensure that the workload container has the appropriate directory structure."""
+        # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
+        # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
+        if self._container.can_connect():
+            try:
+                self._container.make_dir(self._rules_dir, make_parents=True)
+                return True
+            except (FileNotFoundError, ProtocolError, PathError):
+                logger.debug("Could not create loki directory.")
+                return False
+            except Exception as e:
+                logger.debug("Could create loki directory: %s", e)
+                return False
+        return False
+
+    def _regenerate_alert_rules(self):
+        """Recreate all alert rules."""
+        self._remove_alert_rules_files()
+        # If there aren't any alerts, we can just clean it and move on
+        if self.loki_provider.alerts:
+            self._generate_alert_rules_files()
+            self._check_alert_rules()
+
+    def _generate_alert_rules_files(self) -> None:
+        """Generate and upload alert rules files.
+
+        Args:
+            container: Container into which alert rules files are going to be uploaded
+        """
+        file_mappings = {}
+
+        for identifier, alert_rules in self.loki_provider.alerts.items():
+            rules = yaml.dump({"groups": alert_rules["groups"]})
+            file_mappings["{}_alert.rules".format(identifier)] = rules
+
+        if self._container.can_connect():
+            for filename, content in file_mappings.items():
+                path = os.path.join(self._rules_dir, filename)
+                self._container.push(path, content, make_dirs=True)
+        logger.debug("Saved alert rules to disk")
+
+    def _remove_alert_rules_files(self) -> None:
+        """Remove alert rules files from workload container."""
+        if not self._container.can_connect():
+            logger.debug("Cannot connect to container to remove alert rule files!")
+            return
+
+        files = self._container.list_files(self._rules_dir)
+        for f in files:
+            self._container.remove_path(f.path)
+
+    def _check_alert_rules(self):
+        """Check alert rules using Loki API."""
+        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.loki_provider.port)
+        req = request.Request(url)
+        try:
+            request.urlopen(req, timeout=2.0)
+        except HTTPError as e:
+            msg = e.read().decode("utf-8")
+
+            if e.code == 404 and "no rule groups found" in msg:
+                log_msg = "Checking alert rules: No rule groups found"
+                logger.debug(log_msg)
+                self.unit.status = BlockedStatus(log_msg)
+                return
+
+            message = "{} - {}".format(e.code, e.msg)  # type: ignore
+            logger.error("Checking alert rules: %s", message)
+            self.unit.status = BlockedStatus("Errors in alert rule groups. Check juju debug-log")
+            return
+        except URLError as e:
+            logger.error("Checking alert rules: %s", e.reason)
+            self.unit.status = BlockedStatus("Error connecting to Loki. Check juju debug-log")
+            return
+        except Exception as e:
+            logger.error("Checking alert rules: %s", e)
+            self.unit.status = BlockedStatus("Error connecting to Loki. Check juju debug-log")
+            return
+        else:
+            log_msg = "Checking alert rules: Ok"
+            logger.debug(log_msg)
+            if isinstance(self.unit.status, BlockedStatus):
+                self.unit.status = ActiveStatus()
+                logger.info("Clearing blocked status with successful alert rule check")
+            return
 
 
 if __name__ == "__main__":
