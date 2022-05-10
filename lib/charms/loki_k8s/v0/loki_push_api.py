@@ -1874,6 +1874,7 @@ class LogProxyConsumer(ConsumerBase):
         if self.model.relations[self._relation_name]:
             if "promtail" not in self._container.get_plan().services:
                 self._setup_promtail()
+                return
 
             new_config = self._promtail_config
             if new_config != self._current_config:
@@ -2289,24 +2290,24 @@ class LogProxyConsumer(ConsumerBase):
         if not promtail_binaries:
             return
 
-        if self._is_promtail_installed(promtail_binaries[self._arch]):
-            return
+        if not self._is_promtail_installed(promtail_binaries[self._arch]):
+            try:
+                self._obtain_promtail(promtail_binaries[self._arch])
+            except HTTPError as e:
+                msg = "Promtail binary couldn't be downloaded - {}".format(str(e))
+                logger.warning(msg)
+                self.on.promtail_digest_error.emit(msg)
+                return
+
+        workload_binary_path = os.path.join(
+            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
+        )
 
         self._create_directories()
         self._container.push(
             WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._promtail_config), make_dirs=True
         )
 
-        try:
-            self._obtain_promtail(promtail_binaries[self._arch])
-        except HTTPError as e:
-            msg = "Promtail binary couldn't be download - {}".format(str(e))
-            logger.warning(msg)
-            self.on.promtail_digest_error.emit(msg)
-
-        workload_binary_path = os.path.join(
-            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
-        )
         self._add_pebble_layer(workload_binary_path)
 
         if self._current_config.get("clients"):

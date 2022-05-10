@@ -23,10 +23,8 @@ async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:
 async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
     # Sometimes get_unit_address returns a None, no clue why, so looping until it's not
     addresses = [""] * num_units
-    logger.info("Loki addresses: %s", addresses)
     while not all(addresses):
         addresses = [await get_unit_address(ops_test, app_name, i) for i in range(num_units)]
-    logger.info("Loki addresses: %s", addresses)
 
     def get(url) -> bool:
         response = urllib.request.urlopen(url, data=None, timeout=2.0)
@@ -58,7 +56,6 @@ async def loki_api_query(ops_test, app_name, query: str, unit_num: int = 0):
         # Using requests because params with urllib are a mess
         response = requests.get(url, params=params)
         if response.status_code == 200:
-            logger.info(response.json())
             return response.json()["data"]["result"]
         return {}
     except requests.exceptions.RequestException:

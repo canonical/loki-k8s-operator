@@ -276,7 +276,7 @@ class LokiOperatorCharm(CharmBase):
                 logger.debug("Could not create loki directory.")
                 return False
             except Exception as e:
-                logger.debug("Could create loki directory: %s", e)
+                logger.debug("Could not create loki directory: %s", e)
                 return False
         return False
 
