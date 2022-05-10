@@ -208,7 +208,7 @@ self.framework.observe(
 
 The consumer charm can then choose to update its configuration in both situations.
 
-Note that when LokiPushApiConsumer is used, logs will not have any labels automatically added. In
+Note that LokiPushApiConsumer does not add any labels automatically on its own. In
 order to better integrate with the Canonical Observability Stack, you may want to configure your
 software to add Juju topology labels. The
 [observability-libs](https://charmhub.io/observability-libs) library can be used to get topology
