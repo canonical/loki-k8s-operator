@@ -36,7 +36,7 @@ class LokiTesterCharm(CharmBase):
         self.topology = ProviderTopology.from_charm(self)
         self.unit.status = ActiveStatus()
 
-    def _setup_logging(self, handlers: dict = None) -> None:
+    def _setup_logging(self, handlers_init: dict = None) -> None:
         """Ensure logging is configured correctly.
 
         A dict of "wanted" loggers is passed in, and the list of current loggers known to
@@ -47,22 +47,24 @@ class LokiTesterCharm(CharmBase):
         adding/removing them.
 
         Args:
-            handlers: a dict of 'name' -> handler objects
+            handlers_init: a dict of 'name' -> handler objects
         """
-        handlers = handlers or {}
-        logger = logging.getLogger("Loki-Tester")
-        logger.setLevel(logging.INFO)
+        handlers_init = handlers_init or {}
+        logger = logging.getLogger("loki-tester")
 
         # Make sure we always have a local console logger
-        console_handler = {"console": logging.StreamHandler()}
-        handlers.update(console_handler)
+        console_handler = {"console": {"handler": logging.StreamHandler(), "level": logging.INFO}}
+        handlers_init.update(console_handler)
 
-        for k, v in handlers.items():
+        for k, v in handlers_init.items():
             # Give each handler a "name" property which matches so we can find it
-            v.name = k
+            v["handler"].name = k
+            v["handler"].setLevel(v["level"])
+
+        handlers = {v["handler"].name: v["handler"] for v in handlers_init.values()}
 
         # Check against logger.Manager and exclude "useless" values like logging.Placeholder
-        existing_handlers: dict[str, logging.Handler] = {v.name: v for v in logger.manager.loggerDict.values() if type(v) == logging.Handler}  # type: ignore
+        existing_handlers: dict[str, logging.Handler] = {k: v for v in logger.manager.loggerDict.items() if not isinstance(v, logging.PlaceHolder) and "loki" not in k}  # type: ignore
 
         if set(handlers.keys()) == set(existing_handlers.keys()):
             # Nothing to do
@@ -81,7 +83,7 @@ class LokiTesterCharm(CharmBase):
             logger.addHandler(h)
 
         self.logger = logger
-        logger.debug(
+        self.logger.debug(
             "Configured logging with {} handlers: {}".format(
                 len(handlers.keys()), ", ".join(handlers.keys())
             )
@@ -102,8 +104,7 @@ class LokiTesterCharm(CharmBase):
         self.log("debug", "Loki push API endpoint joined")
 
     def _on_loki_push_api_endpoint_departed(self, _):
-        # TODO (multi-logger): remove only the logger whose endpoint departed
-        self.set_logger(local_only=True)
+        self.set_logger()
         self.log("debug", "Loki push API endpoint departed")
 
     def _on_log_error_action(self, event):
@@ -111,8 +112,10 @@ class LokiTesterCharm(CharmBase):
         message = event.params["message"]
         logged = self.log("error", message)
         if logged:
+            self.logger.warning("Error message logged!")
             event.set_results({"message": "Error message successfully logged"})
         else:
+            self.logger.warning("Error message not logged!")
             event.fail("Failed to log error message")
 
     def set_logger(self, local_only=False):
@@ -139,18 +142,18 @@ class LokiTesterCharm(CharmBase):
         log_endpoints = self._loki_consumer.loki_endpoints
 
         loki_handlers = {}
-        if log_endpoints:
+        for idx, endpoint in enumerate(log_endpoints):
             logging_loki.emitter.LokiEmitter.level_tag = "level"
-            # TODO (multi-logger): create loggers for each endpoint
-
             loki_handlers.update(
                 {
-                    "loki": logging_loki.LokiHandler(
-                        url=log_endpoints[0]["url"], version="1", tags=dict(tags)
-                    )
+                    "loki-{}".format(idx): {
+                        "handler": logging_loki.LokiHandler(
+                            url=endpoint["url"], version="1", tags=dict(tags)
+                        ),
+                        "level": logging.DEBUG,
+                    }
                 }
             )
-            # TODO (multi-logger): each logger will need a different name
 
         self._setup_logging(loki_handlers)
 

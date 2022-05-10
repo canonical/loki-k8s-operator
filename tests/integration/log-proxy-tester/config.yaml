@@ -11,3 +11,11 @@ options:
   rotate:
     description: Rotate log after x logs.
     type: int
+  syslog:
+    description: Enable syslog forwarding
+    type: boolean
+    default: false
+  file_forwarding:
+    description: Enable file forwarding
+    type: boolean
+    default: true

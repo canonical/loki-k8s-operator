@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 from typing import List
 
+import requests
 import yaml
 from pytest_operator.plugin import OpsTest
 
@@ -28,7 +29,6 @@ async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
     logger.info("Loki addresses: %s", addresses)
 
     def get(url) -> bool:
-        logger.info("GETTING URL: {}".format(url))
         response = urllib.request.urlopen(url, data=None, timeout=2.0)
         return response.code == 200 and "version" in json.loads(response.read())
 
@@ -45,6 +45,23 @@ async def loki_rules(ops_test, app_name) -> dict:
             return yaml.safe_load(response.read())
         return {}
     except urllib.error.HTTPError:
+        return {}
+
+
+async def loki_api_query(ops_test, app_name, query: str, unit_num: int = 0):
+    address = await get_unit_address(ops_test, app_name, unit_num)
+    # Use query_range for a longer default time interval so we
+    # don't need to nitpick about it
+    url = f"http://{address}:3100/loki/api/v1/query_range"
+    params = {"query": f"{{{query}}}"}
+    try:
+        # Using requests because params with urllib are a mess
+        response = requests.get(url, params=params)
+        logger.info("Opening %s", url)
+        if response.status_code == 200:
+            return response.json()["data"]["result"]
+        return {}
+    except requests.exceptions.RequestException:
         return {}
 
 

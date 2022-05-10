@@ -1569,7 +1569,7 @@ class ConsumerBase(Object):
 
         for relation in self._charm.model.relations[self._relation_name]:
             for unit in relation.units:
-                if unit.app is self._charm.app:
+                if unit.app == self._charm.app:
                     # This is a peer unit
                     continue
 
@@ -1872,13 +1872,18 @@ class LogProxyConsumer(ConsumerBase):
         if not self._container.can_connect():
             return
         if self.model.relations[self._relation_name]:
-            self._setup_promtail()
-        else:
+            if "promtail" not in self._container.get_plan().services:
+                self._setup_promtail()
+
             new_config = self._promtail_config
             if new_config != self._current_config:
                 self._container.push(
                     WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True
                 )
+
+            # Loki may send endpoints late. Don't necessarily start, there may be
+            # no clients
+            if new_config["clients"]:
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
 
