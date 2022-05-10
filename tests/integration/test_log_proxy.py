@@ -4,7 +4,6 @@
 
 import asyncio
 import logging
-import time
 
 import pytest
 from helpers import loki_alerts, loki_api_query, oci_image
@@ -43,9 +42,6 @@ async def test_alert_rules_do_fire_from_log_proxy(ops_test, loki_charm, log_prox
     await ops_test.model.add_relation(loki_app_name, tester_app_name)
     await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
 
-    # This is silly, but we need to actually wait to get log data
-    time.sleep(30)
-
     # Trigger a log message to fire an alert on
     await ops_test.model.applications[tester_app_name].set_config({"rate": "5"})
     alerts = await loki_alerts(ops_test, "loki")
@@ -80,14 +76,10 @@ async def test_logproxy_file_logs(ops_test, log_proxy_tester_charm):
     await ops_test.model.add_relation(loki_app_name, tester_app_name)
     await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
 
-    # This is silly, but we need to actually wait to get log data
-    time.sleep(30)
-
     logs = await loki_api_query(
-        ops_test, loki_app_name, f"juju_application=~'{tester_app_name}',filename=~'.+'"
+        ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",filename=~".+"}}'
     )
-    logger.info("LOGS: {}".format(logs))
-    assert len(logs["values"]) > 0
+    assert len(logs[0]["values"]) > 0
 
 
 @pytest.mark.abort_on_fail
@@ -111,13 +103,10 @@ async def test_logproxy_syslog_logs(ops_test, log_proxy_tester_charm):
     await ops_test.model.add_relation(loki_app_name, tester_app_name)
     await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
 
-    # This is silly, but we need to actually wait to get log data
-    time.sleep(30)
-
     logs = await loki_api_query(
-        ops_test, loki_app_name, f"juju_application=~'{tester_app_name}',job=~'.+syslog'"
+        ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",job=~".+syslog"}}'
     )
-    assert len(logs["values"]) > 0
+    assert len(logs[0]["values"]) > 0
 
 
 @pytest.mark.abort_on_fail
@@ -143,14 +132,11 @@ async def test_logproxy_logs_to_file_and_syslog(ops_test, log_proxy_tester_charm
     await ops_test.model.add_relation(loki_app_name, tester_app_name)
     await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
 
-    # This is silly, but we need to actually wait to get log data
-    time.sleep(30)
-
     syslogs = await loki_api_query(
-        ops_test, loki_app_name, f"juju_application=~'{tester_app_name}',job=~'.+syslog'"
+        ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",job=~".+syslog"}}'
     )
-    assert len(syslogs["values"]) > 0
+    assert len(syslogs[0]["values"]) > 0
     file_logs = await loki_api_query(
-        ops_test, loki_app_name, f"juju_application=~'{tester_app_name}',filename=~'.+'"
+        ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",filename=~".+"}}'
     )
-    assert len(file_logs["values"]) > 0
+    assert len(file_logs[0]["values"]) > 0

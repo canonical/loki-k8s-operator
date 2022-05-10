@@ -53,12 +53,12 @@ async def loki_api_query(ops_test, app_name, query: str, unit_num: int = 0):
     # Use query_range for a longer default time interval so we
     # don't need to nitpick about it
     url = f"http://{address}:3100/loki/api/v1/query_range"
-    params = {"query": f"{{{query}}}"}
+    params = {"query": query}
     try:
         # Using requests because params with urllib are a mess
         response = requests.get(url, params=params)
-        logger.info("Opening %s", url)
         if response.status_code == 200:
+            logger.info(response.json())
             return response.json()["data"]["result"]
         return {}
     except requests.exceptions.RequestException:

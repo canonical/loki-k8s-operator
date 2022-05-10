@@ -4,7 +4,6 @@
 
 import asyncio
 import logging
-import time
 from pathlib import Path
 
 import pytest
@@ -22,9 +21,9 @@ tester_resources = {
 }
 
 tester_apps = {
-    "loki-tester": "juju_application='loki-tester',level='debug'",
-    "log-proxy-tester-file": "juju_application='log-proxy-tester-file',filename=~'.+'",
-    "log-proxy-tester-syslog": "juju_appllication='log-proxy-tester-syslog',job=~'.*syslog'",
+    "loki-tester": '{juju_application="loki-tester",level="debug"}',
+    "log-proxy-tester-file": '{juju_application="log-proxy-tester-file",filename=~".+"}',
+    "log-proxy-tester-syslog": '{juju_appllication="log-proxy-tester-syslog",job=~".*syslog"}',
 }
 
 
@@ -59,38 +58,10 @@ async def test_loki_api_client_logs(
     )
     await ops_test.model.wait_for_idle(apps=app_names, status="active")
 
-    for t in tester_app_names:
-        await ops_test.model.add_relation(loki_app_name, t)
+    await asyncio.gather(
+        *[ops_test.model.add_relation(loki_app_name, t) for t in tester_app_names]
+    )
     await ops_test.model.wait_for_idle(apps=app_names, status="active")
-
-    # This is silly, but we need to actually wait to get log data
-    time.sleep(30)
-
-    for query in tester_apps.values():
-        logs = await loki_api_query(ops_test, loki_app_name, query)
-        assert len(logs["values"]) > 0
-
-
-@pytest.mark.abort_on_fail
-async def test_scale_up_also_gets_logs(ops_test):
-    await ops_test.model.applications[loki_app_name].scale(scale=3)
-    await ops_test.model.wait_for_idle(
-        apps=[loki_app_name], status="active", timeout=600, wait_for_exact_units=0
-    )
-    assert await is_loki_up(ops_test, loki_app_name, num_units=3)
-
-    # Trigger a log message to fire an alert on just to ensure we have logs
-    await ops_test.model.applications["loki-tester"].units[0].run_action(
-        "log-error", message="Error logged!"
-    )
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=60
-    )
-
-    assert await is_loki_up(ops_test, loki_app_name, num_units=3)
-
-    # This is silly, but we need to actually wait to get log data
-    time.sleep(30)
 
     for query in tester_apps.values():
         logs_per_unit = await asyncio.gather(
@@ -98,11 +69,46 @@ async def test_scale_up_also_gets_logs(ops_test):
             loki_api_query(ops_test, loki_app_name, query, unit_num=1),
             loki_api_query(ops_test, loki_app_name, query, unit_num=2),
         )
-        assert all(len(logs["values"]) > 0 for logs in logs_per_unit)
+        assert all(len(logs[0]["values"]) > 0 for logs in logs_per_unit)
+
+
+@pytest.mark.abort_on_fail
+async def test_scale_up_also_gets_logs(ops_test):
+    await ops_test.model.applications[loki_app_name].scale(scale=3)
+    await ops_test.model.wait_for_idle(
+        apps=[loki_app_name], status="active", timeout=600, wait_for_exact_units=3
+    )
+    assert await is_loki_up(ops_test, loki_app_name, num_units=3)
+
+    # Trigger a log message to fire an alert on just to ensure we have logs
+    await ops_test.model.applications["loki-tester"].units[0].run_action(
+        "log-error", message="Error logged!"
+    )
+    await ops_test.model.wait_for_idle(
+        apps=app_names, status="active", timeout=1000, idle_period=60
+    )
+
+    assert await is_loki_up(ops_test, loki_app_name, num_units=3)
+
+    for query in tester_apps.values():
+        logs_per_unit = await asyncio.gather(
+            loki_api_query(ops_test, loki_app_name, query, unit_num=0),
+            loki_api_query(ops_test, loki_app_name, query, unit_num=1),
+            loki_api_query(ops_test, loki_app_name, query, unit_num=2),
+        )
+        assert all(len(logs[0]["values"]) > 0 for logs in logs_per_unit)
 
 
 @pytest.mark.abort_on_fail
 async def test_logs_persist_after_upgrade(ops_test, loki_charm):
+    counts_before_upgrade = {}
+    for tester, query in tester_apps.items():
+        query = f"count_over_time({query}[10m])"
+        counts_before_upgrade[tester] = await asyncio.gather(
+            loki_api_query(ops_test, loki_app_name, query, unit_num=0),
+            loki_api_query(ops_test, loki_app_name, query, unit_num=1),
+            loki_api_query(ops_test, loki_app_name, query, unit_num=2),
+        )
     # Refresh from path
     await ops_test.model.applications[loki_app_name].refresh(path=loki_charm, resources=resources)
     await ops_test.model.wait_for_idle(
@@ -110,13 +116,19 @@ async def test_logs_persist_after_upgrade(ops_test, loki_charm):
     )
     assert await is_loki_up(ops_test, loki_app_name, num_units=3)
 
-    # This is silly, but we need to actually wait to get log data
-    time.sleep(30)
-
     # Trigger a log message to fire an alert on just to ensure we have logs
     await ops_test.model.applications["loki-tester"].units[0].run_action(
         "log-error", message="Error logged!"
     )
+
+    counts_after_upgrade = {}
+    for tester, query in tester_apps.items():
+        query = f"count_over_time({query}[10m])"
+        counts_after_upgrade[tester] = await asyncio.gather(
+            loki_api_query(ops_test, loki_app_name, query, unit_num=0),
+            loki_api_query(ops_test, loki_app_name, query, unit_num=1),
+            loki_api_query(ops_test, loki_app_name, query, unit_num=2),
+        )
 
     for query in tester_apps.values():
         logs_per_unit = await asyncio.gather(

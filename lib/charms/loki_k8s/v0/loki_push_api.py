@@ -1737,7 +1737,7 @@ class MultipleContainersFoundError(Exception):
 
 
 class PromtailDigestError(EventBase):
-    """Event emitted when there is an error with the Promtail binary file."""
+    """Event emitted when there is an error with Promtail initialization."""
 
     def __init__(self, handle, message):
         super().__init__(handle)
@@ -1886,6 +1886,8 @@ class LogProxyConsumer(ConsumerBase):
             if new_config["clients"]:
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
+            else:
+                self.on.promtail_digest_error.emit("No promtail client endpoints available!")
 
     def _on_relation_departed(self, _: RelationEvent) -> None:
         """Event handler for `relation_departed`.
@@ -2314,6 +2316,8 @@ class LogProxyConsumer(ConsumerBase):
                 self.on.promtail_digest_error.emit(str(e))
             else:
                 self.on.log_proxy_endpoint_joined.emit()
+        else:
+            self.on.promtail_digest_error.emit("No promtail client endpoints available!")
 
     def _is_promtail_installed(self, promtail_info: dict) -> bool:
         """Determine if promtail has already been installed to the container.

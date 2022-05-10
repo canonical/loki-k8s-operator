@@ -37,6 +37,10 @@ class LogProxyTesterCharm(CharmBase):
             self._log_proxy.on.promtail_digest_error,
             self._promtail_error,
         )
+        self.framework.observe(
+            self._log_proxy.on.log_proxy_endpoint_joined,
+            self._promtail_success,
+        )
 
         self.framework.observe(self.on.workload_pebble_ready, self._on_workload_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -44,6 +48,9 @@ class LogProxyTesterCharm(CharmBase):
     def _promtail_error(self, event):
         logger.error(event.message)
         self.unit.status = BlockedStatus(event.message)
+
+    def _promtail_success(self, _):
+        self.unit.status = ActiveStatus()
 
     def _on_workload_pebble_ready(self, event):
         """Define and start a workload using the Pebble API.
