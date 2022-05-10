@@ -212,7 +212,8 @@ Note that LokiPushApiConsumer does not add any labels automatically on its own. 
 order to better integrate with the Canonical Observability Stack, you may want to configure your
 software to add Juju topology labels. The
 [observability-libs](https://charmhub.io/observability-libs) library can be used to get topology
-labels in charm code.
+labels in charm code. See :func:`LogProxyConsumer._scrape_configs` for an example of how
+to do this with promtail.
 
 ## LogProxyConsumer Library Usage
 
