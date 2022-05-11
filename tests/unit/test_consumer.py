@@ -5,10 +5,14 @@ import json
 import os
 import textwrap
 import unittest
-from unittest.mock import PropertyMock, patch
+from pathlib import Path
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import (
+    AlertRules,
+    LokiPushApiConsumer,
+    ProviderTopology,
+)
 from fs.tempfs import TempFS
 from helpers import TempFolderSandbox
 from ops.charm import CharmBase
@@ -61,7 +65,15 @@ class FakeConsumerCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
         self._port = 3100
+        self._stored.set_default(endpoint_events=0)
+
         self.loki_consumer = LokiPushApiConsumer(self)
+        self.framework.observe(
+            self.loki_consumer.on.loki_push_api_endpoint_joined, self.endpoint_events
+        )
+
+    def endpoint_events(self, _):
+        self._stored.endpoint_events += 1
 
     @property
     def _loki_push_api(self) -> str:
@@ -101,57 +113,66 @@ class TestLokiPushApiConsumer(unittest.TestCase):
             None,
         )
 
-    @patch("charms.loki_k8s.v0.loki_push_api.AlertRules.add_path")
-    @patch("charms.loki_k8s.v0.loki_push_api.AlertRules.as_dict", new=lambda *a, **kw: {})
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiConsumer.loki_endpoints",
-        new_callable=PropertyMock,
-    )
-    def test__on_logging_relation_changed(self, mock_endpoints, mock_as_dict):
-        expected_data = [
-            {"url": "http://10.1.2.3:3100/loki/api/v1/push"},
-        ]
-        mock_endpoints.return_value = expected_data
-        mock_as_dict.return_value = (LABELED_ALERT_RULES, {})
+    def test_3_provider_units_related_scaled_down_to_0(self):
+        rel_id = self.harness.add_relation("logging", "loki")
+
+        # Add 3 Loki units
+        for i in range(3):
+            loki_unit = f"loki/{i}"
+            endpoint = f"http://loki-{i}:3100/loki/api/v1/push"
+            data = json.dumps({"url": f"{endpoint}"})
+            self.harness.add_relation_unit(rel_id, loki_unit)
+            self.harness.update_relation_data(
+                rel_id,
+                loki_unit,
+                {"endpoint": data},
+            )
+
+        # Check we have 3 Loki endpoints
+        self.assertEqual(len(self.harness.charm.loki_consumer.loki_endpoints), 3)
+
+        # Check each endpoint is a dict, has a "url" key and starts with "http://"
+        for endpoint_dict in self.harness.charm.loki_consumer.loki_endpoints:
+            self.assertIsInstance(endpoint_dict, dict)
+            self.assertTrue(list(endpoint_dict.keys())[0], "url")
+            self.assertTrue(endpoint_dict["url"].startswith("http://"))
+
+        # Remove Loki units
+        for i in range(3):
+            loki_unit = f"loki/{i}"
+            self.harness.remove_relation_unit(rel_id, loki_unit)
+
+        # Check we have no more endpoint
+        self.assertAlmostEqual(len(self.harness.charm.loki_consumer.loki_endpoints), 0)
+
+    def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self):
         self.harness.set_leader(True)
+
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.harness.update_relation_data(
-            rel_id,
-            "promtail",
-            {"endpoints": json.dumps({"url": "http://10.1.2.3:3100/loki/api/v1/push"})},
-        )
+        self.assertEqual(self.harness.charm._stored.endpoint_events, 1)
 
-        self.assertEqual(
-            self.harness.charm.loki_consumer.loki_endpoints[0]["url"],
-            expected_data[0]["url"],
-        )
-
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiEvents.loki_push_api_endpoint_joined")
-    def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self, mock_events):
-        self.harness.set_leader(True)
-
-        rel_id = self.harness.add_relation("logging", "promtail")
-        self.harness.add_relation_unit(rel_id, "promtail/0")
         self.harness.update_relation_data(
             rel_id,
             "promtail",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        mock_events.emit.assert_called_once()
 
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiEvents.loki_push_api_endpoint_joined")
-    def test__on_upgrade_charm_endpoint_joined_event_fired_for_follower(self, mock_events):
+        self.assertEqual(self.harness.charm._stored.endpoint_events, 2)
+
+    def test__on_upgrade_charm_endpoint_joined_event_fired_for_follower(self):
         self.harness.set_leader(False)
 
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
+        self.assertEqual(self.harness.charm._stored.endpoint_events, 1)
+
         self.harness.update_relation_data(
             rel_id,
             "promtail",
             {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
         )
-        mock_events.emit.assert_called_once()
+        self.assertEqual(self.harness.charm._stored.endpoint_events, 2)
 
 
 class TestReloadAlertRules(unittest.TestCase):
@@ -168,6 +189,12 @@ class TestReloadAlertRules(unittest.TestCase):
     ALERT = yaml.safe_dump({"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5"})
 
     def setUp(self):
+        # override the default ordering, since each of these steps depends on the
+        # state of the previous test
+
+        # The "GIVEN" statements explicitly work against the way unittest is designed, and it is
+        # only through sheer luck that they have worked thus far
+        unittest.TestLoader.sortTestMethodsUsing = None  # type: ignore
         self.sandbox = TempFolderSandbox()
         alert_rules_path = os.path.join(self.sandbox.root, "alerts")
         self.alert_rules_path = alert_rules_path
@@ -197,7 +224,7 @@ class TestReloadAlertRules(unittest.TestCase):
 
         # need to manually emit relation changed
         # https://github.com/canonical/operator/issues/682
-        self.harness.charm.on.logging_relation_changed.emit(
+        self.harness.charm.on.logging_relation_joined.emit(
             self.harness.charm.model.get_relation("logging")
         )
 
@@ -276,6 +303,39 @@ class TestReloadAlertRules(unittest.TestCase):
         # THEN relation data is empty again
         relation = self.harness.charm.model.get_relation("logging")
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
+
+
+class TestAlertRuleNaming(unittest.TestCase):
+    """AlertRules should return sanitized names for any given relative path.
+
+    It is potentially risky to include any characters which may be path separators, drive
+    separators on Windows, or `..|...` in names, since the behavior of Pebble pushing or
+    otherwise writing is not predicatable, and we can mitigate side_channel attacks.
+    """
+
+    PATHS = {
+        r"src/alert_rules/foo.rule": "testing_1234-5678-dead-beef_tester_render_alerts",
+        r"src/alert_rules/a/foo.rule": "testing_1234-5678-dead-beef_tester_a_render_alerts",
+        r"src/alert_rules/a/b/foo.rule": "testing_1234-5678-dead-beef_tester_a_b_render_alerts",
+        r"src/alert_rules/../../proc/cpuinfo": "testing_1234-5678-dead-beef_tester_proc_render_alerts",
+        r"src/alert_rules/../../../sys/class/net": "testing_1234-5678-dead-beef_tester_sys_class_render_alerts",
+    }
+
+    def test_path_transformation(self):
+        topology = ProviderTopology.from_relation_data(
+            {
+                "model": "testing",
+                "model_uuid": "1234-5678-dead-beef",
+                "application": "tester",
+                "unit": "tester/0",
+            }
+        )
+
+        ar = AlertRules(topology)
+
+        for path, rename in self.PATHS.items():
+            val = ar._group_name(Path("src/alert_rules"), path, "render")
+            self.assertEqual(val, rename)
 
 
 class TestAlertRuleFormat(unittest.TestCase):

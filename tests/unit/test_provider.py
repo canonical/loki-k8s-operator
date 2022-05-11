@@ -1,12 +1,10 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import io
 import json
 import textwrap
 import unittest
-from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError, URLError
+from unittest.mock import patch
 
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
@@ -67,45 +65,32 @@ class FakeLokiCharm(CharmBase):
         requires:
           alertmanager:
             interface: alertmanager_dispatch
-        peers:
-          loki-peers:
-            interface: loki_peers
         """
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
+        self._container = self.unit.get_container("loki")
         self._port = 3100
-        self._container = type(
-            "FakeContainer",
-            (object,),
-            {
-                "make_dir": lambda *a, **kw: None,
-                "remove_path": lambda *a, **kw: None,
-                "can_connect": lambda *a, **kw: True,
-                "list_files": lambda *a, **kw: [],
-            },
-        )
-        self.ingress_per_unit = type(
-            "IngressPerUnitRequirer",
-            (object,),
-            {
-                "urls": None,
-            },
+        self.loki_provider = LokiPushApiProvider(
+            self,
+            address="10.0.0.1",
+            port=3100,
+            scheme="http",
+            path="/loki/api/v1/push",
         )
 
-        with patch("ops.testing._TestingPebbleClient.make_dir"):
-            self.loki_provider = LokiPushApiProvider(
-                self,
-                address="10.0.0.1",
-                port=3100,
-                scheme="http",
-                path="/loki/api/v1/push",
-            )
+        self.framework.observe(
+            self.loki_provider.on.loki_push_api_alert_rules_changed, self.alert_events
+        )
+        self._stored.set_default(events=[])
+
+    def alert_events(self, event):
+        self._stored.events.append({"relation": event.relation})
 
     @property
     def _loki_push_api(self) -> str:
-        loki_push_api = f"http://{self.hostname}:{self.charm._port}/loki/api/v1/push"
+        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
@@ -119,63 +104,76 @@ class FakeLokiCharm(CharmBase):
             self.model.name,
         )
 
-    @property
-    def external_url(self) -> str:
-        """Return the external hostname to be passed to ingress via the relation."""
-        return f"http://{self.hostname}:{self._port}"
-
 
 class TestLokiPushApiProvider(unittest.TestCase):
     def setUp(self):
         self.harness = Harness(FakeLokiCharm, meta=FakeLokiCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
-        self.harness.begin()
+        self.harness.begin_with_initial_hooks()
 
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._generate_alert_rules_files",
-        MagicMock(),
-    )
-    @patch(
-        "charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._remove_alert_rules_files",
-        MagicMock(),
-    )
-    @patch("urllib.request.urlopen")
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoint")
-    def test__on_logging_relation_changed(self, mock_endpoint, mock_urlopen):
-        mock_urlopen.return_value = True
-        with self.assertLogs(level="DEBUG") as logger:
-            expected_data = [
-                {"url": "http://loki0.endpoint/loki/api/v1/push"},
+    def test_relation_data(self):
+        self.harness.charm.app.name = "loki"
+        base_url = "http://loki-0.loki-endpoints.None.svc.cluster.local"
+        port = "3100"
+        url = "{}:{}".format(base_url, port)
+        path = "/loki/api/v1/push"
+        endpoint = "{}{}".format(url, path)
+        expected_value = {"url": endpoint}
+        self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoint(url))
+
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test__on_logging_relation_changed(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
+                }
             ]
+        }
+        mock_unit_ip.return_value = fake_network
+        rel_id = self.harness.add_relation("logging", "promtail")
+        self.harness.add_relation_unit(rel_id, "promtail/0")
 
-            mock_endpoint.return_value = expected_data
-            rel_id = self.harness.add_relation("logging", "promtail")
-            self.harness.add_relation_unit(rel_id, "promtail/0")
-            self.harness.update_relation_data(rel_id, "promtail", {"alert_rules": "ww"})
-            data = self.harness.get_relation_data(rel_id, self.harness.model.unit.name)
+        self.harness.update_relation_data(
+            rel_id, "promtail", {"alert_rules": json.dumps(ALERT_RULES)}
+        )
+        self.assertEqual(len(self.harness.charm._stored.events), 1)
 
-            self.assertTrue("endpoint" in data)
-            self.assertTrue(json.dumps(expected_data[0]) in data["endpoint"])
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test__on_logging_relation_created_and_broken(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
+        rel_id = self.harness.add_relation("logging", "promtail")
+        self.harness.add_relation_unit(rel_id, "promtail/0")
 
-            self.assertEqual(
-                logger.output[1],
-                "DEBUG:charms.loki_k8s.v0.loki_push_api:Saved alerts rules to disk",
-            )
-            self.assertEqual(
-                logger.output[2], "DEBUG:charms.loki_k8s.v0.loki_push_api:Checking alert rules: Ok"
-            )
+        self.harness.update_relation_data(
+            rel_id, "promtail", {"alert_rules": json.dumps(ALERT_RULES)}
+        )
+        self.assertEqual(len(self.harness.charm._stored.events), 1)
 
-    @patch("os.makedirs", MagicMock())
-    @patch("urllib.request.urlopen")
-    @patch("charms.loki_k8s.v0.loki_push_api.LokiPushApiProvider._endpoint")
-    def test_alerts(self, mock_endpoint, mock_urlopen):
-        mock_urlopen.return_value = True
-        expected_data = [
-            {"url": "http://loki0.endpoint/loki/api/v1/push"},
-        ]
+        self.harness.remove_relation(rel_id)
+        self.assertEqual(len(self.harness.charm._stored.events), 3)
 
-        mock_endpoint.return_value = expected_data
+    @patch("ops.testing._TestingModelBackend.network_get")
+    def test_alerts(self, mock_unit_ip):
+        fake_network = {
+            "bind-addresses": [
+                {
+                    "interface-name": "eth0",
+                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
+                }
+            ]
+        }
+        mock_unit_ip.return_value = fake_network
         rel_id = self.harness.add_relation("logging", "consumer")
         self.harness.update_relation_data(
             rel_id,
@@ -187,41 +185,6 @@ class TestLokiPushApiProvider(unittest.TestCase):
         )
         self.harness.add_relation_unit(rel_id, "consumer/0")
 
-        alerts = self.harness.charm.loki_provider.alerts()
+        alerts = self.harness.charm.loki_provider.alerts
         self.assertEqual(len(alerts), 1)
         self.assertDictEqual(list(alerts.values())[0]["groups"][0], ALERT_RULES["groups"][0])
-
-    @patch("urllib.request.urlopen")
-    def test__check_alert_rules_ok(self, mock_urlopen):
-        mock_urlopen.return_value = True
-        self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
-
-    @patch("urllib.request.urlopen")
-    def test__check_alert_rules_httperror_404_ok(self, mock_urlopen):
-        with patch("http.client.HTTPResponse") as mock_http_response:
-            msg = "no rule groups found"
-            mock_urlopen.side_effect = HTTPError(URL, 404, msg, {}, io.BytesIO(msg.encode()))  # type: ignore
-            mock_http_response.read.return_value = mock_urlopen.side_effect
-            self.assertTrue(self.harness.charm.loki_provider._check_alert_rules())
-
-    @patch("urllib.request.urlopen")
-    def test__check_alert_rules_httperror_404_error(self, mock_urlopen):
-        with patch("http.client.HTTPResponse") as mock_http_response:
-            msg = "404 page not found"
-            mock_urlopen.side_effect = HTTPError(URL, 404, msg, {}, io.BytesIO(msg.encode()))  # type: ignore
-            mock_http_response.read.return_value = mock_urlopen.side_effect
-            self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
-
-    @patch("urllib.request.urlopen")
-    def test__check_alert_rules_httperror_400(self, mock_urlopen):
-        with patch("http.client.HTTPResponse") as mock_http_response:
-            msg = "Bad Request"
-            mock_urlopen.side_effect = HTTPError(URL, 400, msg, {}, io.BytesIO(msg.encode()))  # type: ignore
-            mock_http_response.read.return_value = mock_urlopen.side_effect
-            self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
-
-    @patch("urllib.request.urlopen")
-    def test__check_alert_rules_urlerror(self, mock_urlopen):
-        mock_urlopen.side_effect = URLError("Unknown host")
-        # mock_http_response.read.return_value = mock_urlopen.side_effect
-        self.assertFalse(self.harness.charm.loki_provider._check_alert_rules())
