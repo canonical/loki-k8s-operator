@@ -5,6 +5,7 @@
 """A Integration tester charm for Loki Operator."""
 
 import logging
+from multiprocessing import Queue
 
 import logging_loki  # type: ignore
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, ProviderTopology
@@ -147,8 +148,8 @@ class LokiTesterCharm(CharmBase):
             loki_handlers.update(
                 {
                     "loki-{}".format(idx): {
-                        "handler": logging_loki.LokiHandler(
-                            url=endpoint["url"], version="1", tags=dict(tags)
+                        "handler": logging_loki.LokiQueueHandler(
+                            Queue(-1), url=endpoint["url"], version="1", tags=dict(tags)
                         ),
                         "level": logging.DEBUG,
                     }
