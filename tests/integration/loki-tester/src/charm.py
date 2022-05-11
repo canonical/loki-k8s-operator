@@ -64,7 +64,7 @@ class LokiTesterCharm(CharmBase):
         handlers = {v["handler"].name: v["handler"] for v in handlers_init.values()}
 
         # Check against logger.Manager and exclude "useless" values like logging.Placeholder
-        existing_handlers: dict[str, logging.Handler] = {k: v for v in logger.manager.loggerDict.items() if not isinstance(v, logging.PlaceHolder) and "loki" not in k}  # type: ignore
+        existing_handlers: dict[str, logging.Handler] = {k: v for k, v in logger.manager.loggerDict.items() if not isinstance(v, logging.PlaceHolder) and "loki" not in k}  # type: ignore
 
         if set(handlers.keys()) == set(existing_handlers.keys()):
             # Nothing to do
