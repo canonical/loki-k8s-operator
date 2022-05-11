@@ -239,16 +239,27 @@ class LokiOperatorCharm(CharmBase):
                 kvstore:
                   store: inmemory
 
+            storage_config:
+              boltdb:
+                directory: /loki/boltdb-shipper-active
+              filesystem:
+                directory: /loki/chunks
+
             schema_config:
               configs:
                 - from: 2020-10-24
-                  store: boltdb-shipper
+                  store: boltdb
                   object_store: filesystem
                   schema: v11
                   index:
                     prefix: index_
                     period: 24h
 
+            ingester:
+              wal:
+                enabled: true
+                dir: {os.path.join(LOKI_DIR, "chunks", "wal")}
+                flush_on_shutdown: true
             ruler:
               alertmanager_url: {self._alerting_config()}
         """
