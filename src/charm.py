@@ -74,10 +74,16 @@ class LokiOperatorCharm(CharmBase):
             charm=self,
             refresh_event=self.on.loki_pebble_ready,
             source_type="loki",
-            source_port=str(self._port),
+            source_url=self._external_url,
         )
         self._loki_server = LokiServer()
-        self.loki_provider = LokiPushApiProvider(self)
+        self.loki_provider = LokiPushApiProvider(
+            self,
+            address=external_url.hostname or self.hostname,
+            port=external_url.port or self._port,
+            scheme=external_url.scheme,
+            path=f"{external_url.path}/loki/api/v1/push",
+        )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
