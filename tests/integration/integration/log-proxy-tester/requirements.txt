@@ -1,0 +1,1 @@
+ops @ git+https://github.com/canonical/operator

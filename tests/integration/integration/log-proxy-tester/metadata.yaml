@@ -1,0 +1,23 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# For a complete list of supported options, see:
+# https://juju.is/docs/sdk/metadata-reference
+
+name: log-proxy-tester
+description: Fake log generator
+summary: NTA
+
+containers:
+  workload:
+    resource: workload-image
+
+resources:
+  workload-image:
+    type: oci-image
+    description: OCI image just so we have a pebble_ready etc.
+    upstream-source: ghcr.io/sed-i/flog:latest
+
+requires:
+  log-proxy:
+    interface: loki_push_api
