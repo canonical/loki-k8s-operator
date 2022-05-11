@@ -1,7 +1,0 @@
-alert: http-credentials-leaked_topo
-annotations:
-  message: "{{ $labels.job }} is leaking http basic auth credentials."
-expr: 'sum by (cluster, job, pod) (count_over_time({namespace="prod", %%juju_topology%%} |~ "http(s?)://(\\w+):(\\w+)@" [5m]) > 0)'
-for: 10m
-labels:
-  severity: critical
