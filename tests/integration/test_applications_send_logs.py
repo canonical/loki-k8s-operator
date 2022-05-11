@@ -106,7 +106,7 @@ async def test_scale_up_also_gets_logs(ops_test):
 async def test_logs_persist_after_upgrade(ops_test, loki_charm):
     counts_before_upgrade = {}
     for tester, query in tester_apps.items():
-        query = f"count_over_time({query}[10m])"
+        query = f"count_over_time({query}[30m])"
         counts_before_upgrade[tester] = await asyncio.gather(
             loki_api_query(ops_test, loki_app_name, query, unit_num=0),
             loki_api_query(ops_test, loki_app_name, query, unit_num=1),
@@ -121,16 +121,19 @@ async def test_logs_persist_after_upgrade(ops_test, loki_charm):
     assert await is_loki_up(ops_test, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on just to ensure we have logs
-    await ops_test.model.applications["loki-tester"].units[0].run_action(
-        "log-error", message="Error logged!"
+    action = (
+        await ops_test.model.applications["loki-tester"]
+        .units[0]
+        .run_action("log-error", message="Error logged!")
     )
+    (await action.wait()).results["message"]
     await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=60
+        apps=app_names, status="active", timeout=1000, idle_period=15
     )
 
     counts_after_upgrade = {}
     for tester, query in tester_apps.items():
-        query = f"count_over_time({query}[10m])"
+        query = f"count_over_time({query}[30m])"
         counts_after_upgrade[tester] = await asyncio.gather(
             loki_api_query(ops_test, loki_app_name, query, unit_num=0),
             loki_api_query(ops_test, loki_app_name, query, unit_num=1),
