@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2021 Canonical Ltd.
+# Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import asyncio
@@ -21,7 +21,7 @@ tester_resources = {
 }
 
 
-# WARNING: the Loki query API is very finicky about qhoting. It MUST be surrounded
+# WARNING: the Loki query API is very finicky about quoting. It MUST be surrounded
 # with single quotes and have double quotes inside, or the return code will be 400.
 #
 # Proceed with care
