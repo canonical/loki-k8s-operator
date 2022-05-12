@@ -1576,7 +1576,7 @@ class ConsumerBase(Object):
 
         for relation in self._charm.model.relations[self._relation_name]:
             for unit in relation.units:
-                if unit.app is self._charm.app:
+                if unit.app == self._charm.app:
                     # This is a peer unit
                     continue
 
@@ -1744,7 +1744,7 @@ class MultipleContainersFoundError(Exception):
 
 
 class PromtailDigestError(EventBase):
-    """Event emitted when there is an error with the Promtail binary file."""
+    """Event emitted when there is an error with Promtail initialization."""
 
     def __init__(self, handle, message):
         super().__init__(handle)
@@ -1879,15 +1879,23 @@ class LogProxyConsumer(ConsumerBase):
         if not self._container.can_connect():
             return
         if self.model.relations[self._relation_name]:
-            self._setup_promtail()
-        else:
+            if "promtail" not in self._container.get_plan().services:
+                self._setup_promtail()
+                return
+
             new_config = self._promtail_config
             if new_config != self._current_config:
                 self._container.push(
                     WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True
                 )
+
+            # Loki may send endpoints late. Don't necessarily start, there may be
+            # no clients
+            if new_config["clients"]:
                 self._container.restart(WORKLOAD_SERVICE_NAME)
                 self.on.log_proxy_endpoint_joined.emit()
+            else:
+                self.on.promtail_digest_error.emit("No promtail client endpoints available!")
 
     def _on_relation_departed(self, _: RelationEvent) -> None:
         """Event handler for `relation_departed`.
@@ -2289,24 +2297,24 @@ class LogProxyConsumer(ConsumerBase):
         if not promtail_binaries:
             return
 
-        if self._is_promtail_installed(promtail_binaries[self._arch]):
-            return
+        if not self._is_promtail_installed(promtail_binaries[self._arch]):
+            try:
+                self._obtain_promtail(promtail_binaries[self._arch])
+            except HTTPError as e:
+                msg = "Promtail binary couldn't be downloaded - {}".format(str(e))
+                logger.warning(msg)
+                self.on.promtail_digest_error.emit(msg)
+                return
+
+        workload_binary_path = os.path.join(
+            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
+        )
 
         self._create_directories()
         self._container.push(
             WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._promtail_config), make_dirs=True
         )
 
-        try:
-            self._obtain_promtail(promtail_binaries[self._arch])
-        except HTTPError as e:
-            msg = "Promtail binary couldn't be download - {}".format(str(e))
-            logger.warning(msg)
-            self.on.promtail_digest_error.emit(msg)
-
-        workload_binary_path = os.path.join(
-            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
-        )
         self._add_pebble_layer(workload_binary_path)
 
         if self._current_config.get("clients"):
@@ -2316,6 +2324,8 @@ class LogProxyConsumer(ConsumerBase):
                 self.on.promtail_digest_error.emit(str(e))
             else:
                 self.on.log_proxy_endpoint_joined.emit()
+        else:
+            self.on.promtail_digest_error.emit("No promtail client endpoints available!")
 
     def _is_promtail_installed(self, promtail_info: dict) -> bool:
         """Determine if promtail has already been installed to the container.

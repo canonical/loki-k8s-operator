@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 import pytest
-from helpers import loki_alerts, oci_image
+from helpers import loki_alerts, loki_api_query, oci_image
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +17,12 @@ tester_resources = {
     )
 }
 
-loki_app_name = "loki"
-tester_app_name = "log-proxy-tester"
-
 
 @pytest.mark.abort_on_fail
-async def test_alert_rules_do_fire(ops_test, loki_charm, log_proxy_tester_charm):
+async def test_alert_rules_do_fire_from_log_proxy(ops_test, loki_charm, log_proxy_tester_charm):
     """Test basic functionality of Log Proxy."""
+    loki_app_name = "loki"
+    tester_app_name = "log-proxy-tester"
     app_names = [loki_app_name, tester_app_name]
 
     await asyncio.gather(
@@ -40,12 +39,6 @@ async def test_alert_rules_do_fire(ops_test, loki_charm, log_proxy_tester_charm)
     )
     await ops_test.model.wait_for_idle(apps=app_names, status="active")
 
-    await ops_test.model.block_until(
-        lambda: (
-            len(ops_test.model.applications[loki_app_name].units) > 0
-            and len(ops_test.model.applications[tester_app_name].units) > 0
-        )
-    )
     await ops_test.model.add_relation(loki_app_name, tester_app_name)
     await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
 
@@ -57,3 +50,93 @@ async def test_alert_rules_do_fire(ops_test, loki_charm, log_proxy_tester_charm)
         for key in ["juju_application", "juju_model", "juju_model_uuid"]
         for alert in alerts
     )
+    await ops_test.model.applications[tester_app_name].remove()
+    await ops_test.model.block_until(
+        lambda: tester_app_name not in ops_test.model.applications, timeout=300
+    )
+
+
+@pytest.mark.abort_on_fail
+async def test_logproxy_file_logs(ops_test, log_proxy_tester_charm):
+    """Make sure Loki endpoints propagate on scaling."""
+    loki_app_name = "loki"
+    tester_app_name = "log-proxy-tester-file"
+
+    await ops_test.model.deploy(
+        log_proxy_tester_charm,
+        resources=tester_resources,
+        application_name=tester_app_name,
+    )
+    await ops_test.model.block_until(
+        lambda: (
+            len(ops_test.model.applications[loki_app_name].units) > 0
+            and len(ops_test.model.applications[tester_app_name].units) > 0
+        )
+    )
+    await ops_test.model.add_relation(loki_app_name, tester_app_name)
+    await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
+
+    logs = await loki_api_query(
+        ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",filename=~".+"}}'
+    )
+    assert len(logs[0]["values"]) > 0
+
+
+@pytest.mark.abort_on_fail
+async def test_logproxy_syslog_logs(ops_test, log_proxy_tester_charm):
+    """Make sure Loki endpoints propagate on scaling."""
+    loki_app_name = "loki"
+    tester_app_name = "log-proxy-tester-syslog"
+
+    await ops_test.model.deploy(
+        log_proxy_tester_charm,
+        resources=tester_resources,
+        application_name=tester_app_name,
+        config={"syslog": "true", "file_forwarding": "false"},
+    )
+    await ops_test.model.block_until(
+        lambda: (
+            len(ops_test.model.applications[loki_app_name].units) > 0
+            and len(ops_test.model.applications[tester_app_name].units) > 0
+        )
+    )
+    await ops_test.model.add_relation(loki_app_name, tester_app_name)
+    await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
+
+    logs = await loki_api_query(
+        ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",job=~".+syslog"}}'
+    )
+    assert len(logs[0]["values"]) > 0
+
+
+@pytest.mark.abort_on_fail
+async def test_logproxy_logs_to_file_and_syslog(ops_test, log_proxy_tester_charm):
+    """Make sure Loki endpoints propagate on scaling."""
+    loki_app_name = "loki"
+    tester_app_name = "log-proxy-tester-both"
+
+    await ops_test.model.deploy(
+        log_proxy_tester_charm,
+        resources=tester_resources,
+        application_name=tester_app_name,
+        config={
+            "syslog": "true",
+        },
+    )
+    await ops_test.model.block_until(
+        lambda: (
+            len(ops_test.model.applications[loki_app_name].units) > 0
+            and len(ops_test.model.applications[tester_app_name].units) > 0
+        )
+    )
+    await ops_test.model.add_relation(loki_app_name, tester_app_name)
+    await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
+
+    syslogs = await loki_api_query(
+        ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",job=~".+syslog"}}'
+    )
+    assert len(syslogs[0]["values"]) > 0
+    file_logs = await loki_api_query(
+        ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",filename=~".+"}}'
+    )
+    assert len(file_logs[0]["values"]) > 0
