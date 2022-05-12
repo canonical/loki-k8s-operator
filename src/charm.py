@@ -64,7 +64,6 @@ class LokiOperatorCharm(CharmBase):
         self._rules_dir = os.path.join(RULES_DIR, tenant_id)
 
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
-
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.ingress_per_unit = IngressPerUnitRequirer(
             self, relation_name="ingress", port=self._port
@@ -75,8 +74,10 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_url=self._external_url,
         )
+
         self._loki_server = LokiServer()
         parsed_external_url = urlparse(self._external_url)
+
         self.loki_provider = LokiPushApiProvider(
             self,
             address=parsed_external_url.hostname or self.hostname,
@@ -95,10 +96,7 @@ class LokiOperatorCharm(CharmBase):
             self.loki_provider.on.loki_push_api_alert_rules_changed,
             self._loki_push_api_alert_rules_changed,
         )
-        self.framework.observe(
-            self.on.logging_relation_changed,
-            self._on_logging_relation_changed,
-        )
+        self.framework.observe(self.on.logging_relation_changed, self._on_logging_relation_changed)
         self.framework.observe(self.ingress_per_unit.on.ingress_changed, self._on_ingress_changed)
 
     ##############################################
@@ -124,6 +122,67 @@ class LokiOperatorCharm(CharmBase):
         # If there is a change in logging relation, let's update Loki endpoint
         self.loki_provider.update_endpoint(url=self._external_url, relation=event.relation)
 
+    ##############################################
+    #                 PROPERTIES                 #
+    ##############################################
+
+    @property
+    def _loki_command(self):
+        """Construct command to launch Loki.
+
+        Returns:
+            a string consisting of Loki command and associated
+            command line options.
+        """
+        return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
+
+    @property
+    def _build_pebble_layer(self) -> Layer:
+        """Construct the pebble layer.
+
+        Returns:
+            a Pebble layer specification for the Loki workload container.
+        """
+        pebble_layer = Layer(
+            {
+                "summary": "Loki layer",
+                "description": "pebble config layer for Loki",
+                "services": {
+                    "loki": {
+                        "override": "replace",
+                        "summary": "loki",
+                        "command": self._loki_command,
+                        "startup": "enabled",
+                    },
+                },
+            }
+        )
+
+        return pebble_layer
+
+    @property
+    def hostname(self) -> str:
+        """Unit's hostname."""
+        return socket.getfqdn()
+
+    @property
+    def _external_url(self) -> str:
+        """Return the external hostname to be passed to ingress via the relation."""
+        if ingress_url := self.ingress_per_unit.url:
+            logger.debug("This unit's ingress URL: %s", ingress_url)
+            return ingress_url
+
+        # If we do not have an ingress, then use the pod ip as hostname.
+        # The reason to prefer this over the pod name (which is the actual
+        # hostname visible from the pod) or a K8s service, is that those
+        # are routable virtually exclusively inside the cluster (as they rely)
+        # on the cluster's DNS service, while the ip address is _sometimes_
+        # routable from the outside, e.g., when deploying on MicroK8s on Linux.
+        return f"http://{self.hostname}:{self._port}"
+
+    ##############################################
+    #             UTILITY METHODS                #
+    ##############################################
     def _configure(self):
         """Configure Loki charm."""
         restart = False
@@ -169,43 +228,6 @@ class LokiOperatorCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-    @property
-    def _loki_command(self):
-        """Construct command to launch Loki.
-
-        Returns:
-            a string consisting of Loki command and associated
-            command line options.
-        """
-        return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
-
-    @property
-    def _build_pebble_layer(self) -> Layer:
-        """Construct the pebble layer.
-
-        Returns:
-            a Pebble layer specification for the Loki workload container.
-        """
-        pebble_layer = Layer(
-            {
-                "summary": "Loki layer",
-                "description": "pebble config layer for Loki",
-                "services": {
-                    "loki": {
-                        "override": "replace",
-                        "summary": "loki",
-                        "command": self._loki_command,
-                        "startup": "enabled",
-                    },
-                },
-            }
-        )
-
-        return pebble_layer
-
-    ##############################################
-    #             UTILITY METHODS                #
-    ##############################################
     def _loki_ready(self) -> bool:
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
         try:
@@ -376,26 +398,6 @@ class LokiOperatorCharm(CharmBase):
                 self.unit.status = ActiveStatus()
                 logger.info("Clearing blocked status with successful alert rule check")
             return
-
-    @property
-    def hostname(self) -> str:
-        """Unit's hostname."""
-        return socket.getfqdn()
-
-    @property
-    def _external_url(self) -> str:
-        """Return the external hostname to be passed to ingress via the relation."""
-        if ingress_url := self.ingress_per_unit.url:
-            logger.debug("This unit's ingress URL: %s", ingress_url)
-            return ingress_url
-
-        # If we do not have an ingress, then use the pod ip as hostname.
-        # The reason to prefer this over the pod name (which is the actual
-        # hostname visible from the pod) or a K8s service, is that those
-        # are routable virtually exclusively inside the cluster (as they rely)
-        # on the cluster's DNS service, while the ip address is _sometimes_
-        # routable from the outside, e.g., when deploying on MicroK8s on Linux.
-        return f"http://{self.hostname}:{self._port}"
 
 
 if __name__ == "__main__":
