@@ -69,7 +69,6 @@ class LokiOperatorCharm(CharmBase):
         self.ingress_per_unit = IngressPerUnitRequirer(
             self, relation_name="ingress", port=self._port
         )
-        external_url = urlparse(self._external_url)
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
             refresh_event=self.on.loki_pebble_ready,
@@ -77,12 +76,13 @@ class LokiOperatorCharm(CharmBase):
             source_url=self._external_url,
         )
         self._loki_server = LokiServer()
+        parsed_external_url = urlparse(self._external_url)
         self.loki_provider = LokiPushApiProvider(
             self,
-            address=external_url.hostname or self.hostname,
-            port=external_url.port or self._port,
-            scheme=external_url.scheme,
-            path=f"{external_url.path}/loki/api/v1/push",
+            address=parsed_external_url.hostname or self.hostname,
+            port=parsed_external_url.port or self._port,
+            scheme=parsed_external_url.scheme,
+            path=f"{parsed_external_url.path}/loki/api/v1/push",
         )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
