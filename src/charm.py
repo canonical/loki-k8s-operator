@@ -95,6 +95,10 @@ class LokiOperatorCharm(CharmBase):
             self.loki_provider.on.loki_push_api_alert_rules_changed,
             self._loki_push_api_alert_rules_changed,
         )
+        self.framework.observe(
+            self.on.logging_relation_changed,
+            self._on_logging_relation_changed,
+        )
         self.framework.observe(self.ingress_per_unit.on.ingress_changed, self._on_ingress_changed)
 
     ##############################################
@@ -112,9 +116,13 @@ class LokiOperatorCharm(CharmBase):
     def _on_alertmanager_change(self, _):
         self._configure()
 
-    def _on_ingress_changed(self, event):
+    def _on_ingress_changed(self, _):
         self._configure()
         self.loki_provider.update_endpoint(url=self._external_url)
+
+    def _on_logging_relation_changed(self, event):
+        # If there is a change in logging relation, let's update Loki endpoint
+        self.loki_provider.update_endpoint(url=self._external_url, relation=event.relation)
 
     def _configure(self):
         """Configure Loki charm."""
