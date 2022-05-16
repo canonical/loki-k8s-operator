@@ -7,7 +7,7 @@ import json
 import logging
 
 import pytest
-from helpers import initial_workload_is_ready, is_loki_up, oci_image
+from helpers import is_loki_up, oci_image
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,6 @@ async def test_ingress_traefik_k8s(ops_test, loki_charm):
 
     apps = [loki_name, traefik_name]
     await ops_test.model.wait_for_idle(apps=apps, status="active")
-    assert initial_workload_is_ready(ops_test, apps)
     await is_loki_up(ops_test, loki_name, 0)
 
     await ops_test.model.add_relation(traefik_name, f"{loki_name}:ingress")
