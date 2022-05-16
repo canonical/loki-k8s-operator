@@ -172,7 +172,7 @@ class LokiOperatorCharm(CharmBase):
             logger.debug("This unit's ingress URL: %s", ingress_url)
             return ingress_url
 
-        # If we do not have an ingress, then use the pod ip as hostname.
+        # If we do not have an ingress, then use the pod hostname.
         # The reason to prefer this over the pod name (which is the actual
         # hostname visible from the pod) or a K8s service, is that those
         # are routable virtually exclusively inside the cluster (as they rely)
