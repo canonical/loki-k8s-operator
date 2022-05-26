@@ -1370,9 +1370,7 @@ class LokiPushApiProvider(Object):
             A boolean indicating whether an event should be emitted so we
             only emit one on lifecycle events
         """
-        relation.data[self._charm.unit]["public_address"] = (
-            str(self._charm.model.get_binding(relation).network.bind_address) or ""
-        )
+        relation.data[self._charm.unit]["public_address"] = socket.getfqdn() or ""
         self.update_endpoint(relation=relation)
         return self._should_update_alert_rules(relation)
 

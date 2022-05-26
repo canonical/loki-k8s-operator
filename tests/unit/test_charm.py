@@ -273,7 +273,7 @@ class TestConfigFile(unittest.TestCase):
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
         self.assertEqual(config["ruler"]["alertmanager_url"], None)
 
-    @patch_network_get(private_address="1.1.1.1")
+    @patch("socket.getfqdn", new=lambda *args: "fqdn")
     def test_instance_address_is_set_to_this_unit_ip(self):
         container = self.harness.charm.unit.get_container("loki")
 
@@ -295,7 +295,7 @@ class TestConfigFile(unittest.TestCase):
 
         # THEN the `instance_addr` property has the first unit's bind address
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["common"]["ring"]["instance_addr"], "1.1.1.1")
+        self.assertEqual(config["common"]["ring"]["instance_addr"], "fqdn")
 
 
 class TestPebblePlan(unittest.TestCase):
