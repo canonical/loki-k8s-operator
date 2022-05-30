@@ -45,7 +45,7 @@ requires:
     interface: alertmanager_dispatch
   ingress:
     interface: ingress_per_unit
-    limit: 1
+    limit: 1 # Since this is the ingress there is no point in having more than one.
 
 resources:
   loki-image:
