@@ -120,6 +120,8 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_logging_relation_changed(self, event):
         # If there is a change in logging relation, let's update Loki endpoint
+        # We are listening to relation_change to handle the Loki scale down to 0 and scale up again
+        # when it is related with ingress. If not, endpoints will end up outdated in consumer side.
         self.loki_provider.update_endpoint(url=self._external_url, relation=event.relation)
 
     ##############################################
