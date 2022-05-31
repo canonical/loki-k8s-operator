@@ -60,7 +60,9 @@ async def test_ingress_traefik_k8s_upscaling_loki(ops_test, loki_charm):
 
     scale = 3
     await ops_test.model.applications[loki_name].scale(scale=scale)
-    await ops_test.model.wait_for_idle(apps=[loki_name], status="active", wait_for_exact_units=scale)
+    await ops_test.model.wait_for_idle(
+        apps=[loki_name], status="active", wait_for_exact_units=scale
+    )
 
     result = await _retrieve_proxied_endpoints(ops_test, traefik_name)
 
