@@ -12,11 +12,6 @@ from helpers import is_loki_up, oci_image
 logger = logging.getLogger(__name__)
 
 
-class AddressNotFoundError(Exception):
-    def __init__(self, message):
-        super().__init__(message)
-
-
 @pytest.mark.abort_on_fail
 async def test_ingress_traefik_k8s(ops_test, loki_charm):
     """Test that Loki can be related with the Grafana Agent over remote_write."""
