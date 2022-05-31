@@ -62,18 +62,14 @@ async def test_ingress_traefik_k8s_upscaling_loki(ops_test, loki_charm):
     await ops_test.model.wait_for_idle(apps=[loki_name], status="active", wait_for_exact_units=3)
 
     result = await _retrieve_proxied_endpoints(ops_test, traefik_name)
+    scale = 3
 
-    assert f"{loki_name}/0" in result and f"{loki_name}/1" in result and f"{loki_name}/2" in result
-    assert result[f"{loki_name}/0"] == {
-        "url": f"http://foo.bar:80/{ops_test.model_name}-{loki_name}-0"
-    }
-    assert result[f"{loki_name}/1"] == {
-        "url": f"http://foo.bar:80/{ops_test.model_name}-{loki_name}-1"
-    }
-    assert result[f"{loki_name}/2"] == {
-        "url": f"http://foo.bar:80/{ops_test.model_name}-{loki_name}-2"
-    }
-    assert len(result) == 3
+    for u in range(scale):
+        assert f"{loki_name}/{u}" in result
+        assert result[f"{loki_name}/{u}"] == {
+            "url": f"http://foo.bar:80/{ops_test.model_name}-{loki_name}-{u}"
+        }
+    assert len(result) == scale
 
 
 @pytest.mark.abort_on_fail
