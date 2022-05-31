@@ -62,7 +62,7 @@ async def test_ingress_traefik_k8s(ops_test, loki_charm):
 async def test_ingress_traefik_k8s_upscaling_loki(ops_test, loki_charm):
     loki_name = "loki"
     traefik_name = "traefik-ingress"
-    apps = [loki_name, traefik_name]
+
     await ops_test.model.applications[loki_name].scale(scale=3)
     await ops_test.model.wait_for_idle(apps=[loki_name], status="active", wait_for_exact_units=3)
 
