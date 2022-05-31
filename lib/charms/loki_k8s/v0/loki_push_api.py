@@ -451,7 +451,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union, cast
 from urllib import request
 from urllib.error import HTTPError
-from urllib.parse import urljoin
 
 import yaml
 from ops.charm import (
@@ -1444,7 +1443,7 @@ class LokiPushApiProvider(Object):
         Returns: str
         """
         endpoint = "/loki/api/v1/push"
-        return {"url": urljoin(url, endpoint)}
+        return {"url": url.rstrip("/") + endpoint}
 
     @property
     def alerts(self) -> dict:

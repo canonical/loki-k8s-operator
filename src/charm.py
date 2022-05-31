@@ -14,9 +14,11 @@ develop a new k8s charm using the Operator Framework:
 
 import logging
 import os
+import socket
 import textwrap
 from urllib import request
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
@@ -26,6 +28,7 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiProvider,
 )
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
+from charms.traefik_k8s.v0.ingress_per_unit import IngressPerUnitRequirer
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -61,16 +64,27 @@ class LokiOperatorCharm(CharmBase):
         self._rules_dir = os.path.join(RULES_DIR, tenant_id)
 
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
-
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
+        self.ingress_per_unit = IngressPerUnitRequirer(
+            self, relation_name="ingress", port=self._port
+        )
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
             refresh_event=self.on.loki_pebble_ready,
             source_type="loki",
-            source_port=str(self._port),
+            source_url=self._external_url,
         )
+
         self._loki_server = LokiServer()
-        self.loki_provider = LokiPushApiProvider(self)
+        parsed_external_url = urlparse(self._external_url)
+
+        self.loki_provider = LokiPushApiProvider(
+            self,
+            address=parsed_external_url.hostname or self.hostname,
+            port=parsed_external_url.port or self._port,
+            scheme=parsed_external_url.scheme,
+            path=f"{parsed_external_url.path}/loki/api/v1/push",
+        )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -82,6 +96,8 @@ class LokiOperatorCharm(CharmBase):
             self.loki_provider.on.loki_push_api_alert_rules_changed,
             self._loki_push_api_alert_rules_changed,
         )
+        self.framework.observe(self.on.logging_relation_changed, self._on_logging_relation_changed)
+        self.framework.observe(self.ingress_per_unit.on.ingress_changed, self._on_ingress_changed)
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
@@ -98,6 +114,77 @@ class LokiOperatorCharm(CharmBase):
     def _on_alertmanager_change(self, _):
         self._configure()
 
+    def _on_ingress_changed(self, _):
+        self._configure()
+        self.loki_provider.update_endpoint(url=self._external_url)
+
+    def _on_logging_relation_changed(self, event):
+        # If there is a change in logging relation, let's update Loki endpoint
+        # We are listening to relation_change to handle the Loki scale down to 0 and scale up again
+        # when it is related with ingress. If not, endpoints will end up outdated in consumer side.
+        self.loki_provider.update_endpoint(url=self._external_url, relation=event.relation)
+
+    ##############################################
+    #                 PROPERTIES                 #
+    ##############################################
+
+    @property
+    def _loki_command(self):
+        """Construct command to launch Loki.
+
+        Returns:
+            a string consisting of Loki command and associated
+            command line options.
+        """
+        return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
+
+    @property
+    def _build_pebble_layer(self) -> Layer:
+        """Construct the pebble layer.
+
+        Returns:
+            a Pebble layer specification for the Loki workload container.
+        """
+        pebble_layer = Layer(
+            {
+                "summary": "Loki layer",
+                "description": "pebble config layer for Loki",
+                "services": {
+                    "loki": {
+                        "override": "replace",
+                        "summary": "loki",
+                        "command": self._loki_command,
+                        "startup": "enabled",
+                    },
+                },
+            }
+        )
+
+        return pebble_layer
+
+    @property
+    def hostname(self) -> str:
+        """Unit's hostname."""
+        return socket.getfqdn()
+
+    @property
+    def _external_url(self) -> str:
+        """Return the external hostname to be passed to ingress via the relation."""
+        if ingress_url := self.ingress_per_unit.url:
+            logger.debug("This unit's ingress URL: %s", ingress_url)
+            return ingress_url
+
+        # If we do not have an ingress, then use the pod hostname.
+        # The reason to prefer this over the pod name (which is the actual
+        # hostname visible from the pod) or a K8s service, is that those
+        # are routable virtually exclusively inside the cluster (as they rely)
+        # on the cluster's DNS service, while the ip address is _sometimes_
+        # routable from the outside, e.g., when deploying on MicroK8s on Linux.
+        return f"http://{self.hostname}:{self._port}"
+
+    ##############################################
+    #             UTILITY METHODS                #
+    ##############################################
     def _configure(self):
         """Configure Loki charm."""
         restart = False
@@ -143,43 +230,6 @@ class LokiOperatorCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-    @property
-    def _loki_command(self):
-        """Construct command to launch Loki.
-
-        Returns:
-            a string consisting of Loki command and associated
-            command line options.
-        """
-        return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
-
-    @property
-    def _build_pebble_layer(self) -> Layer:
-        """Construct the pebble layer.
-
-        Returns:
-            a Pebble layer specification for the Loki workload container.
-        """
-        pebble_layer = Layer(
-            {
-                "summary": "Loki layer",
-                "description": "pebble config layer for Loki",
-                "services": {
-                    "loki": {
-                        "override": "replace",
-                        "summary": "loki",
-                        "command": self._loki_command,
-                        "startup": "enabled",
-                    },
-                },
-            }
-        )
-
-        return pebble_layer
-
-    ##############################################
-    #             UTILITY METHODS                #
-    ##############################################
     def _loki_ready(self) -> bool:
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
         try:

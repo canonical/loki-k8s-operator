@@ -275,3 +275,19 @@ async def juju_show_unit(
 
     # Return the dict without the top-level key (which is the unit itself)
     return yaml.safe_load(stdout)[unit_name]
+
+
+def initial_workload_is_ready(ops_test, app_names) -> bool:
+    """Checks that the initial workload (ie. x/0) is ready.
+
+    Args:
+        ops_test: pytest-operator plugin
+        app_names: array of application names to check for
+
+    Returns:
+        whether the workloads are active or not
+    """
+    return all(
+        ops_test.model.applications[name].units[0].workload_status == "active"
+        for name in app_names
+    )

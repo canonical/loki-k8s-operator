@@ -65,6 +65,9 @@ async def test_loki_scales_up(ops_test):
     app_names = [loki_app_name, tester_app_name]
 
     await ops_test.model.applications[loki_app_name].scale(scale=3)
+    await ops_test.model.wait_for_idle(
+        apps=[loki_app_name], status="active", wait_for_exact_units=3
+    )
     await ops_test.model.wait_for_idle(apps=app_names, status="active")
     assert await is_loki_up(ops_test, loki_app_name, num_units=3)
 
