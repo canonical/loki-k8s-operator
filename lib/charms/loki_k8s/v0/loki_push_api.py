@@ -1387,19 +1387,6 @@ class LokiPushApiProvider(Object):
 
         return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
 
-    @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        bind_address = ""
-        if self._charm.model.relations[self._relation_name]:
-            relation = self._charm.model.relations[self._relation_name][0]
-            bind_address = relation.data[self._charm.unit].get("public_address", "")
-
-        if bind_address:
-            return str(bind_address)
-        logger.warning("No address found")
-        return ""
-
     def update_endpoint(self, url: str = None, relation: Relation = None) -> None:
         """Triggers programmatically the update of endpoint in unit relation data.
 
