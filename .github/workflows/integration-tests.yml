@@ -18,5 +18,6 @@ jobs:
         with:
           juju-channel: 2.9/edge
           provider: microk8s
+          bootstrap-options: "--agent-version 2.9.29"
       - name: Run integration tests
         run: tox -vve integration
