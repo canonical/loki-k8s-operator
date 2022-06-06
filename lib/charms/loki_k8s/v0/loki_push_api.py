@@ -476,7 +476,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 10
+LIBPATCH = 11
 
 logger = logging.getLogger(__name__)
 
@@ -1370,9 +1370,7 @@ class LokiPushApiProvider(Object):
             A boolean indicating whether an event should be emitted so we
             only emit one on lifecycle events
         """
-        relation.data[self._charm.unit]["public_address"] = (
-            str(self._charm.model.get_binding(relation).network.bind_address) or ""
-        )
+        relation.data[self._charm.unit]["public_address"] = socket.getfqdn() or ""
         self.update_endpoint(relation=relation)
         return self._should_update_alert_rules(relation)
 
@@ -1388,19 +1386,6 @@ class LokiPushApiProvider(Object):
             promtail_binaries[arch] = info
 
         return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
-
-    @property
-    def unit_ip(self) -> str:
-        """Returns unit's IP."""
-        bind_address = ""
-        if self._charm.model.relations[self._relation_name]:
-            relation = self._charm.model.relations[self._relation_name][0]
-            bind_address = relation.data[self._charm.unit].get("public_address", "")
-
-        if bind_address:
-            return str(bind_address)
-        logger.warning("No address found")
-        return ""
 
     def update_endpoint(self, url: str = None, relation: Relation = None) -> None:
         """Triggers programmatically the update of endpoint in unit relation data.

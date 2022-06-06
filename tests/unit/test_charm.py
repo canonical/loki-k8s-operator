@@ -9,10 +9,8 @@ from io import BytesIO
 from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 
-import ops
 import ops.testing
 import yaml
-from helpers import patch_network_get
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
@@ -219,8 +217,8 @@ class TestWorkloadUnavailable(unittest.TestCase):
 class TestConfigFile(unittest.TestCase):
     """Feature: Loki config file in the workload container is rendered by the charm."""
 
-    @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
+    @patch("socket.getfqdn", new=lambda *args: "fqdn")
     def setUp(self):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
@@ -273,15 +271,15 @@ class TestConfigFile(unittest.TestCase):
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
         self.assertEqual(config["ruler"]["alertmanager_url"], None)
 
-    @patch_network_get(private_address="1.1.1.1")
+    @patch("socket.getfqdn", new=lambda *args: "fqdn")
     def test_instance_address_is_set_to_this_unit_ip(self):
         container = self.harness.charm.unit.get_container("loki")
 
         # WHEN no units are related over the logging relation
 
-        # THEN the `instance_addr` property is blank (`yaml.safe_load` converts blanks to None)
+        # THEN the `instance_addr` property has the fqdn
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["common"]["ring"]["instance_addr"], None)
+        self.assertEqual(config["common"]["ring"]["instance_addr"], "fqdn")
 
         # WHEN logging units join
         self.log_rel_id = self.harness.add_relation("logging", "logging-app")
@@ -293,9 +291,9 @@ class TestConfigFile(unittest.TestCase):
 
         self.harness.charm.on.config_changed.emit()
 
-        # THEN the `instance_addr` property has the first unit's bind address
+        # THEN the `instance_addr` property has the fqdn
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["common"]["ring"]["instance_addr"], "1.1.1.1")
+        self.assertEqual(config["common"]["ring"]["instance_addr"], "fqdn")
 
 
 class TestPebblePlan(unittest.TestCase):
@@ -305,7 +303,6 @@ class TestPebblePlan(unittest.TestCase):
     """
 
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    @patch_network_get(private_address="1.1.1.1")
     def test_loki_starts_when_cluster_deployed_without_any_relations(self):
         """Scenario: A loki cluster is deployed without any relations."""
         is_leader = True
@@ -343,7 +340,6 @@ class TestPebblePlan(unittest.TestCase):
 class TestDelayedPebbleReady(unittest.TestCase):
     """Feature: Charm code must be resilient to any (reasonable) order of startup event firing."""
 
-    @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
@@ -421,7 +417,6 @@ class TestAppRelationData(unittest.TestCase):
     """
 
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    @patch_network_get(private_address="1.1.1.1")
     def setUp(self) -> None:
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
@@ -461,7 +456,6 @@ class TestAppRelationData(unittest.TestCase):
 class TestAlertRuleBlockedStatus(unittest.TestCase):
     """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
 
-    @patch_network_get(private_address="1.1.1.1")
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
