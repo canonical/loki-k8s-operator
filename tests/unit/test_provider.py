@@ -105,7 +105,11 @@ class FakeLokiCharm(CharmBase):
         )
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestLokiPushApiProvider(unittest.TestCase):
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     def setUp(self):
         self.harness = Harness(FakeLokiCharm, meta=FakeLokiCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)

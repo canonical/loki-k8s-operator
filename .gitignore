@@ -8,3 +8,4 @@ venv
 .tox
 tests/integration/loki-tester/lib/charms/
 tests/integration/log-proxy-tester/lib/charms/
+cos-tool*

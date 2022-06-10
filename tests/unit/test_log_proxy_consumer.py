@@ -140,9 +140,12 @@ class ConsumerCharmWithPromtailResource(CharmBase):
         )
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestLogProxyConsumer(unittest.TestCase):
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     def setUp(self):
-
         self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
         self.harness.set_model_info(name="MODEL", uuid="123456")
         self.addCleanup(self.harness.cleanup)
@@ -268,7 +271,11 @@ class TestLogProxyConsumer(unittest.TestCase):
         self.assertEqual(self.harness.charm.log_proxy._current_config, {})
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     def setUp(self):
 
         self.harness = Harness(ConsumerCharmSyslogDisabled, meta=ConsumerCharm.metadata_yaml)
@@ -287,9 +294,12 @@ class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
         )
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestLogProxyConsumerWithPromtailResource(unittest.TestCase):
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     def setUp(self):
-
         self.harness = Harness(
             ConsumerCharmWithPromtailResource, meta=ConsumerCharmWithPromtailResource.metadata_yaml
         )

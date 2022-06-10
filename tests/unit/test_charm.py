@@ -453,9 +453,13 @@ class TestAppRelationData(unittest.TestCase):
         self.assertTrue(url.startswith("http"))
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestAlertRuleBlockedStatus(unittest.TestCase):
     """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
 
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint

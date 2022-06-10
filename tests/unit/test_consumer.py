@@ -6,13 +6,11 @@ import os
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import (
-    AlertRules,
-    LokiPushApiConsumer,
-    ProviderTopology,
-)
+from charms.loki_k8s.v0.loki_push_api import AlertRules, LokiPushApiConsumer
+from charms.observability_libs.v0.juju_topology import JujuTopology
 from fs.tempfs import TempFS
 from helpers import TempFolderSandbox
 from ops.charm import CharmBase
@@ -87,7 +85,11 @@ class FakeConsumerCharm(CharmBase):
         return "10.1.2.3"
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestLokiPushApiConsumer(unittest.TestCase):
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     def setUp(self):
         self.harness = Harness(FakeConsumerCharm, meta=FakeConsumerCharm.metadata_yaml)
         self.addCleanup(self.harness.cleanup)
@@ -175,6 +177,7 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.endpoint_events, 2)
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestReloadAlertRules(unittest.TestCase):
     """Feature: Consumer charm can manually invoke reloading of alerts.
 
@@ -188,6 +191,9 @@ class TestReloadAlertRules(unittest.TestCase):
     # use a short-form free-standing alert, for brevity
     ALERT = yaml.safe_dump({"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5"})
 
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     def setUp(self):
         # override the default ordering, since each of these steps depends on the
         # state of the previous test
@@ -305,6 +311,7 @@ class TestReloadAlertRules(unittest.TestCase):
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestAlertRuleNaming(unittest.TestCase):
     """AlertRules should return sanitized names for any given relative path.
 
@@ -314,15 +321,15 @@ class TestAlertRuleNaming(unittest.TestCase):
     """
 
     PATHS = {
-        r"src/alert_rules/foo.rule": "testing_1234-5678-dead-beef_tester_render_alerts",
-        r"src/alert_rules/a/foo.rule": "testing_1234-5678-dead-beef_tester_a_render_alerts",
-        r"src/alert_rules/a/b/foo.rule": "testing_1234-5678-dead-beef_tester_a_b_render_alerts",
-        r"src/alert_rules/../../proc/cpuinfo": "testing_1234-5678-dead-beef_tester_proc_render_alerts",
-        r"src/alert_rules/../../../sys/class/net": "testing_1234-5678-dead-beef_tester_sys_class_render_alerts",
+        r"src/alert_rules/foo.rule": "testing_1234-567_tester_render_alerts",
+        r"src/alert_rules/a/foo.rule": "testing_1234-567_tester_a_render_alerts",
+        r"src/alert_rules/a/b/foo.rule": "testing_1234-567_tester_a_b_render_alerts",
+        r"src/alert_rules/../../proc/cpuinfo": "testing_1234-567_tester_proc_render_alerts",
+        r"src/alert_rules/../../../sys/class/net": "testing_1234-567_tester_sys_class_render_alerts",
     }
 
     def test_path_transformation(self):
-        topology = ProviderTopology.from_relation_data(
+        topology = JujuTopology.from_dict(
             {
                 "model": "testing",
                 "model_uuid": "1234-5678-dead-beef",
@@ -338,6 +345,7 @@ class TestAlertRuleNaming(unittest.TestCase):
             self.assertEqual(val, rename)
 
 
+@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestAlertRuleFormat(unittest.TestCase):
     """Feature: Consumer lib should warn when encountering invalid rules files.
 
@@ -350,6 +358,9 @@ class TestAlertRuleFormat(unittest.TestCase):
 
     NO_ALERTS = json.dumps({})  # relation data representation for the case of "no alerts"
 
+    @patch(
+        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
+    )
     def setUp(self):
         self.sandbox = TempFS("consumer_rule_files", auto_clean=True)
         self.addCleanup(self.sandbox.close)
@@ -380,6 +391,7 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
 
         self.peer_rel_id = self.harness.add_relation("replicas", self.harness.model.app.name)
+        self.harness.set_model_name("dead-beef")
         self.harness.set_leader(True)
 
         self.rel_id = self.harness.add_relation(relation_name="logging", remote_app="loki")
@@ -435,7 +447,7 @@ class TestAlertRuleFormat(unittest.TestCase):
                     "rules": [
                         {
                             "alert": "alert_on_error",
-                            "expr": 'rate({%%juju_topology%%}|="ERROR"[5m]) > 0',
+                            "expr": 'rate({%%juju_topology%%} |= "ERROR" [5m]) > 0',
                             "for": "1m",
                             "labels": {
                                 "severity": "critical",
@@ -469,7 +481,7 @@ class TestAlertRuleFormat(unittest.TestCase):
                     "rules": [
                         {
                             "alert": "alert_on_error",
-                            "expr": 'rate({%%juju_topology%%, juju_unit="app/0"}|="ERROR"[5m]) > 0',
+                            "expr": 'rate({%%juju_topology%%, juju_unit="app/0"} |= "ERROR" [5m]) > 0',
                             "for": "1m",
                             "labels": {
                                 "severity": "critical",
