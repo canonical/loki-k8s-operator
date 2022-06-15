@@ -156,6 +156,11 @@ This Loki charm interacts with its clients using the Loki charm library. Charms
 seeking to send log to Loki, must do so using the `LokiPushApiConsumer` object from
 this charm library.
 
+> **NOTE**: `LokiPushApiConsumer` also depends on an additional charm library.
+>
+> Ensure sure you `charmcraft fetch-lib charms.observability_libs.v0.juju_topology`
+> when using this library.
+
 For the simplest use cases, using the `LokiPushApiConsumer` object only requires
 instantiating it, typically in the constructor of your charm (the one which
 sends logs).
