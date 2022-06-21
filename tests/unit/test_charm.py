@@ -22,7 +22,7 @@ ops.testing.SIMULATE_CAN_CONNECT = True
 
 METADATA = {
     "model": "consumer-model",
-    "model_uuid": "qwerty-1234",
+    "model_uuid": "20ce8299-3634-4bef-8bd8-5ace6c8816b4",
     "application": "promtail",
     "charm_name": "charm-k8s",
 }

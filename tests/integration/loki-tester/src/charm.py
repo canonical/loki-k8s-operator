@@ -8,7 +8,8 @@ import logging
 from multiprocessing import Queue
 
 import logging_loki  # type: ignore
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer, ProviderTopology
+from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+from charms.observability_libs.v0.juju_topology import JujuTopology
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
@@ -34,7 +35,7 @@ class LokiTesterCharm(CharmBase):
             self._on_loki_push_api_endpoint_departed,
         )
 
-        self.topology = ProviderTopology.from_charm(self)
+        self.topology = JujuTopology.from_charm(self)
         self.unit.status = ActiveStatus()
 
     def _setup_logging(self, handlers_init: dict = None) -> None:
@@ -139,7 +140,7 @@ class LokiTesterCharm(CharmBase):
             self._setup_logging({})
             return
 
-        tags = self.topology.as_promql_label_dict()
+        tags = self.topology.label_matcher_dict
         log_endpoints = self._loki_consumer.loki_endpoints
 
         loki_handlers = {}

@@ -35,21 +35,21 @@ CONFIG = {
                 {
                     "targets": ["localhost"],
                     "labels": {
-                        "job": "juju_MODEL_123456_loki-k8s",
+                        "job": "juju_MODEL_20ce829_loki-k8s",
                         "__path__": "/var/log/apache2/access.log",
                     },
                 },
                 {
                     "targets": ["localhost"],
                     "labels": {
-                        "job": "juju_MODEL_123456_loki-k8s",
+                        "job": "juju_MODEL_20ce829_loki-k8s",
                         "__path__": "/var/log/alternatives.log",
                     },
                 },
                 {
                     "targets": ["localhost"],
                     "labels": {
-                        "job": "juju_MODEL_123456_loki-k8s",
+                        "job": "juju_MODEL_20ce829_loki-k8s",
                         "__path__": "/var/log/test.log",
                     },
                 },
@@ -142,9 +142,8 @@ class ConsumerCharmWithPromtailResource(CharmBase):
 
 class TestLogProxyConsumer(unittest.TestCase):
     def setUp(self):
-
         self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
-        self.harness.set_model_info(name="MODEL", uuid="123456")
+        self.harness.set_model_info(name="MODEL", uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4")
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
@@ -272,7 +271,7 @@ class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
     def setUp(self):
 
         self.harness = Harness(ConsumerCharmSyslogDisabled, meta=ConsumerCharm.metadata_yaml)
-        self.harness.set_model_info(name="MODEL", uuid="123456")
+        self.harness.set_model_info(name="MODEL", uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4")
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin()
@@ -289,11 +288,10 @@ class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
 
 class TestLogProxyConsumerWithPromtailResource(unittest.TestCase):
     def setUp(self):
-
         self.harness = Harness(
             ConsumerCharmWithPromtailResource, meta=ConsumerCharmWithPromtailResource.metadata_yaml
         )
-        self.harness.set_model_info(name="MODEL", uuid="123456")
+        self.harness.set_model_info(name="MODEL", uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4")
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()

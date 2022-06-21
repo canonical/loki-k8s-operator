@@ -156,6 +156,11 @@ This Loki charm interacts with its clients using the Loki charm library. Charms
 seeking to send log to Loki, must do so using the `LokiPushApiConsumer` object from
 this charm library.
 
+> **NOTE**: `LokiPushApiConsumer` also depends on an additional charm library.
+>
+> Ensure sure you `charmcraft fetch-lib charms.observability_libs.v0.juju_topology`
+> when using this library.
+
 For the simplest use cases, using the `LokiPushApiConsumer` object only requires
 instantiating it, typically in the constructor of your charm (the one which
 sends logs).
@@ -441,18 +446,21 @@ import os
 import platform
 import re
 import socket
+import subprocess
+import tempfile
 import typing
-from collections import OrderedDict
+import uuid
 from copy import deepcopy
 from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, List, Optional, Union, cast
+from typing import Dict, List, Optional, Tuple, Union, cast
 from urllib import request
 from urllib.error import HTTPError
 
 import yaml
+from charms.observability_libs.v0.juju_topology import JujuTopology
 from ops.charm import (
     CharmBase,
     HookEvent,
@@ -617,205 +625,6 @@ def _validate_relation_by_interface_and_direction(
         raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
 
-class JujuTopology:
-    """Class for storing and formatting juju topology information."""
-
-    STUB = "%%juju_topology%%"
-
-    def __new__(cls, *args, **kwargs):
-        """Reject instantiation of a base JujuTopology class. Children only."""
-        if cls is JujuTopology:
-            raise TypeError("only children of '{}' may be instantiated".format(cls.__name__))
-        return object.__new__(cls)
-
-    def __init__(
-        self,
-        model: str,
-        model_uuid: str,
-        application: str,
-        unit: Optional[str] = "",
-        charm_name: Optional[str] = "",
-    ):
-        """Build a JujuTopology object.
-
-        A `JujuTopology` object is used for storing and transforming
-        Juju Topology information. This information is used to
-        annotate Prometheus scrape jobs and alert rules. Such
-        annotation when applied to scrape jobs helps in identifying
-        the source of the scrapped metrics. On the other hand when
-        applied to alert rules topology information ensures that
-        evaluation of alert expressions is restricted to the source
-        (charm) from which the alert rules were obtained.
-
-        Args:
-            model: a string name of the Juju model
-            model_uuid: a globally unique string identifier for the Juju model
-            application: an application name as a string
-            unit: a unit name as a string
-            charm_name: name of charm as a string
-
-        Note:
-            `JujuTopology` should not be constructed directly by charm code. Please
-            use `ProviderTopology` or `AggregatorTopology`.
-        """
-        self.model = model
-        self.model_uuid = model_uuid
-        self.application = application
-        self.charm_name = charm_name
-        self.unit = unit
-
-    @classmethod
-    def from_charm(cls, charm):
-        """Factory method for creating `JujuTopology` children from a given charm.
-
-        Args:
-            charm: a `CharmBase` object for which the `JujuTopology` has to be constructed
-
-        Returns:
-            a `JujuTopology` object.
-        """
-        return cls(
-            model=charm.model.name,
-            model_uuid=charm.model.uuid,
-            application=charm.model.app.name,
-            unit=charm.model.unit.name,
-            charm_name=charm.meta.name,
-        )
-
-    @classmethod
-    def from_relation_data(cls, data: dict):
-        """Factory method for creating `JujuTopology` children from a dictionary.
-
-        Args:
-            data: a dictionary with four keys providing topology information. The keys are
-                - "model"
-                - "model_uuid"
-                - "application"
-                - "unit"
-                - "charm_name"
-
-                `unit` and `charm_name` may be empty, but will result in more limited
-                labels. However, this allows us to support payload-only charms.
-
-        Returns:
-            a `JujuTopology` object.
-        """
-        return cls(
-            model=data["model"],
-            model_uuid=data["model_uuid"],
-            application=data["application"],
-            unit=data.get("unit", ""),
-            charm_name=data.get("charm_name", ""),
-        )
-
-    @property
-    def identifier(self) -> str:
-        """Format the topology information into a terse string."""
-        # This is odd, but may have `None` as a model key
-        return "_".join([str(val) for val in self.as_promql_label_dict().values()]).replace(
-            "/", "_"
-        )
-
-    @property
-    def promql_labels(self) -> str:
-        """Format the topology information into a verbose string."""
-        return ", ".join(
-            ['{}="{}"'.format(key, value) for key, value in self.as_promql_label_dict().items()]
-        )
-
-    def as_dict(self, rename_keys: Optional[Dict[str, str]] = None) -> OrderedDict:
-        """Format the topology information into a dict.
-
-        Use an OrderedDict so we can rely on the insertion order on Python 3.5 (and 3.6,
-        which still does not guarantee it).
-
-        Args:
-            rename_keys: A dictionary mapping old key names to new key names, which will
-                be substituted when invoked.
-        """
-        ret = OrderedDict(
-            [
-                ("model", self.model),
-                ("model_uuid", self.model_uuid),
-                ("application", self.application),
-                ("unit", self.unit),
-                ("charm_name", self.charm_name),
-            ]
-        )
-
-        ret["unit"] or ret.pop("unit")
-        ret["charm_name"] or ret.pop("charm_name")
-
-        # If a key exists in `rename_keys`, replace the value
-        if rename_keys:
-            ret = OrderedDict(
-                (rename_keys.get(k), v) if rename_keys.get(k) else (k, v) for k, v in ret.items()  # type: ignore
-            )
-
-        return ret
-
-    def as_label_dict(self):
-        """Format the topology information into a dict with keys having 'juju_' as prefix."""
-        vals = {
-            "juju_{}".format(key): val
-            for key, val in self.as_dict(rename_keys={"charm_name": "charm"}).items()
-        }
-        return vals
-
-    def as_promql_label_dict(self):
-        """Format the topology information into a dict with keys having 'juju_' as prefix."""
-        vals = self.as_label_dict()
-        # The leader is the only unit that sets alert rules, if "juju_unit" is present,
-        # then the rules will only be evaluated for that unit
-        if "juju_unit" in vals:
-            vals.pop("juju_unit")
-
-        return vals
-
-    def render(self, template: str):
-        """Render a juju-topology template string with topology info."""
-        return template.replace(JujuTopology.STUB, self.promql_labels)
-
-
-class AggregatorTopology(JujuTopology):
-    """Class for initializing topology information for MetricsEndpointAggregator."""
-
-    @classmethod
-    def create(
-        cls, model: str, model_uuid: str, application: str, unit: str
-    ) -> "AggregatorTopology":
-        """Factory method for creating the `AggregatorTopology` dataclass from a given charm.
-
-        Args:
-            model: a string representing the model
-            model_uuid: the model UUID as a string
-            application: the application name
-            unit: the unit name
-
-        Returns:
-            a `AggregatorTopology` object.
-        """
-        return cls(
-            model=model,
-            model_uuid=model_uuid,
-            application=application,
-            unit=unit,
-        )
-
-
-class ProviderTopology(JujuTopology):
-    """Class for initializing topology information for MetricsEndpointProvider."""
-
-    @property
-    def scrape_identifier(self) -> str:
-        """Format the topology information into a scrape identifier."""
-        # This is used only by Metrics[Consumer|Provider] and does not need a
-        # unit name, so only check for the charm name
-        return "juju_{}_prometheus_scrape".format(
-            "_".join([self.model, self.model_uuid[:7], self.application, self.charm_name])  # type: ignore
-        )
-
-
 class InvalidAlertRulePathError(Exception):
     """Raised if the alert rules folder cannot be found or is otherwise invalid."""
 
@@ -901,6 +710,7 @@ class AlertRules:
             topology: a `JujuTopology` instance that is used to annotate all alert rules.
         """
         self.topology = topology
+        self.tool = CosTool(None)
         self.alert_groups = []  # type: List[dict]
 
     def _from_file(self, root_path: Path, file_path: Path) -> List[dict]:
@@ -950,9 +760,15 @@ class AlertRules:
                         alert_rule["labels"] = {}
 
                     if self.topology:
-                        alert_rule["labels"].update(self.topology.as_promql_label_dict())
+                        alert_rule["labels"].update(self.topology.label_matcher_dict)
                         # insert juju topology filters into a prometheus alert rule
-                        alert_rule["expr"] = self.topology.render(alert_rule["expr"])
+                        # logql doesn't like empty matchers, so add a job matcher which hits
+                        # any string as a "wildcard" which the topology labels will
+                        # filter down
+                        alert_rule["expr"] = self.tool.inject_label_matchers(
+                            re.sub(r"%%juju_topology%%", r'job=".+"', alert_rule["expr"]),
+                            self.topology.label_matcher_dict,
+                        )
 
             return alert_groups
 
@@ -1204,12 +1020,37 @@ class LokiPushApiAlertRulesChanged(EventBase):
             self.unit = None
 
 
+class InvalidAlertRuleEvent(EventBase):
+    """Event emitted when alert rule files are not parsable.
+
+    Enables us to set a clear status on the provider.
+    """
+
+    def __init__(self, handle, errors: str = "", valid: bool = False):
+        super().__init__(handle)
+        self.errors = errors
+        self.valid = valid
+
+    def snapshot(self) -> Dict:
+        """Save alert rule information."""
+        return {
+            "valid": self.valid,
+            "errors": self.errors,
+        }
+
+    def restore(self, snapshot):
+        """Restore alert rule information."""
+        self.valid = snapshot["valid"]
+        self.errors = snapshot["errors"]
+
+
 class LokiPushApiEvents(ObjectEvents):
     """Event descriptor for events raised by `LokiPushApiProvider`."""
 
     loki_push_api_endpoint_departed = EventSource(LokiPushApiEndpointDeparted)
     loki_push_api_endpoint_joined = EventSource(LokiPushApiEndpointJoined)
     loki_push_api_alert_rules_changed = EventSource(LokiPushApiAlertRulesChanged)
+    alert_rule_status_changed = EventSource(InvalidAlertRuleEvent)
 
 
 class LokiPushApiProvider(Object):
@@ -1254,6 +1095,7 @@ class LokiPushApiProvider(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
+        self._tool = CosTool(self)
         self.port = int(port)
         self.container = self._charm._container
         self.scheme = scheme
@@ -1431,7 +1273,7 @@ class LokiPushApiProvider(Object):
         return {"url": url.rstrip("/") + endpoint}
 
     @property
-    def alerts(self) -> dict:
+    def alerts(self) -> dict:  # noqa: C901
         """Fetch alerts for all relations.
 
         A Loki alert rules file consists of a list of "groups". Each
@@ -1472,12 +1314,20 @@ class LokiPushApiProvider(Object):
             if not alert_rules:
                 continue
 
+            errors = []
             try:
                 # NOTE: this `metadata` key SHOULD NOT be changed to `scrape_metadata`
                 # to align with Prometheus without careful consideration'
                 metadata = json.loads(relation.data[relation.app]["metadata"])
-                identifier = ProviderTopology.from_relation_data(metadata).identifier
-                alerts[identifier] = alert_rules
+                identifier = JujuTopology.from_dict(metadata).identifier
+                labeled_alerts = self._tool.apply_label_matchers(alert_rules)
+
+                _, errmsg = self._tool.validate_alert_rules(alert_rules)
+                if errmsg:
+                    errors.append(errmsg)
+                    continue
+
+                alerts[identifier] = labeled_alerts
             except KeyError as e:
                 logger.warning(
                     "Relation %s has no 'metadata': %s",
@@ -1497,9 +1347,17 @@ class LokiPushApiProvider(Object):
                             labels["juju_model_uuid"],
                             labels["juju_application"],
                         )
+
+                        _, errmsg = self._tool.validate_alert_rules(alert_rules)
+                        if errmsg:
+                            errors.append(errmsg)
+                            continue
+
                         alerts[identifier] = alert_rules
                     except KeyError:
                         logger.error("Alert rules were found but no usable labels were present")
+            if errors:
+                relation.data[self._charm.app]["event"] = json.dumps({"errors": "; ".join(errors)})
 
         return alerts
 
@@ -1517,7 +1375,7 @@ class ConsumerBase(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self.topology = ProviderTopology.from_charm(charm)
+        self.topology = JujuTopology.from_charm(charm)
 
         try:
             alert_rules_path = _resolve_dir_against_charm_path(charm, alert_rules_path)
@@ -1665,7 +1523,7 @@ class LokiPushApiConsumer(ConsumerBase):
         self._handle_alert_rules(event.relation)
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _on_logging_relation_changed(self, _: RelationEvent):
+    def _on_logging_relation_changed(self, event: RelationEvent):
         """Handle changes in related consumers.
 
         Anytime there are changes in the relation between Loki
@@ -1680,6 +1538,18 @@ class LokiPushApiConsumer(ConsumerBase):
             loki_push_api_alert_rules_error: This event is emitted when an invalid alert rules
                 file is encountered or if `alert_rules_path` is empty.
         """
+        if self._charm.unit.is_leader():
+            ev = json.loads(event.relation.data[event.app].get("event", "{}"))
+
+            if ev:
+                valid = bool(ev.get("valid", True))
+                errors = ev.get("errors", "")
+
+                if valid and not errors:
+                    self.on.alert_rule_status_changed.emit(valid=valid)
+                else:
+                    self.on.alert_rule_status_changed.emit(valid=valid, errors=errors)
+
         self.on.loki_push_api_endpoint_joined.emit()
 
     def _reinitialize_alert_rules(self):
@@ -1823,7 +1693,7 @@ class LogProxyConsumer(ConsumerBase):
         self._log_files = log_files or []
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
-        self.topology = ProviderTopology.from_charm(charm)
+        self.topology = JujuTopology.from_charm(charm)
         self._promtail_resource_name = promtail_resource_name or "promtail-bin"
 
         # architechure used for promtail binary
@@ -1859,6 +1729,18 @@ class LogProxyConsumer(ConsumerBase):
             event: The event object `RelationChangedEvent`.
         """
         self._handle_alert_rules(event.relation)
+
+        if self._charm.unit.is_leader():
+            ev = json.loads(event.relation.data[event.app].get("event", "{}"))
+
+            if ev:
+                valid = bool(ev.get("valid", True))
+                errors = ev.get("errors", "")
+
+                if valid and not errors:
+                    self.on.alert_rule_status_changed.emit(valid=valid)
+                else:
+                    self.on.alert_rule_status_changed.emit(valid=valid, errors=errors)
 
         if not self._container.can_connect():
             return
@@ -2216,7 +2098,12 @@ class LogProxyConsumer(ConsumerBase):
             A dict representing the `scrape_configs` section.
         """
         job_name = "juju_{}".format(self.topology.identifier)
-        common_labels = self.topology.as_label_dict()
+
+        # The new JujuTopology doesn't include unit, but LogProxyConsumer should have it
+        common_labels = {
+            "juju_{}".format(k): v
+            for k, v in self.topology.as_dict(remapped_keys={"charm_name": "charm"}).items()
+        }
         scrape_configs = []
 
         # Files config
@@ -2345,3 +2232,122 @@ class LogProxyConsumer(ConsumerBase):
         return 'action(type="omfwd" protocol="tcp" target="127.0.0.1" port="{}" Template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")'.format(
             self._syslog_port
         )
+
+
+class CosTool:
+    """Uses cos-tool to inject label matchers into alert rule expressions and validate rules."""
+
+    _path = None
+    _disabled = False
+
+    def __init__(self, charm):
+        self._charm = charm
+
+    @property
+    def path(self):
+        """Lazy lookup of the path of cos-tool."""
+        if self._disabled:
+            return None
+        if not self._path:
+            self._path = self._get_tool_path()
+            if not self._path:
+                logger.debug("Skipping injection of juju topology as label matchers")
+                self._disabled = True
+        return self._path
+
+    def apply_label_matchers(self, rules) -> dict:
+        """Will apply label matchers to the expression of all alerts in all supplied groups."""
+        if not self.path:
+            return rules
+        for group in rules["groups"]:
+            rules_in_group = group.get("rules", [])
+            for rule in rules_in_group:
+                topology = {}
+                # if the user for some reason has provided juju_unit, we'll need to honor it
+                # in most cases, however, this will be empty
+                for label in [
+                    "juju_model",
+                    "juju_model_uuid",
+                    "juju_application",
+                    "juju_charm",
+                    "juju_unit",
+                ]:
+                    if label in rule["labels"]:
+                        topology[label] = rule["labels"][label]
+
+                rule["expr"] = self.inject_label_matchers(rule["expr"], topology)
+        return rules
+
+    def validate_alert_rules(self, rules: dict) -> Tuple[bool, str]:
+        """Will validate correctness of alert rules, returning a boolean and any errors."""
+        if not self.path:
+            logger.debug("`cos-tool` unavailable. Not validating alert correctness.")
+            return True, ""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rule_path = Path(tmpdir + "/validate_rule.yaml")
+
+            # Smash "our" rules format into what upstream actually uses, which is more like:
+            #
+            # groups:
+            #   - name: foo
+            #     rules:
+            #       - alert: SomeAlert
+            #         expr: up
+            #       - alert: OtherAlert
+            #         expr: up
+            transformed_rules = {"groups": []}  # type: ignore
+            for rule in rules["groups"]:
+                transformed = {"name": str(uuid.uuid4()), "rules": [rule]}
+                transformed_rules["groups"].append(transformed)
+
+            rule_path.write_text(yaml.dump(transformed_rules))
+
+            args = [str(self.path), "--format", "logql", "validate", str(rule_path)]
+            # noinspection PyBroadException
+            try:
+                self._exec(args)
+                return True, ""
+            except subprocess.CalledProcessError as e:
+                logger.debug("Validating the rules failed: %s", e.output)
+                return False, ", ".join([line for line in e.output if "error validating" in line])
+
+    def inject_label_matchers(self, expression, topology) -> str:
+        """Add label matchers to an expression."""
+        if not topology:
+            return expression
+        if not self.path:
+            logger.debug("`cos-tool` unavailable. Leaving expression unchanged: %s", expression)
+            return expression
+        args = [str(self.path), "--format", "logql", "transform"]
+        args.extend(
+            ["--label-matcher={}={}".format(key, value) for key, value in topology.items()]
+        )
+
+        args.extend(["{}".format(expression)])
+        # noinspection PyBroadException
+        try:
+            return self._exec(args)
+        except subprocess.CalledProcessError as e:
+            logger.debug('Applying the expression failed: "%s", falling back to the original', e)
+            print('Applying the expression failed: "{}", falling back to the original'.format(e))
+            return expression
+
+    def _get_tool_path(self) -> Optional[Path]:
+        arch = platform.processor()
+        arch = "amd64" if arch == "x86_64" else arch
+        res = "cos-tool-{}".format(arch)
+        try:
+            path = Path(res).resolve()
+            path.chmod(0o777)
+            return path
+        except NotImplementedError:
+            logger.debug("System lacks support for chmod")
+        except FileNotFoundError:
+            logger.debug('Could not locate cos-tool at: "{}"'.format(res))
+        return None
+
+    def _exec(self, cmd) -> str:
+        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE)
+        output = result.stdout.decode("utf-8").strip()
+        return output

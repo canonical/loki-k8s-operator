@@ -8,11 +8,8 @@ import unittest
 from pathlib import Path
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import (
-    AlertRules,
-    LokiPushApiConsumer,
-    ProviderTopology,
-)
+from charms.loki_k8s.v0.loki_push_api import AlertRules, LokiPushApiConsumer
+from charms.observability_libs.v0.juju_topology import JujuTopology
 from fs.tempfs import TempFS
 from helpers import TempFolderSandbox
 from ops.charm import CharmBase
@@ -314,18 +311,18 @@ class TestAlertRuleNaming(unittest.TestCase):
     """
 
     PATHS = {
-        r"src/alert_rules/foo.rule": "testing_1234-5678-dead-beef_tester_render_alerts",
-        r"src/alert_rules/a/foo.rule": "testing_1234-5678-dead-beef_tester_a_render_alerts",
-        r"src/alert_rules/a/b/foo.rule": "testing_1234-5678-dead-beef_tester_a_b_render_alerts",
-        r"src/alert_rules/../../proc/cpuinfo": "testing_1234-5678-dead-beef_tester_proc_render_alerts",
-        r"src/alert_rules/../../../sys/class/net": "testing_1234-5678-dead-beef_tester_sys_class_render_alerts",
+        r"src/alert_rules/foo.rule": "testing_20ce8299_tester_render_alerts",
+        r"src/alert_rules/a/foo.rule": "testing_20ce8299_tester_a_render_alerts",
+        r"src/alert_rules/a/b/foo.rule": "testing_20ce8299_tester_a_b_render_alerts",
+        r"src/alert_rules/../../proc/cpuinfo": "testing_20ce8299_tester_proc_render_alerts",
+        r"src/alert_rules/../../../sys/class/net": "testing_20ce8299_tester_sys_class_render_alerts",
     }
 
     def test_path_transformation(self):
-        topology = ProviderTopology.from_relation_data(
+        topology = JujuTopology.from_dict(
             {
                 "model": "testing",
-                "model_uuid": "1234-5678-dead-beef",
+                "model_uuid": "20ce8299-3634-4bef-8bd8-5ace6c8816b4",
                 "application": "tester",
                 "unit": "tester/0",
             }
@@ -380,6 +377,7 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
 
         self.peer_rel_id = self.harness.add_relation("replicas", self.harness.model.app.name)
+        self.harness.set_model_name("20ce8299-3634-4bef-8bd8-5ace6c8816b4")
         self.harness.set_leader(True)
 
         self.rel_id = self.harness.add_relation(relation_name="logging", remote_app="loki")
@@ -435,7 +433,7 @@ class TestAlertRuleFormat(unittest.TestCase):
                     "rules": [
                         {
                             "alert": "alert_on_error",
-                            "expr": 'rate({%%juju_topology%%}|="ERROR"[5m]) > 0',
+                            "expr": 'rate({%%juju_topology%%} |= "ERROR" [5m]) > 0',
                             "for": "1m",
                             "labels": {
                                 "severity": "critical",
@@ -469,7 +467,7 @@ class TestAlertRuleFormat(unittest.TestCase):
                     "rules": [
                         {
                             "alert": "alert_on_error",
-                            "expr": 'rate({%%juju_topology%%, juju_unit="app/0"}|="ERROR"[5m]) > 0',
+                            "expr": 'rate({%%juju_topology%%, juju_unit="app/0"} |= "ERROR" [5m]) > 0',
                             "for": "1m",
                             "labels": {
                                 "severity": "critical",
