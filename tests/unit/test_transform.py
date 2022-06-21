@@ -4,7 +4,6 @@
 import subprocess
 import unittest
 from pathlib import PosixPath
-from unittest.mock import patch
 
 from charms.loki_k8s.v0.loki_push_api import CosTool
 from ops.charm import CharmBase
@@ -21,7 +20,6 @@ class ToolProviderCharm(CharmBase):
         self.tool = CosTool(self)
 
 
-@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestTransform(unittest.TestCase):
     """Test that the cos-tool implementation works."""
 
@@ -146,7 +144,6 @@ class TestTransform(unittest.TestCase):
         self.assertTrue(all(['{}="{}"'.format(k, v) in output for k, v in keys.items()]))
 
 
-@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestValidateAlerts(unittest.TestCase):
     """Test that the cos-tool validation works."""
 

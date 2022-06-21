@@ -22,7 +22,7 @@ ops.testing.SIMULATE_CAN_CONNECT = True
 
 METADATA = {
     "model": "consumer-model",
-    "model_uuid": "qwerty-1234",
+    "model_uuid": "20ce8299-3634-4bef-8bd8-5ace6c8816b4",
     "application": "promtail",
     "charm_name": "charm-k8s",
 }
@@ -453,13 +453,9 @@ class TestAppRelationData(unittest.TestCase):
         self.assertTrue(url.startswith("http"))
 
 
-@patch("charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True)
 class TestAlertRuleBlockedStatus(unittest.TestCase):
     """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
 
-    @patch(
-        "charms.observability_libs.v0.juju_topology.JujuTopology.is_valid_uuid", lambda *args: True
-    )
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     def setUp(self):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
