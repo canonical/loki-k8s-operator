@@ -28,6 +28,7 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiProvider,
 )
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.ingress_per_unit import IngressPerUnitRequirer
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -74,6 +75,8 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_url=self._external_url,
         )
+        scrape_jobs = [{"static_configs": [{"targets": [f"*:{self._port}"]}]}]
+        self.metrics_provider = MetricsEndpointProvider(self, jobs=scrape_jobs)
 
         self._loki_server = LokiServer()
         parsed_external_url = urlparse(self._external_url)
