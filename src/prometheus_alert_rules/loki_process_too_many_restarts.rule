@@ -1,0 +1,9 @@
+# Based on https://awesome-prometheus-alerts.grep.to/rules.html#loki
+alert: LokiProcessTooManyRestarts
+expr: changes(process_start_time_seconds[15m]) > 2
+for: 0m
+labels:
+  severity: warning
+annotations:
+  summary: Loki process too many restarts (instance {{ $labels.instance }})
+  description: "A loki process had too many restarts (target {{ $labels.instance }})\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"

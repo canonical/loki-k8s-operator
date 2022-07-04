@@ -1,0 +1,9 @@
+# Based on https://awesome-prometheus-alerts.grep.to/rules.html#loki
+alert: LokiRequestPanic
+expr: sum(increase(loki_panic_total[10m])) by (namespace, job) > 0
+for: 5m
+labels:
+  severity: critical
+annotations:
+  summary: Loki request panic (instance {{ $labels.instance }})
+  description: "The {{ $labels.job }} is experiencing {{ printf \"%.2f\" $value }}% increase of panics\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
