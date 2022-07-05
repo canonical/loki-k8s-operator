@@ -1,6 +1,7 @@
 # Based on https://awesome-prometheus-alerts.grep.to/rules.html#loki
+# Given the way Loki charm behaves seems reasonable to warn if Loki restarts 5 times in 15 minutes
 alert: LokiProcessTooManyRestarts
-expr: changes(process_start_time_seconds[15m]) > 2
+expr: changes(process_start_time_seconds[15m]) > 5
 for: 0m
 labels:
   severity: warning
