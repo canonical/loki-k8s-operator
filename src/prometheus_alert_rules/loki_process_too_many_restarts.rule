@@ -1,5 +1,8 @@
 # Based on https://awesome-prometheus-alerts.grep.to/rules.html#loki
-# Given the way Loki charm behaves seems reasonable to warn if Loki restarts 5 times in 15 minutes
+# The Loki charm may restart the workload on config-changed event, which means there would be
+# two restarts just from deploying the charm.
+# Changing the config soon after deploy (e.g. set resource limits) would cause another restart.
+# Using 5 as the alert threshold to take into account restart (2 starts) + immediate config change (1 more start).
 alert: LokiProcessTooManyRestarts
 expr: changes(process_start_time_seconds[15m]) > 5
 for: 0m
