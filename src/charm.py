@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiAlertRulesChanged,
@@ -88,6 +89,8 @@ class LokiOperatorCharm(CharmBase):
             scheme=parsed_external_url.scheme,
             path=f"{parsed_external_url.path}/loki/api/v1/push",
         )
+
+        self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
