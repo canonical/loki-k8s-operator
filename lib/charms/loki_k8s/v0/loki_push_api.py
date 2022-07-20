@@ -2148,9 +2148,6 @@ class LogProxyConsumer(ConsumerBase):
             }
             scrape_configs.append(syslog_config)  # type: ignore
 
-        import pprint
-
-        logger.warning(pprint.pformat(yaml.dump(scrape_configs)))
         return {"scrape_configs": scrape_configs}
 
     def _generate_static_configs(self, config: dict) -> list:
