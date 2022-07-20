@@ -106,6 +106,10 @@ async def test_logproxy_syslog_logs(ops_test, log_proxy_tester_charm):
     logs = await loki_api_query(
         ops_test, loki_app_name, f'{{juju_application=~"{tester_app_name}",job=~".+syslog"}}'
     )
+
+    # Default syslog labels and one structured one to remap
+    syslog_labels = ["facility", "hostname", "severity", "timeQuality_syncAccuracy"]
+    assert all([label in logs[0]["stream"] for label in syslog_labels])
     assert len(logs[0]["values"]) > 0
 
 

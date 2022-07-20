@@ -38,7 +38,7 @@ copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 [tool.mypy]
 pretty = true
 python_version = 3.8
-mypy_path = "$MYPY_CONFIG_FILE_DIR/src:$MYPY_CONFIG_FILE_DIR/lib"
+mypy_path = "./src:./lib"
 exclude = 'tests/integration/.*tester/'
 follow_imports = "normal"
 warn_redundant_casts = true

@@ -49,10 +49,6 @@ jobs:
         run: python3 -m pip install tox
       - name: Run static analysis (charm)
         run: tox -vve static-charm
-      - name: Run static analysis (unit tests)
-        run: tox -vve static-unit
-      - name: Run static analysis (integration tests)
-        run: tox -vve static-integration
 
   lint:
     name: Lint

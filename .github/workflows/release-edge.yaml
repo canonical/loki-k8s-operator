@@ -13,7 +13,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          fetch-depth: 0  
+          fetch-depth: 0
       - name: Check libs
         uses: canonical/charming-actions/check-libraries@1.0.1-rc
         with:
@@ -36,7 +36,7 @@ jobs:
         run: python3 -m pip install tox
       - name: Run static analysis for /lib for 3.5
         run: tox -vve static-lib
-  
+
   static-charm:
     name: Static analysis of the charm and tests
     runs-on: ubuntu-latest
@@ -49,10 +49,6 @@ jobs:
         run: python3 -m pip install tox
       - name: Run static analysis (charm)
         run: tox -vve static-charm
-      - name: Run static analysis (unit tests)
-        run: tox -vve static-unit
-      - name: Run static analysis (integration tests)
-        run: tox -vve static-integration
 
   lint:
     name: Lint
