@@ -484,7 +484,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 12
 
 logger = logging.getLogger(__name__)
 
@@ -2123,6 +2123,14 @@ class LogProxyConsumer(ConsumerBase):
 
         # Syslog config
         if self._is_syslog:
+            relabel_mappings = [
+                "severity",
+                "facility",
+                "hostname",
+                "app_name",
+                "proc_id",
+                "msg_id",
+            ]
             syslog_labels = common_labels.copy()
             syslog_labels.update({"job": "{}_syslog".format(job_name)})
             syslog_config = {
@@ -2132,9 +2140,17 @@ class LogProxyConsumer(ConsumerBase):
                     "label_structured_data": True,
                     "labels": syslog_labels,
                 },
+                "relabel_configs": [
+                    {"source_labels": ["__syslog_message_{}".format(val)], "target_label": val}
+                    for val in relabel_mappings
+                ]
+                + [{"action": "labelmap", "regex": "__syslog_message_sd_(.+)"}],
             }
             scrape_configs.append(syslog_config)  # type: ignore
 
+        import pprint
+
+        logger.warning(pprint.pformat(yaml.dump(scrape_configs)))
         return {"scrape_configs": scrape_configs}
 
     def _generate_static_configs(self, config: dict) -> list:
