@@ -36,7 +36,9 @@ async def test_deploy_and_relate_charms(ops_test, loki_charm):
             application_name=GRAFANA,
             channel="edge",
         ),
-        ops_test.model.deploy("prometheus-k8s", application_name=PROMETHEUS, channel="edge"),
+        ops_test.model.deploy(
+            "prometheus-k8s", application_name=PROMETHEUS, channel="edge", trust=True
+        ),
     )
 
     await ops_test.model.add_relation(LOKI, PROMETHEUS)
