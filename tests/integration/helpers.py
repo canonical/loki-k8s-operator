@@ -7,6 +7,7 @@ import logging
 import urllib.request
 from pathlib import Path
 from typing import List
+from urllib.parse import urljoin
 
 import requests
 import yaml
@@ -44,6 +45,18 @@ async def loki_rules(ops_test, app_name) -> dict:
         return {}
     except urllib.error.HTTPError:
         return {}
+
+
+async def loki_endpoint_request(ops_test, app_name: str, endpoint: str, unit_num: int = 0):
+    address = await get_unit_address(ops_test, app_name, unit_num)
+    url = urljoin(f"http://{address}:3100/", endpoint)
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.text
+        return ""
+    except requests.exceptions.RequestException:
+        return ""
 
 
 async def loki_api_query(ops_test, app_name, query: str, unit_num: int = 0):
