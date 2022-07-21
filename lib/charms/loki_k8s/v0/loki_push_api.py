@@ -1371,8 +1371,10 @@ class ConsumerBase(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = False,
+        *,
+        key: Optional[str] = None,
     ):
-        super().__init__(charm, relation_name)
+        super().__init__(charm, key or relation_name)
         self._charm = charm
         self._relation_name = relation_name
         self.topology = JujuTopology.from_charm(charm)
@@ -1685,11 +1687,15 @@ class LogProxyConsumer(ConsumerBase):
         container_name: str = "",
         promtail_resource_name: Optional[str] = None,
     ):
-        super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._charm = charm
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
         self._container_name = self._get_container_name(container_name)
+
+        key = "{}_{}".format(relation_name, self._container_name)
+        logger.info("KEY %s", key)
+        super().__init__(charm, relation_name, alert_rules_path, recursive, key=key)
+
         self._log_files = log_files or []
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
