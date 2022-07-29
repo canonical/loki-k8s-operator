@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 
 import ops.testing
 import yaml
+from helpers import k8s_resource_multipatch
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
@@ -109,7 +110,9 @@ table_manager:
 
 class TestCharm(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def setUp(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *_):
         self.container_name: str = "loki"
         version_patcher = patch(
             "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
@@ -141,6 +144,7 @@ class TestCharm(unittest.TestCase):
             self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
 
     @patch("charm.LokiOperatorCharm._loki_config")
+    @k8s_resource_multipatch
     def test__on_config_cannot_connect(self, mock_loki_config):
         self.harness.set_leader(True)
         self.harness.set_can_connect("loki", False)
@@ -152,6 +156,7 @@ class TestCharm(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
     @patch("charm.LokiOperatorCharm._loki_config")
+    @k8s_resource_multipatch
     def test__on_config_can_connect(self, mock_loki_config):
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
         self.harness.set_leader(True)
@@ -190,7 +195,9 @@ class TestCharm(unittest.TestCase):
 
 class TestWorkloadUnavailable(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def setUp(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *_):
         self.container_name: str = "loki"
         version_patcher = patch(
             "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
@@ -219,7 +226,9 @@ class TestConfigFile(unittest.TestCase):
 
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @patch("socket.getfqdn", new=lambda *args: "fqdn")
-    def setUp(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *_):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
             "charm.LokiOperatorCharm._check_alert_rules",
@@ -239,6 +248,7 @@ class TestConfigFile(unittest.TestCase):
     def tearDown(self):
         self.check_alert_rules_patcher.stop()
 
+    @k8s_resource_multipatch
     def test_relating_over_alertmanager_updates_config_with_ip_addresses(self):
         """Scenario: The charm is related to alertmanager."""
         container = self.harness.charm.unit.get_container("loki")
@@ -303,7 +313,9 @@ class TestPebblePlan(unittest.TestCase):
     """
 
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def test_loki_starts_when_cluster_deployed_without_any_relations(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def test_loki_starts_when_cluster_deployed_without_any_relations(self, *_):
         """Scenario: A loki cluster is deployed without any relations."""
         is_leader = True
         num_consumer_apps = 3
@@ -341,7 +353,9 @@ class TestDelayedPebbleReady(unittest.TestCase):
     """Feature: Charm code must be resilient to any (reasonable) order of startup event firing."""
 
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def setUp(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *_):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
             "charm.LokiOperatorCharm._check_alert_rules",
@@ -375,6 +389,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.check_alert_rules_patcher.stop()
         self.version_patcher.stop()
 
+    @k8s_resource_multipatch
     def test_pebble_ready_changes_status_from_waiting_to_active(self):
         """Scenario: a pebble-ready event is delayed."""
         # WHEN all startup hooks except pebble-ready finished
@@ -385,6 +400,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.harness.container_pebble_ready("loki")
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
+    @k8s_resource_multipatch
     def test_regular_relation_departed_runs_before_pebble_ready(self):
         """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
         # WHEN relation-departed fires before pebble-ready
@@ -397,6 +413,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.harness.container_pebble_ready("loki")
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
+    @k8s_resource_multipatch
     def test_regular_relation_broken_runs_before_pebble_ready(self):
         """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
         # WHEN relation-broken fires before pebble-ready
@@ -417,7 +434,9 @@ class TestAppRelationData(unittest.TestCase):
     """
 
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def setUp(self) -> None:
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *_) -> None:
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
@@ -457,7 +476,9 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
     """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
 
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    def setUp(self):
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    def setUp(self, *_):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.patcher = patch("urllib.request.urlopen", new=Mock())
         self.mock_request = self.patcher.start()
@@ -492,6 +513,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
             {"metadata": json.dumps(METADATA), "alert_rules": json.dumps(ALERT_RULES)},
         )
 
+    @k8s_resource_multipatch
     def test__alert_rule_errors_appropriately_set_state(self):
         self.harness.charm.on.config_changed.emit()
         self.mock_request.side_effect = HTTPError(
@@ -522,6 +544,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.harness.charm._loki_push_api_alert_rules_changed(None)
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
+    @k8s_resource_multipatch
     def test__loki_connection_errors_on_lifecycle_events_appropriately_clear(self):
         self.harness.charm.on.config_changed.emit()
         self.mock_request.side_effect = URLError(reason="fubar!")

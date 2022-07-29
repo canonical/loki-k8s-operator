@@ -31,10 +31,12 @@ from charms.loki_k8s.v0.loki_push_api import (
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
+    adjust_resource_requirements,
 )
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.ingress_per_unit import IngressPerUnitRequirer
+from lightkube.models.core_v1 import ResourceRequirements
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -70,11 +72,10 @@ class LokiOperatorCharm(CharmBase):
         self._rules_dir = os.path.join(RULES_DIR, tenant_id)
 
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
-        self.framework.breakpoint()
         self.resources_patch = KubernetesComputeResourcesPatch(
             self,
             self._container.name,
-            resource_reqs_func=lambda: self._resource_spec_from_config,
+            resource_reqs_func=lambda: self._resource_reqs_from_config(),
         )
 
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
@@ -203,7 +204,7 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #             UTILITY METHODS                #
     ##############################################
-    def _configure(self):
+    def _configure(self):  # noqa: C901
         """Configure Loki charm."""
         restart = False
 
@@ -435,8 +436,13 @@ class LokiOperatorCharm(CharmBase):
                 logger.info("Clearing blocked status with successful alert rule check")
             return
 
-    def _resource_spec_from_config(self):
-        return {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
+    def _resource_reqs_from_config(self) -> ResourceRequirements:
+        limits = {
+            "cpu": self.model.config.get("cpu"),
+            "memory": self.model.config.get("memory"),
+        }
+        requests = {"cpu": "0.25", "memory": "200Mi"}
+        return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
     def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.unit.status = BlockedStatus(event.message)

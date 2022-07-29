@@ -10,7 +10,7 @@ When initialised, this library binds a handler to the parent charm's `config-cha
 The config-changed event is used because it is guaranteed to fire on startup, on upgrade and on
 pod churn. Additionally, resource limits may be set by charm config options, which would also be
 caught out-of-the-box by this handler. The handler applies the patch to the app's StatefulSet.
-This should ensure that the resource limits are correct throughout the charm's life.Additional
+This should ensure that the resource limits are correct throughout the charm's life. Additional
 optional user-provided events for re-applying the patch are supported but discouraged.
 
 The constructor takes a reference to the parent charm, a 'limits' and a 'requests' dictionaries
@@ -40,6 +40,7 @@ Then, to initialise the library:
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     KubernetesComputeResourcesPatch
 )
+from lightkube.models.core_v1 import ResourceRequirements
 
 class SomeCharm(CharmBase):
   def __init__(self, *args):
@@ -47,31 +48,32 @@ class SomeCharm(CharmBase):
     self.resources_patch = KubernetesComputeResourcesPatch(
         self,
         "container-name",
-        limits_func=lambda: {"cpu": "1", "mem": "2Gi"},
-        requests_func=lambda: {"cpu": "1", "mem": "2Gi"}
+        resource_reqs_func=lambda: ResourceRequirements(
+            limits={"cpu": "2"}, requests={"cpu": "1"}
+        ),
     )
+    self.framework.observe(self.resources_patch.on.patch_failed, self._on_resource_patch_failed)
+
+  def _on_resource_patch_failed(self, event):
+    self.unit.status = BlockedStatus(event.message)
     # ...
 ```
 
 Or, if, for example, the resource specs are coming from config options:
 
 ```python
-# ...
-
 class SomeCharm(CharmBase):
   def __init__(self, *args):
     # ...
     self.resources_patch = KubernetesComputeResourcesPatch(
         self,
         "container-name",
-        limits_func=lambda: self._resource_spec_from_config(),
-        requests_func=lambda: self._resource_spec_from_config(),
+        resource_reqs_func=lambda: self._resource_spec_from_config(),
     )
 
-  def _resource_spec_from_config(self):
-    return {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
-
-    # ...
+  def _resource_spec_from_config(self) -> ResourceRequirements:
+    spec = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
+    return ResourceRequirements(limits=spec, requests=spec)
 ```
 
 
@@ -156,19 +158,19 @@ def adjust_resource_requirements(
     >>> adjust_resource_requirements({}, {})
     ResourceRequirements(limits={}, requests={})
     >>> adjust_resource_requirements({"cpu": "1"}, {})
-    ResourceRequirements(limits={'cpu': '1'}, requests={})
+    ResourceRequirements(limits={'cpu': '1'}, requests={'cpu': '1'})
     >>> adjust_resource_requirements({"cpu": "1"}, {"cpu": "2"}, True)
     ResourceRequirements(limits={'cpu': '2'}, requests={'cpu': '2'})
     >>> adjust_resource_requirements({"cpu": "1"}, {"cpu": "2"}, False)
     ResourceRequirements(limits={'cpu': '1'}, requests={'cpu': '1'})
     >>> adjust_resource_requirements({"cpu": "1"}, {"memory": "1G"}, True)
-    ResourceRequirements(limits={'cpu': '1'}, requests={'memory': '1G'})
+    ResourceRequirements(limits={'cpu': '1'}, requests={'memory': '1G', 'cpu': '1'})
     >>> adjust_resource_requirements({"cpu": "1"}, {"memory": "1G"}, False)
-    ResourceRequirements(limits={'cpu': '1'}, requests={'memory': '1G'})
-    >>> adjust_resource_requirements({"cpu": "1", "memory": "500M"}, {"memory": "1G"}, True)
-    ResourceRequirements(limits={'cpu': '1', 'memory': '1000000000'}, requests={'memory': '1G'})
-    >>> adjust_resource_requirements({"cpu": "1", "memory": "500M"}, {"memory": "1G"}, False)
-    ResourceRequirements(limits={'cpu': '1', 'memory': '500M'}, requests={'memory': '500000000'})
+    ResourceRequirements(limits={'cpu': '1'}, requests={'memory': '1G', 'cpu': '1'})
+    >>> adjust_resource_requirements({"cpu": "1", "memory": "1"}, {"memory": "2"}, True)
+    ResourceRequirements(limits={'cpu': '1', 'memory': '2'}, requests={'memory': '2', 'cpu': '1'})
+    >>> adjust_resource_requirements({"cpu": "1", "memory": "1"}, {"memory": "1G"}, False)
+    ResourceRequirements(limits={'cpu': '1', 'memory': '1'}, requests={'memory': '1', 'cpu': '1'})
     >>> adjust_resource_requirements({"custom-resource": "1"}, {"custom-resource": "2"}, False)
     ResourceRequirements(limits={'custom-resource': '1'}, requests={'custom-resource': '1'})
     """
@@ -180,13 +182,21 @@ def adjust_resource_requirements(
     limits = sanitize_resource_spec_dict(limits) or {}
     requests = sanitize_resource_spec_dict(requests) or {}
 
+    # Make sure we do not modify in-place
+    limits, requests = limits.copy(), requests.copy()
+
+    # Need to copy key-val pairs from "limits" to "requests", if they are not present in
+    # "requests". This replicates K8s behavior:
+    # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers
+    requests.update({k: limits[k] for k in limits if k not in requests})
+
     if adhere_to_requests:
         # Keep limits fixed when `limits` is too low
-        adjusted, fixed = limits.copy(), requests.copy()
+        adjusted, fixed = limits, requests
         func = max
     else:
         # Pull down requests when limit is too low
-        fixed, adjusted = limits.copy(), requests.copy()
+        fixed, adjusted = limits, requests
         func = min
 
     # adjusted = {}
@@ -372,6 +382,12 @@ class ResourcePatcher:
         Returns:
             bool: A boolean indicating if the service patch has been applied and is in effect.
         """
+        logger.info(
+            "reqs=%s, templated=%s, actual=%s",
+            resource_reqs,
+            self.get_templated(),
+            self.get_actual(pod_name),
+        )
         return self.is_patched(resource_reqs) and equals_canonically(
             resource_reqs, self.get_actual(pod_name)
         )
@@ -446,7 +462,7 @@ class KubernetesComputeResourcesPatch(Object):
         """Patch the Kubernetes resources created by Juju to limit cpu or mem."""
         try:
             resource_reqs = self.resource_reqs_func()
-            # limits = resource_reqs.limits
+            limits = resource_reqs.limits
             requests = resource_reqs.requests
         except ValueError as e:
             msg = f"Failed obtaining resource limit spec: {e}"
@@ -505,7 +521,7 @@ class KubernetesComputeResourcesPatch(Object):
         """
         try:
             resource_reqs = self.resource_reqs_func()
-            # limits = resource_reqs.limits
+            limits = resource_reqs.limits
             requests = resource_reqs.requests
         except ValueError as e:
             msg = f"Failed obtaining resource limit spec: {e}"
@@ -513,6 +529,7 @@ class KubernetesComputeResourcesPatch(Object):
             return False
 
         if not is_valid_spec(limits) or not is_valid_spec(requests):
+            logger.error("Invalid resource requirements specs: %s, %s", limits, requests)
             return False
 
         resource_reqs = ResourceRequirements(
