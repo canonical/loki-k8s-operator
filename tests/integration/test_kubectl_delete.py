@@ -22,7 +22,9 @@ async def test_deploy_from_local_path(ops_test, loki_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
 
-    await ops_test.model.deploy(loki_charm, application_name=app_name, resources=resources)
+    await ops_test.model.deploy(
+        loki_charm, application_name=app_name, resources=resources, trust=True
+    )
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
     await is_loki_up(ops_test, app_name)
 

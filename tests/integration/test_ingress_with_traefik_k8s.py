@@ -23,6 +23,7 @@ async def test_ingress_traefik_k8s(ops_test, loki_charm):
             loki_charm,
             resources={"loki-image": oci_image("./metadata.yaml", "loki-image")},
             application_name=loki_name,
+            trust=True,
         ),
         ops_test.model.deploy(
             "traefik-k8s",
