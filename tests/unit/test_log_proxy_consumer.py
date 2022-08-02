@@ -75,6 +75,8 @@ class ConsumerCharm(CharmBase):
         containers:
           loki:
             resource: loki-image
+          loki2:
+            resource: loki-image
           promtail:
             resource: promtail-image
         requires:
@@ -90,6 +92,9 @@ class ConsumerCharm(CharmBase):
         self._stored.set_default(invalid_events=0)
         self.log_proxy = LogProxyConsumer(
             charm=self, container_name="loki", log_files=LOG_FILES, enable_syslog=True
+        )
+        self.log_proxy2 = LogProxyConsumer(
+            charm=self, container_name="loki2", log_files=LOG_FILES, enable_syslog=True
         )
 
         self.framework.observe(
@@ -117,6 +122,8 @@ class ConsumerCharmWithPromtailResource(CharmBase):
         containers:
           loki:
             resource: loki-image
+          loki2:
+            resource: loki-image
           promtail:
             resource: promtail-image
         requires:
@@ -137,6 +144,9 @@ class ConsumerCharmWithPromtailResource(CharmBase):
         self._stored.set_default(invalid_events=0)
         self.log_proxy = LogProxyConsumer(
             charm=self, container_name="loki", log_files=LOG_FILES, enable_syslog=True
+        )
+        self.log_proxy2 = LogProxyConsumer(
+            charm=self, container_name="loki2", log_files=LOG_FILES, enable_syslog=True
         )
 
 
