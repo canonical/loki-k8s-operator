@@ -30,14 +30,19 @@ async def test_deploy_and_relate_charms(ops_test, loki_charm):
             loki_charm,
             resources={"loki-image": oci_image("./metadata.yaml", "loki-image")},
             application_name=LOKI,
+            trust=True,
         ),
         ops_test.model.deploy(
             "grafana-k8s",
             application_name=GRAFANA,
             channel="edge",
+            trust=True,
         ),
         ops_test.model.deploy(
-            "prometheus-k8s", application_name=PROMETHEUS, channel="edge", trust=True
+            "prometheus-k8s",
+            application_name=PROMETHEUS,
+            channel="edge",
+            trust=True,
         ),
     )
 

@@ -35,7 +35,12 @@ async def test_setup_env(ops_test: OpsTest):
 async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
-    await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
+    await ops_test.model.deploy(
+        f"ch:{app_name}",
+        application_name=app_name,
+        channel="edge",
+        trust=True,
+    )
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
@@ -49,8 +54,18 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     # Deploy related apps
     app_names = [app_name, "am", "grafana"]
     await asyncio.gather(
-        ops_test.model.deploy("ch:alertmanager-k8s", application_name="am", channel="edge"),
-        ops_test.model.deploy("ch:grafana-k8s", application_name="grafana", channel="edge"),
+        ops_test.model.deploy(
+            "ch:alertmanager-k8s",
+            application_name="am",
+            channel="edge",
+            trust=True,
+        ),
+        ops_test.model.deploy(
+            "ch:grafana-k8s",
+            application_name="grafana",
+            channel="edge",
+            trust=True,
+        ),
     )
 
     # Relate apps

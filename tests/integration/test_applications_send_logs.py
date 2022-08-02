@@ -47,6 +47,7 @@ async def test_loki_api_client_logs(
             loki_charm,
             resources=resources,
             application_name=loki_app_name,
+            trust=True,
         ),
         ops_test.model.deploy(loki_tester_charm, application_name="loki-tester"),
         ops_test.model.deploy(

@@ -28,9 +28,15 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiAlertRulesChanged,
     LokiPushApiProvider,
 )
+from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
+    K8sResourcePatchFailedEvent,
+    KubernetesComputeResourcesPatch,
+    adjust_resource_requirements,
+)
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v0.ingress_per_unit import IngressPerUnitRequirer
+from lightkube.models.core_v1 import ResourceRequirements
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -66,6 +72,12 @@ class LokiOperatorCharm(CharmBase):
         self._rules_dir = os.path.join(RULES_DIR, tenant_id)
 
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
+        self.resources_patch = KubernetesComputeResourcesPatch(
+            self,
+            self._container.name,
+            resource_reqs_func=lambda: self._resource_reqs_from_config(),
+        )
+
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.ingress_per_unit = IngressPerUnitRequirer(
             self, relation_name="ingress", port=self._port
@@ -104,6 +116,7 @@ class LokiOperatorCharm(CharmBase):
         )
         self.framework.observe(self.on.logging_relation_changed, self._on_logging_relation_changed)
         self.framework.observe(self.ingress_per_unit.on.ingress_changed, self._on_ingress_changed)
+        self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
@@ -191,9 +204,14 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #             UTILITY METHODS                #
     ##############################################
-    def _configure(self):
+    def _configure(self):  # noqa: C901
         """Configure Loki charm."""
         restart = False
+
+        if not self.resources_patch.is_ready():
+            if isinstance(self.unit.status, ActiveStatus) or self.unit.status.message == "":
+                self.unit.status = WaitingStatus("Waiting for resource limit patch to apply")
+            return
 
         if not self._container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
@@ -417,6 +435,17 @@ class LokiOperatorCharm(CharmBase):
                 self.unit.status = ActiveStatus()
                 logger.info("Clearing blocked status with successful alert rule check")
             return
+
+    def _resource_reqs_from_config(self) -> ResourceRequirements:
+        limits = {
+            "cpu": self.model.config.get("cpu"),
+            "memory": self.model.config.get("memory"),
+        }
+        requests = {"cpu": "0.25", "memory": "200Mi"}
+        return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
+
+    def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
+        self.unit.status = BlockedStatus(event.message)
 
 
 if __name__ == "__main__":

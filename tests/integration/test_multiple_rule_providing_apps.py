@@ -28,7 +28,12 @@ async def test_deploy(ops_test, loki_charm):
 
     Assert on the unit status before any relations/configurations take place.
     """
-    await ops_test.model.deploy(loki_charm, resources=resources, application_name=app_name)
+    await ops_test.model.deploy(
+        loki_charm,
+        resources=resources,
+        application_name=app_name,
+        trust=True,
+    )
 
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
     assert ops_test.model.applications[app_name].units[0].workload_status == "active"

@@ -5,3 +5,5 @@ lightkube
 lightkube-models
 aiohttp
 jsonschema
+lightkube
+lightkube-models

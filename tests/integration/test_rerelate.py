@@ -36,7 +36,11 @@ async def test_build_and_deploy(ops_test: OpsTest, loki_charm, loki_tester_charm
     """Build the charm-under-test and deploy it together with related charms."""
     await asyncio.gather(
         ops_test.model.deploy(
-            loki_charm, resources=resources, application_name=app_name, num_units=2
+            loki_charm,
+            resources=resources,
+            application_name=app_name,
+            num_units=2,
+            trust=True,
         ),
         ops_test.model.deploy(
             loki_tester_charm,
@@ -46,6 +50,7 @@ async def test_build_and_deploy(ops_test: OpsTest, loki_charm, loki_tester_charm
             "ch:alertmanager-k8s",
             application_name="alertmanager",
             channel="edge",
+            trust=True,
         ),
     )
 
@@ -145,6 +150,7 @@ async def test_rerelate_app(ops_test: OpsTest, loki_tester_charm):
             "ch:alertmanager-k8s",
             application_name="alertmanager",
             channel="edge",
+            trust=True,
         ),
     )
 

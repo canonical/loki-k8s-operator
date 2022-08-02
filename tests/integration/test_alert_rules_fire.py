@@ -28,6 +28,7 @@ async def test_alert_rules_do_fire(ops_test, loki_charm, loki_tester_charm):
             loki_charm,
             resources=resources,
             application_name=loki_app_name,
+            trust=True,
         ),
         ops_test.model.deploy(
             loki_tester_charm,
@@ -127,6 +128,7 @@ async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki
             loki_charm,
             resources=resources,
             application_name=loki_app_name,
+            trust=True,
         ),
         ops_test.model.deploy(
             loki_tester_charm,
@@ -136,6 +138,7 @@ async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki
             "ch:alertmanager-k8s",
             application_name=alertmanager_app_name,
             channel="edge",
+            trust=True,
         ),
     )
 
