@@ -30,6 +30,7 @@ async def test_alert_rules_do_fire_from_log_proxy(ops_test, loki_charm, log_prox
             loki_charm,
             resources=resources,
             application_name=loki_app_name,
+            trust=True,
         ),
         ops_test.model.deploy(
             log_proxy_tester_charm,
