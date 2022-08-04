@@ -35,7 +35,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 )
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.traefik_k8s.v0.ingress_per_unit import IngressPerUnitRequirer
+from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from lightkube.models.core_v1 import ResourceRequirements
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -115,7 +115,7 @@ class LokiOperatorCharm(CharmBase):
             self._loki_push_api_alert_rules_changed,
         )
         self.framework.observe(self.on.logging_relation_changed, self._on_logging_relation_changed)
-        self.framework.observe(self.ingress_per_unit.on.ingress_changed, self._on_ingress_changed)
+        self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
         self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
 
     ##############################################
