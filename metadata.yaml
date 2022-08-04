@@ -5,15 +5,21 @@
 # https://discourse.charmhub.io/t/charm-metadata-v2/3674/15
 
 name: loki-k8s
-display-name: Loki
-description: |
-  Loki for Kubernetes cluster
+assumes:
+  - k8s-api
+
 summary: |
   Loki is a set of components that can be composed into a fully featured logging stack.
+
+description: |
+  Loki for Kubernetes cluster
 
 maintainers:
     - Jose Massón <jose.masson@canonical.com>
 
+website: https://charmhub.io/loki-k8s
+source: https://github.com/canonical/loki-k8s-operator
+issues: https://github.com/canonical/loki-k8s-operator/issues
 docs: https://discourse.charmhub.io/t/loki-k8s-docs-index/5228
 
 containers:
