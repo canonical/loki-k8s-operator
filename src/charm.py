@@ -31,12 +31,12 @@ from charms.loki_k8s.v0.loki_push_api import (
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
+    ResourceRequirements,
     adjust_resource_requirements,
 )
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
-from lightkube.models.core_v1 import ResourceRequirements
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -75,7 +75,7 @@ class LokiOperatorCharm(CharmBase):
         self.resources_patch = KubernetesComputeResourcesPatch(
             self,
             self._container.name,
-            resource_reqs_func=lambda: self._resource_reqs_from_config(),
+            resource_reqs_func=self._resource_reqs_from_config,
         )
 
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
