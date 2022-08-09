@@ -72,16 +72,25 @@ class LokiOperatorCharm(CharmBase):
         self._rules_dir = os.path.join(RULES_DIR, tenant_id)
 
         self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
+
         self.resources_patch = KubernetesComputeResourcesPatch(
             self,
             self._container.name,
             resource_reqs_func=self._resource_reqs_from_config,
         )
+        self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
 
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
+        self.framework.observe(
+            self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
+        )
+
         self.ingress_per_unit = IngressPerUnitRequirer(
             self, relation_name="ingress", port=self._port
         )
+        self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
+        self.framework.observe(self.ingress_per_unit.on.revoked_for_unit, self._on_ingress_changed)
+
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
             refresh_event=self.on.loki_pebble_ready,
@@ -107,16 +116,12 @@ class LokiOperatorCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
-        self.framework.observe(
-            self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
-        )
+
         self.framework.observe(
             self.loki_provider.on.loki_push_api_alert_rules_changed,
             self._loki_push_api_alert_rules_changed,
         )
         self.framework.observe(self.on.logging_relation_changed, self._on_logging_relation_changed)
-        self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
-        self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
@@ -335,6 +340,7 @@ class LokiOperatorCharm(CharmBase):
                 dir: {os.path.join(LOKI_DIR, "chunks", "wal")}
                 flush_on_shutdown: true
             ruler:
+              external_url: {self._external_url}
               alertmanager_url: {self._alerting_config()}
         """
         )
