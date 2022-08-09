@@ -294,6 +294,8 @@ class LokiOperatorCharm(CharmBase):
         Some minimal configuration is required for Loki to start, including: storage paths, schema,
         ring.
 
+        Reference: https://grafana.com/docs/loki/latest/configuration/
+
         Returns:
             Dictionary representation of the Loki YAML config
         """
@@ -305,6 +307,7 @@ class LokiOperatorCharm(CharmBase):
             server:
               http_listen_port: {self._port}
               http_listen_address: 0.0.0.0
+              http_path_prefix: {urlparse(self._external_url).path}
 
             common:
               path_prefix: {LOKI_DIR}
