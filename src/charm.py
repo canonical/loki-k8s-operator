@@ -134,6 +134,11 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_loki_pebble_ready(self, _):
         self._configure()
+        try:
+            version = self._loki_server.version
+            self.unit.set_workload_version(version)
+        except (LokiServerNotReadyError, LokiServerError):
+            logger.debug("Could not get Loki version")
 
     def _on_alertmanager_change(self, _):
         self._configure()
