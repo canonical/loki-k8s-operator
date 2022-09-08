@@ -11,8 +11,8 @@ from urllib.error import HTTPError, URLError
 
 import ops.testing
 import yaml
-from helpers import k8s_resource_multipatch
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
+from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
 from ops.testing import Harness
 
 from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
@@ -112,6 +112,7 @@ class TestCharm(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self, *_):
         self.container_name: str = "loki"
         version_patcher = patch(
@@ -197,6 +198,7 @@ class TestWorkloadUnavailable(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self, *_):
         self.container_name: str = "loki"
         version_patcher = patch(
@@ -228,6 +230,7 @@ class TestConfigFile(unittest.TestCase):
     @patch("socket.getfqdn", new=lambda *args: "fqdn")
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self, *_):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
@@ -315,6 +318,7 @@ class TestPebblePlan(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_loki_starts_when_cluster_deployed_without_any_relations(self, *_):
         """Scenario: A loki cluster is deployed without any relations."""
         is_leader = True
@@ -390,6 +394,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.version_patcher.stop()
 
     @k8s_resource_multipatch
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_pebble_ready_changes_status_from_waiting_to_active(self):
         """Scenario: a pebble-ready event is delayed."""
         # WHEN all startup hooks except pebble-ready finished
@@ -401,6 +406,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @k8s_resource_multipatch
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_regular_relation_departed_runs_before_pebble_ready(self):
         """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
         # WHEN relation-departed fires before pebble-ready
@@ -414,6 +420,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @k8s_resource_multipatch
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def test_regular_relation_broken_runs_before_pebble_ready(self):
         """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
         # WHEN relation-broken fires before pebble-ready
@@ -436,6 +443,7 @@ class TestAppRelationData(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self, *_) -> None:
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
@@ -478,6 +486,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self, *_):
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.patcher = patch("urllib.request.urlopen", new=Mock())
