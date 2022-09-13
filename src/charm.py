@@ -14,8 +14,10 @@ develop a new k8s charm using the Operator Framework:
 
 import logging
 import os
+import re
 import socket
 import textwrap
+from typing import Optional
 from urllib import request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -134,11 +136,11 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_loki_pebble_ready(self, _):
         self._configure()
-        try:
-            version = self._loki_server.version
+        version = self._loki_version
+        if version is not None:
             self.unit.set_workload_version(version)
-        except (LokiServerNotReadyError, LokiServerError):
-            logger.debug("Could not get Loki version")
+        else:
+            logger.debug("Cannot set workload version at this time: could not get Loki version.")
 
     def _on_alertmanager_change(self, _):
         self._configure()
@@ -460,6 +462,23 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
         self.unit.status = BlockedStatus(event.message)
+
+    @property
+    def _loki_version(self) -> Optional[str]:
+        """Returns the version of Loki.
+
+        Returns:
+            A string equal to the Loki version
+        """
+        if not self._container.can_connect():
+            return None
+        version_output, _ = self._container.exec(["/usr/bin/loki", "-version"]).wait_output()
+        # Output looks like this:
+        # loki, version 2.4.1 (branch: HEAD, ...
+        result = re.search(r"version (\d*\.\d*\.\d*)", version_output)
+        if result is None:
+            return result
+        return result.group(1)
 
 
 if __name__ == "__main__":
