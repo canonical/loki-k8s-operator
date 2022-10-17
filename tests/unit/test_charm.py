@@ -384,8 +384,8 @@ class TestDelayedPebbleReady(unittest.TestCase):
             self.log_rel_id,
             "consumer-app",
             {
-                "metadata": {},
-                "alert_rules": {},
+                "metadata": "{}",
+                "alert_rules": "{}",
             },
         )
 
