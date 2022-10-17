@@ -20,7 +20,7 @@ import textwrap
 from typing import Optional
 from urllib import request
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
@@ -419,9 +419,12 @@ class LokiOperatorCharm(CharmBase):
 
     def _check_alert_rules(self):
         """Check alert rules using Loki API."""
-        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.loki_provider.port)
+        path_prefix = urlparse(self._external_url).path
+        url_path = os.path.join(path_prefix, "loki/api/v1/rules")
+        url = urljoin("http://127.0.0.1:{}".format(self._port), url_path)
         req = request.Request(url)
         try:
+            logger.debug("Checking alert rules via {}.".format(req.full_url))
             request.urlopen(req, timeout=2.0)
         except HTTPError as e:
             msg = e.read().decode("utf-8")
