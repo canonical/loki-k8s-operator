@@ -20,7 +20,7 @@ import textwrap
 from typing import Optional
 from urllib import request
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import yaml
 from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
@@ -99,7 +99,15 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_url=self._external_url,
         )
-        scrape_jobs = [{"static_configs": [{"targets": [f"*:{self._port}"]}]}]
+
+        scrape_url = urlparse(self._external_url)
+        logger.debug("Using url {} for Prometheus scrape".format(urlunparse(scrape_url)))
+        scrape_jobs = [
+            {
+                "metrics_path": "{}/{}".format(scrape_url.path, "metrics"),
+                "static_configs": [{"targets": [scrape_url.netloc]}],
+            }
+        ]
         self.metrics_provider = MetricsEndpointProvider(self, jobs=scrape_jobs)
 
         self._loki_server = LokiServer()
