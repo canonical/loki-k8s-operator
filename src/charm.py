@@ -135,6 +135,7 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_loki_pebble_ready(self, _):
+        self._ensure_alert_rules_path()
         self._regenerate_alert_rules()
         self._configure()
         version = self._loki_version
