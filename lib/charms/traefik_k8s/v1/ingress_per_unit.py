@@ -63,8 +63,15 @@ import typing
 from typing import Any, Dict, Optional, Tuple, Union
 
 import yaml
-from ops.charm import CharmBase, RelationEvent
-from ops.framework import EventSource, Object, ObjectEvents, StoredState
+from ops.charm import CharmBase, RelationBrokenEvent, RelationEvent
+from ops.framework import (
+    EventSource,
+    Object,
+    ObjectEvents,
+    StoredDict,
+    StoredList,
+    StoredState,
+)
 from ops.model import Application, ModelError, Relation, Unit
 
 # The unique Charmhub library identifier, never change it
@@ -75,7 +82,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 4
 
 log = logging.getLogger(__name__)
 
@@ -105,6 +112,7 @@ INGRESS_REQUIRES_UNIT_SCHEMA = {
         "host": {"type": "string"},
         "port": {"type": "string"},
         "mode": {"type": "string"},
+        "strip-prefix": {"type": "string"},
     },
     "required": ["model", "name", "host", "port"],
 }
@@ -143,6 +151,7 @@ RequirerData = TypedDict(
         "host": str,
         "port": int,
         "mode": Optional[Literal["tcp", "http"]],
+        "strip-prefix": Optional[bool],
     },
     total=False,
 )
@@ -151,6 +160,19 @@ RequirerData = TypedDict(
 RequirerUnitData = Dict[Unit, "RequirerData"]
 KeyValueMapping = Dict[str, str]
 ProviderApplicationData = Dict[str, KeyValueMapping]
+
+
+def _type_convert_stored(obj):
+    """Convert Stored* to their appropriate types, recursively."""
+    if isinstance(obj, StoredList):
+        return list(map(_type_convert_stored, obj))
+    elif isinstance(obj, StoredDict):
+        rdict = {}  # type: Dict[Any, Any]
+        for k in obj.keys():
+            rdict[k] = _type_convert_stored(obj[k])
+        return rdict
+    else:
+        return obj
 
 
 def _validate_data(data, schema):
@@ -411,6 +433,15 @@ class IngressPerUnitProvider(_IngressPerUnitBase):
         Assumes that this unit is leader.
         """
         assert self.unit.is_leader(), "only leaders can do this"
+        try:
+            relation.data
+        except ModelError as e:
+            log.warning(
+                "error {} accessing relation data for {!r}. "
+                "Probably a ghost of a dead relation is still "
+                "lingering around.".format(e, relation.name)
+            )
+            return
         del relation.data[self.app]["ingress"]
 
     def _requirer_units_data(self, relation: Relation) -> RequirerUnitData:
@@ -431,9 +462,9 @@ class IngressPerUnitProvider(_IngressPerUnitBase):
                 # this remote unit didn't share data yet
                 log.warning("Remote unit {} not ready.".format(remote_unit.name))
                 continue
-            except DataValidationError:
+            except DataValidationError as e:
                 # this remote unit sent invalid data.
-                log.error("Remote unit {} sent invalid data.".format(remote_unit.name))
+                log.error("Remote unit {} sent invalid data ({}).".format(remote_unit.name, e))
                 continue
 
             remote_data["port"] = int(remote_data["port"])
@@ -441,21 +472,25 @@ class IngressPerUnitProvider(_IngressPerUnitBase):
         return requirer_units_data
 
     def _get_requirer_unit_data(self, relation: Relation, remote_unit: Unit) -> RequirerData:  # type: ignore
-        """Attempts to fetch the requirer unit data for this unit.
+        """Fetch and validate the requirer unit data for this unit.
 
-        May raise KeyError if the remote unit didn't send (some of) the required
-        data yet, or ValidationError if it did share some data, but the data
-        is invalid.
+        For convenience, we convert 'port' to integer.
         """
+        if not relation.app or not relation.app.name:
+            # Handle edge case where remote app name can be missing, e.g.,
+            # relation_broken events.
+            # FIXME https://github.com/canonical/traefik-k8s-operator/issues/34
+            return {}
+
         databag = relation.data[remote_unit]
         remote_data = {}  # type: Dict[str, Union[int, str]]
-        for k in ("port", "host", "model", "name", "mode"):
+        for k in ("port", "host", "model", "name", "mode", "strip-prefix"):
             v = databag.get(k)
             if v is not None:
                 remote_data[k] = v
         _validate_data(remote_data, INGRESS_REQUIRES_UNIT_SCHEMA)
-        # do some convenience casting
         remote_data["port"] = int(remote_data["port"])
+        remote_data["strip-prefix"] = bool(remote_data.get("strip-prefix", False))
         return remote_data
 
     def _provider_app_data(self, relation: Relation) -> ProviderApplicationData:
@@ -624,6 +659,7 @@ class IngressPerUnitRequirer(_IngressPerUnitBase):
         port: Optional[int] = None,
         mode: Literal["tcp", "http"] = "http",
         listen_to: Literal["only-this-unit", "all-units", "both"] = "only-this-unit",
+        strip_prefix: bool = False,
     ):
         """Constructor for IngressPerUnitRequirer.
 
@@ -659,6 +695,7 @@ class IngressPerUnitRequirer(_IngressPerUnitBase):
         self._host = host
         self._port = port
         self._mode = mode
+        self._strip_prefix = strip_prefix
 
         self.listen_to = listen_to
 
@@ -673,7 +710,10 @@ class IngressPerUnitRequirer(_IngressPerUnitBase):
         # we calculate the diff between the urls we were aware of
         # before and those we know now
         previous_urls = self._stored.current_urls or {}  # type: ignore
-        current_urls = self.urls or {}
+        current_urls = (
+            {} if isinstance(event, RelationBrokenEvent) else self._get_urls_from_relation_data
+        )
+        self._stored.current_urls = current_urls  # type: ignore
 
         removed = previous_urls.keys() - current_urls.keys()  # type: ignore
         changed = {a for a in current_urls if current_urls[a] != previous_urls.get(a)}  # type: ignore
@@ -696,8 +736,6 @@ class IngressPerUnitRequirer(_IngressPerUnitBase):
 
             for unit_name in removed:
                 self.on.revoked.emit(self.relation, unit_name)  # type: ignore
-
-        self._stored.current_urls = current_urls  # type: ignore
 
         # todo remove cast when ops.charm is typed
         self._publish_auto_data(typing.cast(Relation, event.relation))
@@ -747,11 +785,15 @@ class IngressPerUnitRequirer(_IngressPerUnitBase):
             "port": str(port),
             "mode": self._mode,
         }
+
+        if self._strip_prefix:
+            data["strip_prefix"] = "true"
+
         _validate_data(data, INGRESS_REQUIRES_UNIT_SCHEMA)
         self.relation.data[self.unit].update(data)
 
     @property
-    def urls(self) -> Dict[str, str]:
+    def _get_urls_from_relation_data(self) -> Dict[str, str]:
         """The full ingress URLs to reach every unit.
 
         May return an empty dict if the URLs aren't available yet.
@@ -783,6 +825,16 @@ class IngressPerUnitRequirer(_IngressPerUnitBase):
         _validate_data({"ingress": data}, INGRESS_PROVIDES_APP_SCHEMA)
 
         return {unit_name: unit_data["url"] for unit_name, unit_data in data.items()}
+
+    @property
+    def urls(self) -> Dict[str, str]:
+        """The full ingress URLs to reach every unit.
+
+        May return an empty dict if the URLs aren't available yet.
+        """
+        data = _type_convert_stored(self._stored.current_urls or {})  # type: ignore
+        assert isinstance(data, dict)  # for static checker
+        return data
 
     @property
     def url(self) -> Optional[str]:
