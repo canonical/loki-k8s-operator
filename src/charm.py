@@ -144,6 +144,8 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_loki_pebble_ready(self, _):
+        if self._ensure_alert_rules_path():
+            self._regenerate_alert_rules()
         self._configure()
         version = self._loki_version
         if version is not None:
@@ -157,6 +159,7 @@ class LokiOperatorCharm(CharmBase):
     def _on_ingress_changed(self, _):
         self._configure()
         self.loki_provider.update_endpoint(url=self._external_url)
+        self.grafana_source_provider.update_source(source_url=self._external_url)
 
     def _on_logging_relation_changed(self, event):
         # If there is a change in logging relation, let's update Loki endpoint
