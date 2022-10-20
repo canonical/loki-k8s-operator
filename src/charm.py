@@ -88,7 +88,7 @@ class LokiOperatorCharm(CharmBase):
         )
 
         self.ingress_per_unit = IngressPerUnitRequirer(
-            self, relation_name="ingress", port=self._port
+            self, relation_name="ingress", port=self._port, strip_prefix=True
         )
         self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
         self.framework.observe(self.ingress_per_unit.on.revoked_for_unit, self._on_ingress_changed)
@@ -99,18 +99,27 @@ class LokiOperatorCharm(CharmBase):
             source_type="loki",
             source_url=self._external_url,
         )
-        scrape_jobs = [{"static_configs": [{"targets": [f"*:{self._port}"]}]}]
-        self.metrics_provider = MetricsEndpointProvider(self, jobs=scrape_jobs)
+
+        scrape_jobs = [
+            {
+                "static_configs": [{"targets": ["*:{}".format(self._port)]}],
+            }
+        ]
+        self.metrics_provider = MetricsEndpointProvider(
+            self,
+            jobs=scrape_jobs,
+            refresh_event=[self.on.update_status, self.on["ingress"].relation_changed],
+        )
 
         self._loki_server = LokiServer()
-        parsed_external_url = urlparse(self._external_url)
+        external_url = urlparse(self._external_url)
 
         self.loki_provider = LokiPushApiProvider(
             self,
-            address=parsed_external_url.hostname or self.hostname,
-            port=parsed_external_url.port or self._port,
-            scheme=parsed_external_url.scheme,
-            path=f"{parsed_external_url.path}/loki/api/v1/push",
+            address=external_url.hostname or self.hostname,
+            port=external_url.port or 80,
+            scheme=external_url.scheme,
+            path=f"{external_url.path}/loki/api/v1/push",
         )
 
         self.dashboard_provider = GrafanaDashboardProvider(self)
@@ -204,8 +213,9 @@ class LokiOperatorCharm(CharmBase):
     @property
     def _external_url(self) -> str:
         """Return the external hostname to be passed to ingress via the relation."""
-        if ingress_url := self.ingress_per_unit.url:
-            logger.debug("This unit's ingress URL: %s", ingress_url)
+        ingress_url = self.ingress_per_unit.url
+        logger.debug("This unit's ingress URL: %s", ingress_url)
+        if ingress_url:
             return ingress_url
 
         # If we do not have an ingress, then use the pod hostname.
@@ -317,7 +327,6 @@ class LokiOperatorCharm(CharmBase):
             server:
               http_listen_port: {self._port}
               http_listen_address: 0.0.0.0
-              http_path_prefix: {urlparse(self._external_url).path}
 
             common:
               path_prefix: {LOKI_DIR}
@@ -422,9 +431,10 @@ class LokiOperatorCharm(CharmBase):
 
     def _check_alert_rules(self):
         """Check alert rules using Loki API."""
-        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self.loki_provider.port)
+        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self._port)
         req = request.Request(url)
         try:
+            logger.debug("Checking alert rules via {}.".format(req.full_url))
             request.urlopen(req, timeout=2.0)
         except HTTPError as e:
             msg = e.read().decode("utf-8")
@@ -485,4 +495,6 @@ class LokiOperatorCharm(CharmBase):
 
 
 if __name__ == "__main__":
-    main(LokiOperatorCharm)
+    # We need use_juju_for_storage=True because ingress_per_unit
+    # requires it to keep track of the ingress address.
+    main(LokiOperatorCharm, use_juju_for_storage=True)
