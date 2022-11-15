@@ -484,7 +484,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 13
 
 logger = logging.getLogger(__name__)
 
@@ -1097,7 +1097,14 @@ class LokiPushApiProvider(Object):
         self._relation_name = relation_name
         self._tool = CosTool(self)
         self.port = int(port)
-        self.container = self._charm._container
+
+        # This needs to return none if it does not exist for
+        # compatibility with machine charms. Also, this should
+        # be removed in v1 of the library as we should not
+        # assume any charm attributes exist except those 
+        # guaranteed by ops.
+        self.container = getattr(self._charm, "_container")
+
         self.scheme = scheme
         self.address = address
         self.path = path
