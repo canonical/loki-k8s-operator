@@ -1101,7 +1101,7 @@ class LokiPushApiProvider(Object):
         # This needs to return none if it does not exist for
         # compatibility with machine charms. Also, this should
         # be removed in v1 of the library as we should not
-        # assume any charm attributes exist except those 
+        # assume any charm attributes exist except those
         # guaranteed by ops.
         self.container = getattr(self._charm, "_container")
 
