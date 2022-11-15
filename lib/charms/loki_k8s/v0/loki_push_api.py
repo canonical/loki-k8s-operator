@@ -1103,7 +1103,7 @@ class LokiPushApiProvider(Object):
         # be removed in v1 of the library as we should not
         # assume any charm attributes exist except those
         # guaranteed by ops.
-        self.container = getattr(self._charm, "_container")
+        self.container = getattr(self._charm, "_container", None)
 
         self.scheme = scheme
         self.address = address
