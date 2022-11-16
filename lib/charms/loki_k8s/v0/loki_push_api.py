@@ -936,7 +936,7 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
 class NoRelationWithInterfaceFoundError(Exception):
     """No relations with the given interface are found in the charm meta."""
 
-    def __init__(self, charm: CharmBase, relation_interface: str = None):
+    def __init__(self, charm: CharmBase, relation_interface: Optional[str] = None):
         self.charm = charm
         self.relation_interface = relation_interface
         self.message = (
