@@ -936,7 +936,7 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
 class NoRelationWithInterfaceFoundError(Exception):
     """No relations with the given interface are found in the charm meta."""
 
-    def __init__(self, charm: CharmBase, relation_interface: str = ""):
+    def __init__(self, charm: CharmBase, relation_interface: str = None):
         self.charm = charm
         self.relation_interface = relation_interface
         self.message = (
@@ -1676,7 +1676,7 @@ class LogProxyConsumer(ConsumerBase):
     def __init__(
         self,
         charm,
-        log_files: list = [],
+        log_files: list = None,
         relation_name: str = DEFAULT_LOG_PROXY_RELATION_NAME,
         enable_syslog: bool = False,
         syslog_port: int = 1514,
@@ -1690,7 +1690,7 @@ class LogProxyConsumer(ConsumerBase):
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
         self._container_name = self._get_container_name(container_name)
-        self._log_files = log_files
+        self._log_files = log_files if log_files is not None else []
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = JujuTopology.from_charm(charm)
