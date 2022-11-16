@@ -1690,7 +1690,7 @@ class LogProxyConsumer(ConsumerBase):
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
         self._container_name = self._get_container_name(container_name)
-        self._log_files = log_files if log_files is not None else []
+        self._log_files = log_files or []
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = JujuTopology.from_charm(charm)
