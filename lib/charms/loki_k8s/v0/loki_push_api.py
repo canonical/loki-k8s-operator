@@ -484,7 +484,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 13
 
 logger = logging.getLogger(__name__)
 
@@ -936,7 +936,7 @@ def _resolve_dir_against_charm_path(charm: CharmBase, *path_elements: str) -> st
 class NoRelationWithInterfaceFoundError(Exception):
     """No relations with the given interface are found in the charm meta."""
 
-    def __init__(self, charm: CharmBase, relation_interface: str = None):
+    def __init__(self, charm: CharmBase, relation_interface: str = ""):
         self.charm = charm
         self.relation_interface = relation_interface
         self.message = (
@@ -1229,7 +1229,7 @@ class LokiPushApiProvider(Object):
 
         return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
 
-    def update_endpoint(self, url: str = None, relation: Relation = None) -> None:
+    def update_endpoint(self, url: str = "", relation: Relation = None) -> None:
         """Triggers programmatically the update of endpoint in unit relation data.
 
         This method should be used when the charm relying on this library needs
@@ -1676,7 +1676,7 @@ class LogProxyConsumer(ConsumerBase):
     def __init__(
         self,
         charm,
-        log_files: list = None,
+        log_files: list = [],
         relation_name: str = DEFAULT_LOG_PROXY_RELATION_NAME,
         enable_syslog: bool = False,
         syslog_port: int = 1514,
@@ -1690,7 +1690,7 @@ class LogProxyConsumer(ConsumerBase):
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
         self._container_name = self._get_container_name(container_name)
-        self._log_files = log_files or []
+        self._log_files = log_files
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = JujuTopology.from_charm(charm)
@@ -1807,7 +1807,7 @@ class LogProxyConsumer(ConsumerBase):
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
 
-    def _get_container_name(self, container_name: str = None) -> str:
+    def _get_container_name(self, container_name: str = "") -> str:
         """Helper function for getting/validating a container name.
 
         Args:

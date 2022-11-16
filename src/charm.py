@@ -100,20 +100,19 @@ class LokiOperatorCharm(CharmBase):
             source_url=self._external_url,
         )
 
-        scrape_jobs = [
-            {
-                "static_configs": [{"targets": ["*:{}".format(self._port)]}],
-            }
-        ]
         self.metrics_provider = MetricsEndpointProvider(
             self,
-            jobs=scrape_jobs,
-            refresh_event=[self.on.update_status, self.on["ingress"].relation_changed],
+            jobs=self.scrape_jobs,
+            refresh_event=[
+                self.on.update_status,
+                self.ingress_per_unit.on.ready_for_unit,
+                self.ingress_per_unit.on.revoked_for_unit,
+                self.on.ingress_relation_departed,
+            ],
         )
 
         self._loki_server = LokiServer()
         external_url = urlparse(self._external_url)
-
         self.loki_provider = LokiPushApiProvider(
             self,
             address=external_url.hostname or self.hostname,
@@ -160,6 +159,7 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
         self.loki_provider.update_endpoint(url=self._external_url)
         self.grafana_source_provider.update_source(source_url=self._external_url)
+        self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
 
     def _on_logging_relation_changed(self, event):
         # If there is a change in logging relation, let's update Loki endpoint
@@ -213,9 +213,8 @@ class LokiOperatorCharm(CharmBase):
     @property
     def _external_url(self) -> str:
         """Return the external hostname to be passed to ingress via the relation."""
-        ingress_url = self.ingress_per_unit.url
-        logger.debug("This unit's ingress URL: %s", ingress_url)
-        if ingress_url:
+        if ingress_url := self.ingress_per_unit.url:
+            logger.debug("This unit's ingress URL: %s", ingress_url)
             return ingress_url
 
         # If we do not have an ingress, then use the pod hostname.
@@ -225,6 +224,25 @@ class LokiOperatorCharm(CharmBase):
         # on the cluster's DNS service, while the ip address is _sometimes_
         # routable from the outside, e.g., when deploying on MicroK8s on Linux.
         return f"http://{self.hostname}:{self._port}"
+
+    @property
+    def scrape_jobs(self) -> list:
+        """Generate scrape jobs."""
+        if not self.ingress_per_unit.url:
+            return [
+                {
+                    "static_configs": [{"targets": [f"*:{self._port}"]}],
+                }
+            ]
+
+        external_url = urlparse(self.ingress_per_unit.url)
+
+        return [
+            {
+                "metrics_path": f"{external_url.path}/metrics",
+                "static_configs": [{"targets": [f"{external_url.hostname}:{external_url.port}"]}],
+            }
+        ]
 
     ##############################################
     #             UTILITY METHODS                #
