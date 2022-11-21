@@ -1097,7 +1097,6 @@ class LokiPushApiProvider(Object):
         self._relation_name = relation_name
         self._tool = CosTool(self)
         self.port = int(port)
-
         self.scheme = scheme
         self.address = address
         self.path = path
