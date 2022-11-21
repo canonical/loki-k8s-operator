@@ -1098,13 +1098,6 @@ class LokiPushApiProvider(Object):
         self._tool = CosTool(self)
         self.port = int(port)
 
-        # This needs to return none if it does not exist for
-        # compatibility with machine charms. Also, this should
-        # be removed in v1 of the library as we should not
-        # assume any charm attributes exist except those
-        # guaranteed by ops.
-        self.container = getattr(self._charm, "_container", None)
-
         self.scheme = scheme
         self.address = address
         self.path = path
