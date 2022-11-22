@@ -255,7 +255,11 @@ is assumed to be in one of two formats:
 - a single rule format, which is a simplified subset of the official format,
 comprising a single alert rule per file, using the same YAML fields.
 
-The file name must have the `.rule` extension.
+The file name must have one of the following extensions:
+- `.rule`
+- `.rules`
+- `.yml`
+- `.yaml`
 
 An example of the contents of such a file in the custom single rule
 format is shown below.
@@ -350,7 +354,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 26
+LIBPATCH = 25
 
 logger = logging.getLogger(__name__)
 
@@ -449,7 +453,7 @@ class PrometheusConfig:
     def expand_wildcard_targets_into_individual_jobs(
         scrape_jobs: List[dict],
         hosts: Dict[str, Tuple[str, str]],
-        topology: JujuTopology = None,  # type: ignore
+        topology: JujuTopology = None,
     ) -> List[dict]:
         """Extract wildcard hosts from the given scrape_configs list into separate jobs.
 
@@ -939,7 +943,9 @@ class AlertRules:
         alert_groups = []  # type: List[dict]
 
         # Gather all alerts into a list of groups
-        for file_path in self._multi_suffix_glob(dir_path, [".rule", ".rules"], recursive):
+        for file_path in self._multi_suffix_glob(
+            dir_path, [".rule", ".rules", ".yml", ".yaml"], recursive
+        ):
             alert_groups_from_file = self._from_file(dir_path, file_path)
             if alert_groups_from_file:
                 logger.debug("Reading alert rule from %s", file_path)
@@ -1378,7 +1384,7 @@ class MetricsEndpointProvider(Object):
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None,
         external_url: str = "",
-        lookaside_jobs_callable: Callable = None,  # type: ignore
+        lookaside_jobs_callable: Callable = None,
     ):
         """Construct a metrics provider for a Prometheus charm.
 
