@@ -91,7 +91,7 @@ async def test_loki_scales_up(ops_test):
         )
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_scale_down_to_zero_units(ops_test):
     loki_app_name = "loki"
     await ops_test.model.applications[loki_app_name].scale(scale=0)
