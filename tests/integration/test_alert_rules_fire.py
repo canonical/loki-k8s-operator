@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import get_alertmanager_alerts, is_loki_up, juju_show_unit, loki_alerts
+from helpers import is_loki_up, juju_show_unit, loki_alerts
 
 logger = logging.getLogger(__name__)
 
