@@ -288,7 +288,7 @@ class LokiOperatorCharm(CharmBase):
                 self._container.restart(self._name)
                 logger.info("Loki (re)started")
             except ChangeError as e:
-                msg = str(e)
+                msg = f"Failed to restart loki: {e}"  # or e.err?
                 self.unit.status = BlockedStatus(msg)
                 logger.error(msg)
                 return
