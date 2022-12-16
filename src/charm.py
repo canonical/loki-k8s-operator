@@ -43,7 +43,7 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from ops.pebble import Layer, PathError, ProtocolError
+from ops.pebble import ChangeError, Layer, PathError, ProtocolError
 
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
@@ -283,9 +283,15 @@ class LokiOperatorCharm(CharmBase):
             return
 
         if restart:
-            self._container.add_layer(self._name, new_layer, combine=True)
-            self._container.restart(self._name)
-            logger.info("Loki (re)started")
+            try:
+                self._container.add_layer(self._name, new_layer, combine=True)
+                self._container.restart(self._name)
+                logger.info("Loki (re)started")
+            except ChangeError as e:
+                msg = str(e)
+                self.unit.status = BlockedStatus(msg)
+                logger.error(msg)
+                return
 
         # Don't clear alert error states on reconfigure
         # but let errors connecting clear after a restart
