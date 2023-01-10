@@ -766,7 +766,7 @@ class AlertRules:
                         # any string as a "wildcard" which the topology labels will
                         # filter down
                         alert_rule["expr"] = self.tool.inject_label_matchers(
-                            re.sub(r"%%juju_topology%%", r'job=".+"', alert_rule["expr"]),
+                            re.sub(r"%%juju_topology%%", r'job=~".+"', alert_rule["expr"]),
                             self.topology.label_matcher_dict,
                         )
 
