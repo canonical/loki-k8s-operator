@@ -36,7 +36,10 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
+from charms.observability_libs.v1.kubernetes_service_patch import (
+    KubernetesServicePatch,
+    ServicePort,
+)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from ops.charm import CharmBase
@@ -73,7 +76,7 @@ class LokiOperatorCharm(CharmBase):
         tenant_id = "fake"
         self._rules_dir = os.path.join(RULES_DIR, tenant_id)
 
-        self.service_patch = KubernetesServicePatch(self, [(self.app.name, self._port)])
+        self.service_patch = KubernetesServicePatch(self, [ServicePort(self._port, self.app.name)])
 
         self.resources_patch = KubernetesComputeResourcesPatch(
             self,
