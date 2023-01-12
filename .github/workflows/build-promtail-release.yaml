@@ -34,7 +34,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.8
+          go-version: 1.18
       - name: Install systemd dependencies
         run: |
           sudo apt-get update
@@ -99,7 +99,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.8
+          go-version: 1.18
       - name: Build Promtail
         # We run the make-based build with CGO_ENABLED=0
         # because we want statically-linked binaries and
