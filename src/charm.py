@@ -76,7 +76,7 @@ class LokiOperatorCharm(CharmBase):
         tenant_id = "fake"
         self._rules_dir = os.path.join(RULES_DIR, tenant_id)
 
-        self.service_patch = KubernetesServicePatch(self, [ServicePort(self._port, self.app.name)])
+        self.service_patch = KubernetesServicePatch(self, [ServicePort(self._port, name=self.app.name)])
 
         self.resources_patch = KubernetesComputeResourcesPatch(
             self,
