@@ -1,4 +1,4 @@
-ops
+ops==2.0.0rc2
 kubernetes
 requests
 lightkube
