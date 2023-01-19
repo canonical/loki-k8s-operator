@@ -374,7 +374,8 @@ class TestDelayedPebbleReady(unittest.TestCase):
 
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
-        self.harness.begin_with_initial_hooks()
+        self.harness.begin()
+        self.harness.charm.on.config_changed.emit()
 
         # AND a "logging" app joins with several units
         self.log_rel_id = self.harness.add_relation("logging", "consumer-app")
