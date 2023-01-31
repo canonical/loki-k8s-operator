@@ -14,7 +14,7 @@ jobs:
 
   build-dynamic:
     name: Build dynamically-linked Promtail
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         arch: [amd64] # [amd64, arm64] # GitHub workflows do not support YAML anchors :-(
@@ -34,7 +34,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18
+          go-version: 1.19
       - name: Install systemd dependencies
         run: |
           sudo apt-get update
@@ -42,7 +42,8 @@ jobs:
       - name: Build Promtail
         working-directory: loki-upstream
         run: |
-          GOHOSTOS=linux GOARCH=${{matrix.arch}} make clients/cmd/promtail/promtail
+          GOHOSTOS=linux GOARCH=${{matrix.arch}} make promtail
+          ldd clients/cmd/promtail/promtail
           file clients/cmd/promtail/promtail
       - name: Attach promtail-dynamic-${{matrix.arch}} artifact to run
         uses: actions/upload-artifact@v3
@@ -99,7 +100,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18
+          go-version: 1.19
       - name: Build Promtail
         # We run the make-based build with CGO_ENABLED=0
         # because we want statically-linked binaries and
