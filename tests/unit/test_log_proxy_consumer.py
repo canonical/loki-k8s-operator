@@ -269,7 +269,6 @@ class TestLogProxyConsumer(unittest.TestCase):
 
 class TestLogProxyConsumerWithoutSyslog(unittest.TestCase):
     def setUp(self):
-
         self.harness = Harness(ConsumerCharmSyslogDisabled, meta=ConsumerCharm.metadata_yaml)
         self.harness.set_model_info(name="MODEL", uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4")
         self.addCleanup(self.harness.cleanup)

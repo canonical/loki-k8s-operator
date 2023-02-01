@@ -120,7 +120,6 @@ class LogProxyTesterCharm(CharmBase):
         return services
 
     def _flog_layer(self) -> Layer:
-
         return Layer(
             {
                 "summary": "flog layer",
