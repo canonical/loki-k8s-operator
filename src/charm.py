@@ -15,7 +15,9 @@ develop a new k8s charm using the Operator Framework:
 import logging
 import os
 import re
+import signal
 import socket
+import sys
 import textwrap
 from typing import Optional
 from urllib import request
@@ -523,7 +525,12 @@ class LokiOperatorCharm(CharmBase):
         return result.group(1)
 
 
+def _signal_worker(*args) -> None:
+    # trigger CI
+    os.kill(os.getppid(), signal.SIGTERM)
+    sys.exit(0)
+
+
 if __name__ == "__main__":
-    # We need use_juju_for_storage=True because ingress_per_unit
-    # requires it to keep track of the ingress address.
-    main(LokiOperatorCharm, use_juju_for_storage=True)
+    signal.signal(signal.SIGTERM, _signal_worker)
+    main(LokiOperatorCharm)
