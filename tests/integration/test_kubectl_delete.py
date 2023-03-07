@@ -35,7 +35,7 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
 
     cmd = [
         "sg",
-        "microk8s",
+        "snap_microk8s",
         "-c",
         " ".join(["microk8s.kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]),
     ]
