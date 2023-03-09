@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 import pytest
-from helpers import loki_alerts, loki_api_query, oci_image
+from helpers import loki_alerts, oci_image
 
 logger = logging.getLogger(__name__)
 
