@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import asyncio
+import grp
 import json
 import logging
 import urllib.request
@@ -231,6 +232,16 @@ def oci_image(metadata_file: str, image_name: str) -> str:
         raise ValueError("Upstream source not found")
 
     return upstream_source
+
+
+def uk8s_group() -> str:
+    try:
+        # Classically confined microk8s
+        uk8s_group = grp.getgrnam("microk8s").gr_name
+    except KeyError:
+        # Strictly confined microk8s
+        uk8s_group = "snap_microk8s"
+    return uk8s_group
 
 
 async def juju_show_unit(
