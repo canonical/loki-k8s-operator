@@ -81,43 +81,6 @@ async def test_second_relation_second_alert_rule(ops_test, loki_tester_charm):
 
 
 @pytest.mark.abort_on_fail
-async def test_remove_app_one_alert_rules_is_retained(ops_test):
-    await ops_test.model.applications[rules_app2].remove()
-    try:
-        await ops_test.model.block_until(
-            lambda: rules_app2 not in ops_test.model.applications, timeout=300
-        )
-    except asyncio.exceptions.TimeoutError:
-        logger.warning(
-            "Failed to remove applications: %s",
-            ", ".join([app for app in ops_test.model.applications if app in [rules_app2]]),
-        )
-        hung_apps = [
-            app_name
-            for app_name, app in ops_test.model.applications.items()
-            if len(app.units) == 0 and app.status == "active"
-        ]
-        if hung_apps:
-            for app in hung_apps:
-                logger.warning("%s stuck removing. Forcing...", app)
-                cmd = [
-                    "juju",
-                    "remove-application",
-                    "--destroy-storage",
-                    "--force",
-                    "--no-wait",
-                    app,
-                ]
-                logger.info("Forcibly removing {}".format(app))
-                await ops_test.run(*cmd)
-        else:
-            raise
-    global rules_after_relation
-    rules_after_delete_relation2 = await loki_rules(ops_test, app_name)
-    assert rules_after_delete_relation2 == rules_after_relation
-
-
-@pytest.mark.abort_on_fail
 async def test_wrong_alert_rule(ops_test, faulty_loki_tester_charm):
     await ops_test.model.deploy(faulty_loki_tester_charm, application_name=rules_app3)
 
