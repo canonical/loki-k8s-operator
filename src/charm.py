@@ -51,7 +51,7 @@ from ops.pebble import ChangeError, Layer, PathError, ProtocolError
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
 # Paths in workload container
-LOKI_CONFIG = "/etc/loki/local-config.yaml"
+LOKI_CONFIG = "/etc/loki/loki-local-config.yaml"
 LOKI_DIR = "/loki"
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
