@@ -60,5 +60,5 @@ requires:
 resources:
   loki-image:
     type: oci-image
-    description: Loki OCI image "grafana/loki:2.4.1"
-    upstream-source: grafana/loki:2.4.1
+    description: Loki OCI image "ghcr.io/canonical/loki:2.7.4"
+    upstream-source: ghcr.io/canonical/loki:2.7.4
