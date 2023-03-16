@@ -484,7 +484,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 16
+LIBPATCH = 17
 
 logger = logging.getLogger(__name__)
 
@@ -2391,11 +2391,9 @@ class CosTool:
             #         expr: up
             transformed_rules = {"groups": []}  # type: ignore
             for rule in rules["groups"]:
-                transformed = {"name": str(uuid.uuid4()), "rules": [rule]}
-                transformed_rules["groups"].append(transformed)
+                transformed_rules["groups"].append(rule)
 
             rule_path.write_text(yaml.dump(transformed_rules))
-
             args = [str(self.path), "--format", "logql", "validate", str(rule_path)]
             # noinspection PyBroadException
             try:
