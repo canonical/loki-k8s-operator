@@ -176,20 +176,25 @@ class TestValidateAlerts(unittest.TestCase):
             {
                 "groups": [
                     {
-                        "alert": "CPUOverUse",
-                        "expr": 'rate({job="unit_test"} [5m]) > 0.12',
-                        "for": "0m",
-                        "labels": {
-                            "severity": "Low",
-                            "juju_model": "None",
-                            "juju_model_uuid": "f2c1b2a6-e006-11eb-ba80-0242ac130004",
-                            "juju_application": "consumer-tester",
-                        },
-                        "annotations": {
-                            "summary": "Instance {{ $labels.instance }} CPU over use",
-                            "description": "{{ $labels.instance }} of job "
-                            "{{ $labels.job }} has used too much CPU.",
-                        },
+                        "name": "CPUOverUse",
+                        "rules": [
+                            {
+                                "alert": "CPUOverUse",
+                                "expr": 'rate({job="unit_test"} [5m]) > 0.12',
+                                "for": "0m",
+                                "labels": {
+                                    "severity": "Low",
+                                    "juju_model": "None",
+                                    "juju_model_uuid": "f2c1b2a6-e006-11eb-ba80-0242ac130004",
+                                    "juju_application": "consumer-tester",
+                                },
+                                "annotations": {
+                                    "summary": "Instance {{ $labels.instance }} CPU over use",
+                                    "description": "{{ $labels.instance }} of job "
+                                    "{{ $labels.job }} has used too much CPU.",
+                                },
+                            }
+                        ],
                     }
                 ]
             }

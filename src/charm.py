@@ -17,7 +17,8 @@ import os
 import re
 import socket
 import textwrap
-from typing import Optional
+import time
+from typing import Any, Dict, Optional
 from urllib import request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -43,15 +44,14 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from ops.charm import CharmBase
-from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from ops.pebble import ChangeError, Layer, PathError, ProtocolError
+from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
 # Paths in workload container
-LOKI_CONFIG = "/etc/loki/local-config.yaml"
+LOKI_CONFIG = "/etc/loki/loki-local-config.yaml"
 LOKI_DIR = "/loki"
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
@@ -61,14 +61,12 @@ logger = logging.getLogger(__name__)
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
-    _stored = StoredState()
     _port = 3100
     _name = "loki"
 
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._stored.set_default(k8s_service_patched=False, config="")
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
@@ -274,11 +272,10 @@ class LokiOperatorCharm(CharmBase):
         config = self._loki_config()
 
         try:
-            if yaml.safe_load(self._stored.config) != config:
+            if self._running_config() != config:
                 config_as_yaml = yaml.safe_dump(config)
                 self._container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
                 logger.info("Pushed new configuration")
-                self._stored.config = config_as_yaml
                 restart = True
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
@@ -304,6 +301,11 @@ class LokiOperatorCharm(CharmBase):
             isinstance(self.unit.status, BlockedStatus)
             and "Errors in alert rule" in self.unit.status.message
         ):
+            # Wait briefly for Loki to come back up and re-check the alert rules
+            # in case an upgrade/refresh caused the check to occur when it wasn't
+            # ready yet
+            time.sleep(2)
+            self._check_alert_rules()
             return
 
         self.unit.status = ActiveStatus()
@@ -337,7 +339,17 @@ class LokiOperatorCharm(CharmBase):
 
         return ",".join([f"http://{am}" for am in alertmanagers])
 
-    def _loki_config(self) -> dict:
+    def _running_config(self) -> Dict[str, Any]:
+        """Get the on-disk Loki config."""
+        if not self._container.can_connect():
+            return {}
+
+        try:
+            return yaml.safe_load(self._container.pull(LOKI_CONFIG, encoding="utf-8").read())
+        except (FileNotFoundError, Error):
+            return {}
+
+    def _loki_config(self) -> Dict[str, Any]:
         """Construct Loki configuration.
 
         Some minimal configuration is required for Loki to start, including: storage paths, schema,
