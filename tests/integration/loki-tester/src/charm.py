@@ -14,7 +14,6 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 
-
 logging.raiseExceptions = False
 
 
