@@ -15,6 +15,9 @@ from ops.main import main
 from ops.model import ActiveStatus
 
 
+logging.raiseExceptions = False
+
+
 class LokiTesterCharm(CharmBase):
     """A Loki Operator Client Charm."""
 

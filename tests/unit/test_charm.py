@@ -125,7 +125,6 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
-        self.harness.charm._stored.config = LOKI_CONFIG
 
     def test__alerting_config(self):
         self.harness.charm.alertmanager_consumer = Mock()

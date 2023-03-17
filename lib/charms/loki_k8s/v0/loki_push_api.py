@@ -449,7 +449,6 @@ import socket
 import subprocess
 import tempfile
 import typing
-import uuid
 from copy import deepcopy
 from gzip import GzipFile
 from hashlib import sha256

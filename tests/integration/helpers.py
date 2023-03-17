@@ -29,10 +29,23 @@ async def is_loki_up(ops_test, app_name, num_units=1) -> bool:
         addresses = [await get_unit_address(ops_test, app_name, i) for i in range(num_units)]
 
     def get(url) -> bool:
-        response = urllib.request.urlopen(url, data=None, timeout=2.0)
-        return response.code == 200 and "version" in json.loads(response.read())
+        try:
+            response = urllib.request.urlopen(url, data=None, timeout=2.0)
+            return response.code == 200 and "version" in json.loads(response.read())
+        except Exception:
+            return False
 
-    return all(get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses)
+    count = 5
+    while count >= 0:
+        resp = [
+            get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses
+        ]
+        if all(resp):
+            return all(resp)
+        # Otherwise, newer Loki may take a bit to re-play. Back off and wait a maximum of 5 seconds
+        await asyncio.sleep(1)
+        count -= 1
+    return False
 
 
 async def loki_rules(ops_test, app_name) -> dict:
