@@ -314,3 +314,38 @@ class TestLogProxyConsumerWithPromtailResource(unittest.TestCase):
                     "INFO:charms.loki_k8s.v0.loki_push_api:Promtail binary file has been obtained from an attached resource."
                 ],
             )
+
+
+class TestTypeValidation(unittest.TestCase):
+    def test_log_files_various_types(self):
+        for log_files in [
+            "",
+            None,
+            [],
+            "/my/file.log",
+            ["/my/file.log"],
+            {"/my/file.log"},
+            ("/my/file.log",),
+        ]:
+            with self.subTest(log_files=log_files):
+
+                class ConsumerCharm(CharmBase):
+                    metadata_yaml = textwrap.dedent(
+                        """
+                        name: loki-k8s
+                        containers:
+                          app:
+                            resource: app-image
+                        requires:
+                          log-proxy:
+                            interface: loki_push_api
+                        """
+                    )
+
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args)
+                        self.loki_consumer = LogProxyConsumer(self, log_files=log_files)
+
+                self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
+                self.addCleanup(self.harness.cleanup)
+                self.harness.begin()

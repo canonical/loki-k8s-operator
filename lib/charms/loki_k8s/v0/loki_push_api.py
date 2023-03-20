@@ -483,7 +483,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 17
+LIBPATCH = 18
 
 logger = logging.getLogger(__name__)
 
@@ -1755,7 +1755,7 @@ class LogProxyConsumer(ConsumerBase):
     def __init__(
         self,
         charm,
-        log_files: Optional[list] = None,
+        log_files: Optional[Union[List[str], str]] = None,
         relation_name: str = DEFAULT_LOG_PROXY_RELATION_NAME,
         enable_syslog: bool = False,
         syslog_port: int = 1514,
@@ -1769,7 +1769,15 @@ class LogProxyConsumer(ConsumerBase):
         self._relation_name = relation_name
         self._container = self._get_container(container_name)
         self._container_name = self._get_container_name(container_name)
-        self._log_files = log_files or []
+
+        if not log_files:
+            log_files = []
+        elif isinstance(log_files, str):
+            log_files = [log_files]
+        else:
+            log_files = list(log_files)
+        self._log_files = log_files
+
         self._syslog_port = syslog_port
         self._is_syslog = enable_syslog
         self.topology = JujuTopology.from_charm(charm)
