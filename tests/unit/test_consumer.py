@@ -14,34 +14,6 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
 
-LABELED_ALERT_RULES = [
-    {
-        "name": "loki_20ce8299-3634-4bef-8bd8-5ace6c8816b4_promtail-k8s_alerts",
-        "rules": [
-            {
-                "alert": "HighPercentageError",
-                "expr": 'sum(rate({juju_model="loki", juju_model_uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4", juju_application="promtail-k8s"} |= "error" [5m])) by (job)\n  /\nsum(rate({app="foo", env="production"}[5m])) by (job)\n  > 0.05\n',
-                "for": "10m",
-                "labels": {
-                    "severity": "page",
-                    "juju_model": "loki",
-                    "juju_model_uuid": "20ce8299-3634-4bef-8bd8-5ace6c8816b4",
-                    "juju_application": "promtail-k8s",
-                },
-                "annotations": {"summary": "High request latency"},
-            }
-        ],
-    }
-]
-
-ONE_RULE = {
-    "alert": "HighPercentageError",
-    "expr": 'sum(rate({%%juju_topology%%} |= "error" [5m])) by (job)\n  /\nsum(rate({app="foo", env="production"}[5m])) by (job)\n  > 0.05\n',
-    "for": "10m",
-    "labels": {"severity": "page"},
-    "annotations": {"summary": "High request latency"},
-}
-
 
 class FakeConsumerCharm(CharmBase):
     _stored = StoredState()
@@ -89,13 +61,13 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         self.harness.set_leader(True)
         self.harness.begin()
 
-    def test__on_logging_relation_changed_no_leader(self):
+    def test_on_logging_relation_changed_no_leader(self):
         self.harness.set_leader(False)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
         self.assertEqual(self.harness.update_relation_data(rel_id, "promtail", {}), None)
 
-    def test__on_logging_relation_changed_no_unit(self):
+    def test_on_logging_relation_changed_no_unit(self):
         self.harness.set_leader(True)
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
@@ -140,7 +112,7 @@ class TestLokiPushApiConsumer(unittest.TestCase):
         # Check we have no more endpoint
         self.assertAlmostEqual(len(self.harness.charm.loki_consumer.loki_endpoints), 0)
 
-    def test__on_upgrade_charm_endpoint_joined_event_fired_for_leader(self):
+    def test_on_upgrade_charm_endpoint_joined_event_fired_for_leader(self):
         self.harness.set_leader(True)
 
         rel_id = self.harness.add_relation("logging", "promtail")
@@ -155,7 +127,7 @@ class TestLokiPushApiConsumer(unittest.TestCase):
 
         self.assertEqual(self.harness.charm._stored.endpoint_events, 2)
 
-    def test__on_upgrade_charm_endpoint_joined_event_fired_for_follower(self):
+    def test_on_upgrade_charm_endpoint_joined_event_fired_for_follower(self):
         self.harness.set_leader(False)
 
         rel_id = self.harness.add_relation("logging", "promtail")
@@ -183,6 +155,17 @@ class TestReloadAlertRules(unittest.TestCase):
     # use a short-form free-standing alert, for brevity
     ALERT = yaml.safe_dump({"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5"})
 
+    RENDERED_ALERT_WITHOUT_LABELS = {
+        "groups": [
+            {
+                "name": "alert_alerts",
+                "rules": [
+                    {"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5", "labels": {}}
+                ],
+            }
+        ]
+    }
+
     def setUp(self):
         # override the default ordering, since each of these steps depends on the
         # state of the previous test
@@ -208,7 +191,10 @@ class TestReloadAlertRules(unittest.TestCase):
                 super().__init__(*args)
                 self._port = 3100
                 self.loki_consumer = LokiPushApiConsumer(
-                    self, alert_rules_path=alert_rules_path, recursive=True
+                    self,
+                    alert_rules_path=alert_rules_path,
+                    recursive=True,
+                    skip_alert_topology_labeling=True,
                 )
 
         self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
@@ -263,8 +249,9 @@ class TestReloadAlertRules(unittest.TestCase):
         self.sandbox.writetext("alert.rule", self.ALERT)
         self.harness.charm.loki_consumer._reinitialize_alert_rules()
         relation = self.harness.charm.model.get_relation("logging")
-        self.assertNotEqual(
-            relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS
+        self.assertEqual(
+            json.loads(relation.data[self.harness.charm.app].get("alert_rules")),
+            self.RENDERED_ALERT_WITHOUT_LABELS,
         )
 
         # WHEN all rule files are deleted from the alerts dir
