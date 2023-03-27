@@ -317,35 +317,54 @@ class TestLogProxyConsumerWithPromtailResource(unittest.TestCase):
 
 
 class TestTypeValidation(unittest.TestCase):
-    def test_log_files_various_types(self):
-        for log_files in [
+    def setUp(self) -> None:
+        self.valid_cases = [
             "",
             None,
             [],
             "/my/file.log",
             ["/my/file.log"],
+        ]
+
+        self.invalid_cases = [
             {"/my/file.log"},
             ("/my/file.log",),
-        ]:
+        ]
+
+    @staticmethod
+    def charm_factory(log_files):
+        class ConsumerCharm(CharmBase):
+            metadata_yaml = textwrap.dedent(
+                """
+                name: loki-k8s
+                containers:
+                  app:
+                    resource: app-image
+                requires:
+                  log-proxy:
+                    interface: loki_push_api
+                """
+            )
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args)
+                self.loki_consumer = LogProxyConsumer(self, log_files=log_files)
+
+        return ConsumerCharm
+
+    def test_log_files_various_valid_types(self):
+        for log_files in self.valid_cases:
             with self.subTest(log_files=log_files):
-
-                class ConsumerCharm(CharmBase):
-                    metadata_yaml = textwrap.dedent(
-                        """
-                        name: loki-k8s
-                        containers:
-                          app:
-                            resource: app-image
-                        requires:
-                          log-proxy:
-                            interface: loki_push_api
-                        """
-                    )
-
-                    def __init__(self, *args, **kwargs):
-                        super().__init__(*args)
-                        self.loki_consumer = LogProxyConsumer(self, log_files=log_files)
-
+                ConsumerCharm = self.charm_factory(log_files)  # noqa: N806
                 self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
                 self.addCleanup(self.harness.cleanup)
                 self.harness.begin()
+
+    def test_log_files_various_invalid_types(self):
+        for log_files in self.invalid_cases:
+            with self.subTest(log_files=log_files):
+                ConsumerCharm = self.charm_factory(log_files)  # noqa: N806
+                self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
+                self.addCleanup(self.harness.cleanup)
+                with self.assertRaises(TypeError):
+                    self.harness.begin()

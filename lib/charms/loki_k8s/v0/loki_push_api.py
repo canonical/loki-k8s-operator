@@ -1774,8 +1774,10 @@ class LogProxyConsumer(ConsumerBase):
             log_files = []
         elif isinstance(log_files, str):
             log_files = [log_files]
-        else:
-            log_files = list(log_files)
+        elif not isinstance(log_files, list) or not all(
+            map(lambda x: isinstance(x, str), log_files)
+        ):
+            raise TypeError("The 'log_files' argument must be a list of strings.")
         self._log_files = log_files
 
         self._syslog_port = syslog_port
