@@ -1,133 +1,53 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "prometheus"
-    }
-  ],
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "7.3.1"
-    },
-    {
-      "type": "panel",
-      "id": "grafana-piechart-panel",
-      "name": "Pie Chart",
-      "version": "1.3.8"
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "stat",
-      "name": "Stat",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "text",
-      "name": "Text",
-      "version": ""
-    }
-  ],
   "annotations": {
     "list": [
       {
         "$$hashKey": "object:7",
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
         "type": "dashboard"
       }
     ]
   },
   "description": "Loki Operator Overview",
   "editable": true,
+  "fiscalYearStartMonth": 0,
   "gnetId": 13407,
   "graphTooltip": 0,
-  "id": null,
+  "id": 5,
   "links": [],
+  "liveNow": false,
   "panels": [
     {
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": null
-          },
-          "decimals": 4,
-          "links": [],
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
       "gridPos": {
-        "h": 2,
+        "h": 1,
         "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 21,
-      "interval": "",
-      "options": {
-        "content": "<div class=\"left dashboard-header\">\n   <img src=\"https://marketplace-assets.digitalocean.com/logos/loki-logo.svg\" style=\"height:29px;\"/>\n  <span>Loki Global Metrics</span>\n</div>",
-        "mode": "html"
-      },
-      "pluginVersion": "7.3.1",
-      "targets": [
-        {
-          "expr": "loki_build_info",
-          "format": "table",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "",
-      "transparent": true,
-      "type": "text"
+      "id": 75,
+      "title": "At a glance",
+      "type": "row"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": null
-          },
           "decimals": 4,
           "links": [],
           "mappings": [],
@@ -145,10 +65,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 3,
+        "h": 4,
+        "w": 2,
         "x": 0,
-        "y": 2
+        "y": 1
       },
       "id": 59,
       "interval": "",
@@ -166,10 +86,13 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "targets": [
         {
-          "expr": "loki_build_info",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "loki_build_info{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "format": "table",
           "instant": false,
           "interval": "",
@@ -177,21 +100,20 @@
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Loki Version",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": null
-          },
           "decimals": 0,
           "links": [],
           "mappings": [],
+          "noValue": "-",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -206,10 +128,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 3,
-        "y": 2
+        "h": 4,
+        "w": 4,
+        "x": 2,
+        "y": 1
       },
       "id": 10,
       "interval": "",
@@ -227,41 +149,39 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "targets": [
         {
-          "expr": "sum(log_messages_total)",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "editorMode": "code",
+          "expr": "sum(log_messages_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"})",
           "instant": false,
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Message Total",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": null
-          },
-          "decimals": 0,
+          "decimals": 4,
           "links": [],
           "mappings": [],
+          "noValue": "-",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
               }
             ]
           },
@@ -270,50 +190,110 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 3,
+        "h": 4,
+        "w": 4,
         "x": 6,
-        "y": 2
+        "y": 1
       },
-      "id": 44,
+      "id": 23,
       "interval": "",
       "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
-            "last"
+            "mean"
           ],
           "fields": "",
           "values": false
         },
-        "textMode": "value"
+        "textMode": "auto"
       },
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "targets": [
         {
-          "expr": "cortex_prometheus_notifications_alertmanagers_discovered",
-          "format": "time_series",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum(loki_store_series_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Store Series Total",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 4,
+          "links": [],
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 10,
+        "y": 1
+      },
+      "id": 41,
+      "interval": "",
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum(loki_ingester_chunk_stored_bytes_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
           "instant": true,
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Current Alerts",
+      "title": "Store Chunks Total",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": null
-          },
           "decimals": 0,
           "links": [],
           "mappings": [],
@@ -335,10 +315,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
+        "h": 4,
         "w": 3,
-        "x": 9,
-        "y": 2
+        "x": 14,
+        "y": 1
       },
       "id": 48,
       "interval": "",
@@ -356,10 +336,13 @@
         },
         "textMode": "value"
       },
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "targets": [
         {
-          "expr": "cortex_prometheus_notifications_sent_total",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "cortex_prometheus_notifications_sent_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -367,141 +350,19 @@
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Alerts Event Total",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": null
-          },
-          "decimals": 4,
-          "links": [],
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 12,
-        "y": 2
-      },
-      "id": 23,
-      "interval": "",
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "mean"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.3.1",
-      "targets": [
-        {
-          "expr": "sum(loki_store_series_total)",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Store Series Total",
-      "type": "stat"
-    },
-    {
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": null
-          },
-          "decimals": 4,
-          "links": [],
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 15,
-        "y": 2
-      },
-      "id": 41,
-      "interval": "",
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "mean"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "7.3.1",
-      "targets": [
-        {
-          "expr": "sum(loki_ingester_chunk_stored_bytes_total)",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Store Chunks Total",
-      "type": "stat"
-    },
-    {
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": null
-          },
           "decimals": 0,
           "links": [],
           "mappings": [],
+          "noValue": "-",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -520,10 +381,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
+        "h": 4,
         "w": 3,
-        "x": 18,
-        "y": 2
+        "x": 17,
+        "y": 1
       },
       "id": 49,
       "interval": "",
@@ -541,10 +402,13 @@
         },
         "textMode": "value"
       },
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "targets": [
         {
-          "expr": "sum(cortex_prometheus_rule_group_rules)",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum(cortex_prometheus_rule_group_rules{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -552,21 +416,19 @@
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Rules Total",
       "type": "stat"
     },
     {
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": null
-          },
           "decimals": 4,
           "links": [],
           "mappings": [],
+          "noValue": "-",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -581,10 +443,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 3,
-        "x": 21,
-        "y": 2
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
       },
       "id": 24,
       "interval": "",
@@ -602,30 +464,45 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "targets": [
         {
-          "expr": "loki_panic_total",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "loki_panic_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "instant": false,
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "timeFrom": null,
-      "timeShift": null,
       "title": "Panic ",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 77,
+      "panels": [],
+      "title": "Row title",
+      "type": "row"
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -636,7 +513,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 5
+        "y": 6
       },
       "hiddenSeries": false,
       "id": 8,
@@ -657,7 +534,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -667,16 +544,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(irate(log_messages_total[1m])) by (level)",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(level) (irate(log_messages_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[1m]))",
           "interval": "",
           "legendFormat": "{{ level }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Messages Input",
       "tooltip": {
         "shared": true,
@@ -685,9 +563,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -695,25 +571,18 @@
         {
           "$$hashKey": "object:155",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -721,10 +590,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -735,110 +605,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 5
-      },
-      "hiddenSeries": false,
-      "id": 53,
-      "interval": "",
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": false,
-        "min": false,
-        "rightSide": true,
-        "show": true,
-        "sort": "current",
-        "sortDesc": true,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.1",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_s3_request_duration_seconds_bucket[5m])) by (le,operation))",
-          "interval": "",
-          "legendFormat": "{{operation}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "S3 Request Durations",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:155",
-          "format": "s",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:156",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 0,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 0,
-        "y": 11
+        "y": 6
       },
       "hiddenSeries": false,
       "id": 11,
@@ -863,7 +630,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -873,16 +640,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_request_duration_seconds_bucket[5m])) by (le,route))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le, route) (rate(loki_request_duration_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "{{ route }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "API Request Durations",
       "tooltip": {
         "shared": true,
@@ -891,9 +659,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -901,25 +667,18 @@
         {
           "$$hashKey": "object:155",
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -927,10 +686,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -939,112 +699,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 11
-      },
-      "hiddenSeries": false,
-      "id": 12,
-      "interval": "",
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": false,
-        "min": false,
-        "rightSide": true,
-        "show": true,
-        "sort": "current",
-        "sortDesc": true,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.1",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_logql_querystats_latency_seconds_bucket[5m])) by (le,type))",
-          "interval": "",
-          "legendFormat": "{{ type }}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "LogQL Latency",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:155",
-          "format": "s",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:156",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "links": []
-        },
-        "overrides": []
-      },
-      "fill": 0,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 6,
-        "w": 12,
+        "w": 7,
         "x": 0,
-        "y": 17
+        "y": 12
       },
       "hiddenSeries": false,
       "id": 13,
@@ -1069,7 +726,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1079,16 +736,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_logql_querystats_bytes_processed_per_seconds_bucket[5m])) by (le,type))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le, type) (rate(loki_logql_querystats_bytes_processed_per_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "{{ type }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "LogQL  Processed bytes",
       "tooltip": {
         "shared": true,
@@ -1097,9 +755,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1107,125 +763,30 @@
         {
           "$$hashKey": "object:155",
           "format": "Bps",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
-    },
-    {
-      "collapsed": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 23
-      },
-      "id": 43,
-      "panels": [],
-      "title": "Ruler",
-      "type": "row"
-    },
-    {
-      "aliasColors": {},
-      "breakPoint": "50%",
-      "cacheTimeout": null,
-      "combine": {
-        "label": "Others",
-        "threshold": 0
-      },
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": null
-          },
-          "decimals": 0,
-          "links": [],
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "fontSize": "80%",
-      "format": "short",
-      "gridPos": {
-        "h": 6,
-        "w": 7,
-        "x": 0,
-        "y": 24
-      },
-      "id": 46,
-      "interval": "",
-      "legend": {
-        "show": true,
-        "values": true
-      },
-      "legendType": "Right side",
-      "links": [],
-      "maxDataPoints": 3,
-      "nullPointMode": "connected",
-      "pieType": "pie",
-      "pluginVersion": "7.3.1",
-      "strokeWidth": 1,
-      "targets": [
-        {
-          "expr": "cortex_prometheus_rule_evaluations_total",
-          "format": "time_series",
-          "instant": true,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "Evaluations",
-          "refId": "A"
-        },
-        {
-          "expr": "cortex_prometheus_notifications_sent_total",
-          "instant": true,
-          "interval": "1m",
-          "legendFormat": "Notifications",
-          "refId": "B"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Rules Status ",
-      "type": "grafana-piechart-panel",
-      "valueName": "current"
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1236,18 +797,18 @@
         "h": 6,
         "w": 8,
         "x": 7,
-        "y": 24
+        "y": 12
       },
       "hiddenSeries": false,
-      "id": 28,
+      "id": 12,
       "interval": "",
       "legend": {
-        "alignAsTable": false,
+        "alignAsTable": true,
         "avg": false,
         "current": true,
         "max": false,
         "min": false,
-        "rightSide": false,
+        "rightSide": true,
         "show": true,
         "sort": "current",
         "sortDesc": true,
@@ -1261,7 +822,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1271,17 +832,18 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(cortex_prometheus_notifications_latency_seconds[5m]))  by (quantile)",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le, type) (rate(loki_logql_querystats_latency_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
-          "legendFormat": "TP {{quantile}}",
+          "legendFormat": "{{ type }}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Notifications Latency",
+      "title": "LogQL Latency",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1289,9 +851,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1299,25 +859,18 @@
         {
           "$$hashKey": "object:155",
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1325,10 +878,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1339,7 +893,127 @@
         "h": 6,
         "w": 9,
         "x": 15,
-        "y": 24
+        "y": 12
+      },
+      "hiddenSeries": false,
+      "id": 53,
+      "interval": "",
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.1",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le, operation) (rate(cortex_s3_request_duration_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
+          "interval": "",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "S3 Request Durations",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:155",
+          "format": "s",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:156",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "collapsed": false,
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 43,
+      "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Ruler",
+      "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 19
       },
       "hiddenSeries": false,
       "id": 47,
@@ -1364,7 +1038,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1374,16 +1048,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(cortex_prometheus_rule_evaluation_duration_seconds[5m]))  by (quantile)",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(quantile) (rate(cortex_prometheus_rule_evaluation_duration_seconds{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "TP {{quantile}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Rule Evaluations",
       "tooltip": {
         "shared": true,
@@ -1392,9 +1067,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1402,38 +1075,137 @@
         {
           "$$hashKey": "object:155",
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "links": []
+        },
+        "overrides": []
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "hiddenSeries": false,
+      "id": 28,
+      "interval": "",
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.1",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(quantile) (rate(cortex_prometheus_notifications_latency_seconds{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
+          "interval": "",
+          "legendFormat": "TP {{quantile}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Notifications Latency",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:155",
+          "format": "s",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:156",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
       }
     },
     {
       "collapsed": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 25
       },
       "id": 34,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "Cache ",
       "type": "row"
     },
@@ -1442,10 +1214,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1456,7 +1229,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 26
       },
       "hiddenSeries": false,
       "id": 45,
@@ -1481,7 +1254,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1491,16 +1264,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_cache_request_duration_seconds_bucket[5m])) by (le,name,method))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le, name, method) (rate(cortex_cache_request_duration_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "{{method}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Cache Request  Duration",
       "tooltip": {
         "shared": true,
@@ -1509,9 +1283,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1519,25 +1291,18 @@
         {
           "$$hashKey": "object:155",
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1545,10 +1310,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1559,7 +1325,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 26
       },
       "hiddenSeries": false,
       "id": 29,
@@ -1584,7 +1350,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1594,16 +1360,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_cache_value_size_bytes_bucket[5m])) by (le,name,method))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le, name, method) (rate(cortex_cache_value_size_bytes_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "{{name}} / {{method}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Cache Value Size bytes",
       "tooltip": {
         "shared": true,
@@ -1612,9 +1379,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1622,25 +1387,18 @@
         {
           "$$hashKey": "object:155",
           "format": "decbytes",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1648,12 +1406,8 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -1661,7 +1415,7 @@
         "h": 6,
         "w": 10,
         "x": 0,
-        "y": 37
+        "y": 32
       },
       "hiddenSeries": false,
       "id": 27,
@@ -1681,7 +1435,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1691,16 +1445,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(cortex_cache_hits[5m])",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "rate(cortex_cache_hits{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])",
           "interval": "",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Hits Keys",
       "tooltip": {
         "shared": true,
@@ -1709,9 +1464,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1719,25 +1472,18 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1745,12 +1491,8 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -1758,7 +1500,7 @@
         "h": 6,
         "w": 7,
         "x": 10,
-        "y": 37
+        "y": 32
       },
       "hiddenSeries": false,
       "id": 30,
@@ -1778,7 +1520,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1788,16 +1530,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "cortex_cache_background_queue_length",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "cortex_cache_background_queue_length{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "interval": "",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Background Queue Length",
       "tooltip": {
         "shared": true,
@@ -1806,9 +1549,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1816,25 +1557,19 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1842,12 +1577,8 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -1855,7 +1586,7 @@
         "h": 6,
         "w": 7,
         "x": 17,
-        "y": 37
+        "y": 32
       },
       "hiddenSeries": false,
       "id": 26,
@@ -1875,7 +1606,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1885,16 +1616,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "cortex_cache_fetched_keys",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "cortex_cache_fetched_keys{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "interval": "",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Fetched Keys",
       "tooltip": {
         "shared": true,
@@ -1903,9 +1635,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1913,38 +1643,41 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
       "collapsed": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 38
       },
       "id": 36,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "Index",
       "type": "row"
     },
@@ -1953,10 +1686,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -1967,7 +1701,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 44
+        "y": 39
       },
       "hiddenSeries": false,
       "id": 38,
@@ -1992,7 +1726,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2002,16 +1736,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_cassandra_request_duration_seconds_bucket[5m])) by (le,operation))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le, operation) (rate(cortex_cassandra_request_duration_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Cassandra Request Durations",
       "tooltip": {
         "shared": true,
@@ -2020,9 +1755,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2030,25 +1763,18 @@
         {
           "$$hashKey": "object:155",
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -2056,10 +1782,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -2070,7 +1797,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 44
+        "y": 39
       },
       "hiddenSeries": false,
       "id": 39,
@@ -2095,7 +1822,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2105,16 +1832,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_chunk_store_chunks_per_query_bucket[5m])) by (le))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(cortex_chunk_store_chunks_per_query_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "chunks",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Chunk Store Chunks",
       "tooltip": {
         "shared": true,
@@ -2123,9 +1851,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2133,25 +1859,18 @@
         {
           "$$hashKey": "object:155",
           "format": "none",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -2159,10 +1878,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -2173,7 +1893,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 44
+        "y": 39
       },
       "hiddenSeries": false,
       "id": 54,
@@ -2198,7 +1918,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2208,16 +1928,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(cortex_table_manager_sync_duration_seconds_bucket[5m])) by (le))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(cortex_table_manager_sync_duration_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Table-Manager Sync Durations",
       "tooltip": {
         "shared": true,
@@ -2226,9 +1947,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2237,39 +1956,42 @@
           "$$hashKey": "object:155",
           "decimals": 2,
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
       "collapsed": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 45
       },
       "id": 19,
       "panels": [],
-      "title": "Distributor",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Distribution",
       "type": "row"
     },
     {
@@ -2277,12 +1999,8 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -2290,7 +2008,7 @@
         "h": 6,
         "w": 6,
         "x": 0,
-        "y": 51
+        "y": 46
       },
       "hiddenSeries": false,
       "id": 20,
@@ -2310,7 +2028,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2320,16 +2038,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (tenant) (rate(loki_distributor_lines_received_total[5m]))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(tenant) (rate(loki_distributor_lines_received_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "distributor / {{ tenant}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Received Lines / sec",
       "tooltip": {
         "shared": true,
@@ -2338,9 +2057,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2348,25 +2065,18 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -2374,12 +2084,8 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -2387,7 +2093,7 @@
         "h": 6,
         "w": 6,
         "x": 6,
-        "y": 51
+        "y": 46
       },
       "hiddenSeries": false,
       "id": 15,
@@ -2407,7 +2113,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2417,16 +2123,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(loki_distributor_bytes_received_total[5m])) by (tenant)",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(tenant) (rate(loki_distributor_bytes_received_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "distributor / {{tenant}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Distributor  Received bytes / sec",
       "tooltip": {
         "shared": true,
@@ -2435,9 +2142,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2445,25 +2150,18 @@
         {
           "$$hashKey": "object:837",
           "format": "Bps",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:838",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -2471,12 +2169,8 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -2484,7 +2178,7 @@
         "h": 6,
         "w": 6,
         "x": 12,
-        "y": 51
+        "y": 46
       },
       "hiddenSeries": false,
       "id": 17,
@@ -2504,7 +2198,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2514,22 +2208,26 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(loki_distributor_ingester_appends_total[5m])",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "rate(loki_distributor_ingester_appends_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])",
           "interval": "",
           "legendFormat": "Successful",
           "refId": "A"
         },
         {
-          "expr": "loki_distributor_ingester_append_failures_total",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "loki_distributor_ingester_append_failures_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "interval": "",
           "legendFormat": "Failed",
           "refId": "B"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "batch appends sent to ingesters / sec",
       "tooltip": {
         "shared": true,
@@ -2538,9 +2236,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2548,25 +2244,18 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -2574,24 +2263,12 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": null
-          },
-          "decimals": 4,
           "links": [],
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
           "unit": "short"
         },
         "overrides": []
@@ -2602,7 +2279,7 @@
         "h": 6,
         "w": 6,
         "x": 18,
-        "y": 51
+        "y": 46
       },
       "hiddenSeries": false,
       "id": 22,
@@ -2623,7 +2300,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2633,7 +2310,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (status) (rate(loki_store_series_total[5m]))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(status) (rate(loki_store_series_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "instant": false,
           "interval": "",
           "legendFormat": "{{status}}",
@@ -2641,9 +2321,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Store Series / sec",
       "tooltip": {
         "shared": true,
@@ -2652,9 +2330,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2662,39 +2338,42 @@
         {
           "$$hashKey": "object:88",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:89",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
       "collapsed": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 52
       },
       "id": 66,
       "panels": [],
-      "title": "Ingster",
+      "targets": [
+        {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Ingestion",
       "type": "row"
     },
     {
@@ -2702,10 +2381,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -2716,7 +2396,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 58
+        "y": 53
       },
       "hiddenSeries": false,
       "id": 71,
@@ -2741,7 +2421,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2751,16 +2431,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_ingester_blocks_per_chunk_bucket[5m])) by (le))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(loki_ingester_blocks_per_chunk_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "blocks",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Blocks / Chunk",
       "tooltip": {
         "shared": true,
@@ -2769,9 +2450,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2779,25 +2458,18 @@
         {
           "$$hashKey": "object:155",
           "format": "none",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -2805,10 +2477,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -2819,7 +2492,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 58
+        "y": 53
       },
       "hiddenSeries": false,
       "id": 68,
@@ -2844,7 +2517,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2854,16 +2527,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_ingester_chunk_size_bytes_bucket[5m])) by (le))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(loki_ingester_chunk_size_bytes_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "chunk size",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Chunk Size",
       "tooltip": {
         "shared": true,
@@ -2872,9 +2546,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2882,25 +2554,18 @@
         {
           "$$hashKey": "object:155",
           "format": "decbytes",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -2908,10 +2573,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -2922,7 +2588,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 58
+        "y": 53
       },
       "hiddenSeries": false,
       "id": 72,
@@ -2947,7 +2613,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2957,16 +2623,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_ingester_chunk_age_seconds_bucket[5m])) by (le))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(loki_ingester_chunk_age_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "ages",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Chunk Age",
       "tooltip": {
         "shared": true,
@@ -2975,9 +2642,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -2985,25 +2650,18 @@
         {
           "$$hashKey": "object:155",
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -3011,10 +2669,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -3025,7 +2684,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 64
+        "y": 59
       },
       "hiddenSeries": false,
       "id": 70,
@@ -3050,7 +2709,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3060,16 +2719,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_ingester_chunk_compression_ratio_bucket[5m])) by (le))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(loki_ingester_chunk_compression_ratio_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "ratio",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Chunk Compression Ratios",
       "tooltip": {
         "shared": true,
@@ -3078,9 +2738,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3088,25 +2746,18 @@
         {
           "$$hashKey": "object:155",
           "format": "percent",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -3114,10 +2765,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -3128,7 +2780,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 64
+        "y": 59
       },
       "hiddenSeries": false,
       "id": 69,
@@ -3153,7 +2805,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3163,16 +2815,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_ingester_chunk_encode_time_seconds_bucket[5m])) by (le))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(loki_ingester_chunk_encode_time_seconds_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "durations.",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Chunk Encode Time",
       "tooltip": {
         "shared": true,
@@ -3181,9 +2834,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3191,25 +2842,18 @@
         {
           "$$hashKey": "object:155",
           "format": "s",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -3217,10 +2861,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": {
+        "uid": "${prometheusds}"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {},
           "links": []
         },
         "overrides": []
@@ -3231,7 +2876,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 64
+        "y": 59
       },
       "hiddenSeries": false,
       "id": 73,
@@ -3256,7 +2901,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3266,16 +2911,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loki_ingester_chunk_entries_bucket[5m])) by (le))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(loki_ingester_chunk_entries_bucket{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])))",
           "interval": "",
           "legendFormat": "lines",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Lines / Chunk",
       "tooltip": {
         "shared": true,
@@ -3284,9 +2930,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3294,25 +2938,18 @@
         {
           "$$hashKey": "object:155",
           "format": "none",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:156",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -3320,20 +2957,16 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 6,
-        "w": 12,
+        "w": 8,
         "x": 0,
-        "y": 70
+        "y": 65
       },
       "hiddenSeries": false,
       "id": 60,
@@ -3343,7 +2976,7 @@
         "current": true,
         "max": false,
         "min": false,
-        "rightSide": true,
+        "rightSide": false,
         "show": true,
         "total": false,
         "values": true
@@ -3355,7 +2988,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3365,24 +2998,36 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(loki_ingester_chunks_created_total[5m])",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "rate(loki_ingester_chunks_created_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])",
           "interval": "",
           "legendFormat": "create",
           "refId": "A"
         },
         {
-          "expr": "sum by (reason) (rate(loki_ingester_chunks_flushed_total[5m]))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(reason) (rate(loki_ingester_chunks_flushed_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "flush / {{ reason }}",
           "refId": "B"
         },
         {
-          "expr": "sum by (fake) (rate(loki_ingester_chunks_stored_total[5m]))",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(fake) (rate(loki_ingester_chunks_stored_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m]))",
           "interval": "",
           "legendFormat": "stored",
           "refId": "C"
         },
         {
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
           "expr": "",
           "interval": "",
           "legendFormat": "",
@@ -3390,9 +3035,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Chunk Status",
       "tooltip": {
         "shared": true,
@@ -3401,9 +3044,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3411,25 +3052,18 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -3437,20 +3071,16 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 6,
-        "w": 6,
-        "x": 12,
-        "y": 70
+        "w": 8,
+        "x": 8,
+        "y": 65
       },
       "hiddenSeries": false,
       "id": 61,
@@ -3470,7 +3100,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3480,16 +3110,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "loki_ingester_memory_chunks",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "loki_ingester_memory_chunks{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "interval": "",
           "legendFormat": "chunks",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Chunks in Memory",
       "tooltip": {
         "shared": true,
@@ -3498,9 +3129,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3508,25 +3137,18 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -3534,20 +3156,16 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 6,
-        "w": 6,
-        "x": 18,
-        "y": 70
+        "w": 8,
+        "x": 16,
+        "y": 65
       },
       "hiddenSeries": false,
       "id": 62,
@@ -3567,7 +3185,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3577,16 +3195,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (tenan) (loki_ingester_memory_streams)",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "sum by(tenan) (loki_ingester_memory_streams{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
           "interval": "",
           "legendFormat": "streams",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Chunks in Streams",
       "tooltip": {
         "shared": true,
@@ -3595,9 +3214,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3605,25 +3222,18 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -3631,20 +3241,16 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
+      "datasource": {
+        "uid": "${prometheusds}"
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 6,
-        "w": 12,
+        "w": 8,
         "x": 0,
-        "y": 76
+        "y": 71
       },
       "hiddenSeries": false,
       "id": 67,
@@ -3654,7 +3260,7 @@
         "current": true,
         "max": false,
         "min": false,
-        "rightSide": true,
+        "rightSide": false,
         "show": true,
         "total": false,
         "values": true
@@ -3666,7 +3272,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "7.3.1",
+      "pluginVersion": "9.2.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3676,22 +3282,26 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(loki_ingester_streams_created_total[5m])",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "rate(loki_ingester_streams_created_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])",
           "interval": "",
           "legendFormat": "create",
           "refId": "A"
         },
         {
-          "expr": "rate(loki_ingester_streams_removed_total[5m])",
+          "datasource": {
+            "uid": "${prometheusds}"
+          },
+          "expr": "rate(loki_ingester_streams_removed_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[5m])",
           "interval": "",
           "legendFormat": "delete",
           "refId": "B"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Streams Stats",
       "tooltip": {
         "shared": true,
@@ -3700,9 +3310,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -3710,35 +3318,185 @@
         {
           "$$hashKey": "object:1092",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1093",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     }
   ],
-  "schemaVersion": 26,
+  "schemaVersion": 37,
   "style": "dark",
   "tags": [
     "loki"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Loki datasource",
+        "multi": true,
+        "name": "lokids",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Prometheus datasource",
+        "multi": true,
+        "name": "prometheusds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju unit",
+        "multi": true,
+        "name": "juju_unit",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju application",
+        "multi": true,
+        "name": "juju_application",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju model uuid",
+        "multi": true,
+        "name": "juju_model_uuid",
+        "options": [],
+        "query": {
+          "query": "label_values(up{juju_model=~\"$juju_model\"},juju_model_uuid)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "uid": "${prometheusds}"
+        },
+        "definition": "label_values(up,juju_model)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Juju model",
+        "multi": true,
+        "name": "juju_model",
+        "options": [],
+        "query": {
+          "query": "label_values(up,juju_model)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
   },
   "time": {
     "from": "now-1h",
@@ -3760,6 +3518,6 @@
   },
   "timezone": "",
   "title": "Loki Operator Overview",
-  "uid": "MQHVDmtWk",
-  "version": 37
+  "uid": "loki",
+  "version": 39
 }
