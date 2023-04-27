@@ -1077,6 +1077,10 @@ class LokiPushApiProvider(Object):
                 It is strongly advised not to change the default, so that people
                 deploying your charm will have a consistent experience with all
                 other charms that consume metrics endpoints.
+            port: an optional port of the Loki service (default is "3100").
+            scheme: an optional scheme of the Loki API URL (default is "http").
+            address: an optional address of the Loki service (default is "localhost").
+            path: an optional path of the Loki API URL (default is "loki/api/v1/push")
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1546,6 +1550,7 @@ class LokiPushApiConsumer(ConsumerBase):
                 respectively.
             alert_rules_path: a string indicating a path where alert rules can be found
             recursive: Whether or not to scan for rule files recursively.
+            skip_alert_topology_labeling: whether or not to skip the alert topology labeling.
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1781,9 +1786,7 @@ class LogProxyConsumer(ConsumerBase):
             log_files = []
         elif isinstance(log_files, str):
             log_files = [log_files]
-        elif not isinstance(log_files, list) or not all(
-            map(lambda x: isinstance(x, str), log_files)
-        ):
+        elif not isinstance(log_files, list) or not all((isinstance(x, str) for x in log_files)):
             raise TypeError("The 'log_files' argument must be a list of strings.")
         self._log_files = log_files
 
@@ -2009,8 +2012,7 @@ class LogProxyConsumer(ConsumerBase):
         except NameError as e:
             if "invalid resource name" in str(e):
                 return False
-            else:
-                raise
+            raise
 
     def _push_promtail_if_attached(self, workload_binary_path: str) -> bool:
         """Checks whether Promtail binary is attached to the charm or not.

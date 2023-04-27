@@ -254,7 +254,7 @@ class TestLogProxyConsumer(unittest.TestCase):
 
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm.log_proxy._obtain_promtail(PROMTAIL_INFO)
-            self.assertTrue(any(["File sha256sum mismatch" in line for line in logger.output]))
+            self.assertTrue(any("File sha256sum mismatch" in line for line in logger.output))
 
             # Don't actually download, but make sure we would
             self.assertTrue(

@@ -55,8 +55,8 @@ class LokiServer:
 
         if response.status_code == requests.codes.ok:
             return response.json()
-        else:
-            response.raise_for_status()
+        response.raise_for_status()
+        return None
 
     @property
     def version(self) -> str:

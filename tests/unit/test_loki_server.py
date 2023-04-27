@@ -11,7 +11,6 @@ from socketserver import ThreadingMixIn
 from unittest.mock import patch
 
 import requests
-
 from loki_server import LokiServer
 
 

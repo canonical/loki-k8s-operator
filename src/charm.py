@@ -43,12 +43,11 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
+from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
-
-from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 
 # Paths in workload container
 LOKI_CONFIG = "/etc/loki/loki-local-config.yaml"
