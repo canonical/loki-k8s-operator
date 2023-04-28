@@ -11,13 +11,12 @@ from urllib.error import HTTPError, URLError
 
 import ops.testing
 import yaml
-from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
-from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
-from ops.testing import Harness
-
 from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
 from charm import LokiOperatorCharm
+from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
 from loki_server import LokiServerError, LokiServerNotReadyError
+from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
+from ops.testing import Harness
 
 ops.testing.SIMULATE_CAN_CONNECT = True
 

@@ -148,10 +148,8 @@ async def test_logs_persist_after_upgrade(ops_test, loki_charm):
         # If any of the log counts are higher, we are continuiting. Don't depend on
         # timing the log entries
         assert any(
-            [
-                values_after_upgrade[client][idx] > values_before_upgrade[client][idx]
-                for idx in range(len(values))
-            ]
+            values_after_upgrade[client][idx] > values_before_upgrade[client][idx]
+            for idx in range(len(values))
         )
 
 
