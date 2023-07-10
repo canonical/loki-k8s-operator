@@ -18,7 +18,7 @@ class ConfigBuilder:
     _target: str = "all"
     _auth_enabled: bool = False
 
-    def __init__(self, charm, *args):
+    def __init__(self, charm):
         """Init method."""
         self._charm = charm
 

@@ -65,7 +65,6 @@ requires:
 peers:
   replicas:
     interface: loki_replica
-    # assumed network type: private
 
 resources:
   loki-image:
