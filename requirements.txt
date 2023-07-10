@@ -7,3 +7,7 @@ aiohttp
 jsonschema
 lightkube
 lightkube-models
+
+# Cryptography
+# Deps: tls_certificates
+cryptography

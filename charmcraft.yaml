@@ -10,6 +10,7 @@ bases:
       channel: "20.04"
 parts:
   charm:
+    charm-binary-python-packages: [cryptography, jsonschema]
     build-packages: [git]
   cos-tool:
     plugin: dump

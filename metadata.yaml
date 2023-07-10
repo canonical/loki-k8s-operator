@@ -56,6 +56,16 @@ requires:
   ingress:
     interface: ingress_per_unit
     limit: 1 # Since this is the ingress there is no point in having more than one.
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Certificate and key files for the loki server.
+
+peers:
+  replicas:
+    interface: loki_replica
+    # assumed network type: private
 
 resources:
   loki-image:

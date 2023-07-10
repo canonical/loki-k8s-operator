@@ -142,7 +142,7 @@ class TestCharm(unittest.TestCase):
             self.harness.charm._alerting_config()
             self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
 
-    @patch("charm.LokiOperatorCharm._loki_config")
+    @patch("config_builder.ConfigBuilder.build")
     @k8s_resource_multipatch
     def test__on_config_cannot_connect(self, mock_loki_config):
         self.harness.set_leader(True)
@@ -154,7 +154,7 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
 
-    @patch("charm.LokiOperatorCharm._loki_config")
+    @patch("config_builder.ConfigBuilder.build")
     @k8s_resource_multipatch
     def test__on_config_can_connect(self, mock_loki_config):
         mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
@@ -258,7 +258,7 @@ class TestConfigFile(unittest.TestCase):
 
         # THEN the `alertmanager_url` property is blank (`yaml.safe_load` converts blanks to None)
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["ruler"]["alertmanager_url"], None)
+        self.assertEqual(config["ruler"]["alertmanager_url"], "")
 
         # WHEN alertmanager units join
         self.alerting_rel_id = self.harness.add_relation("alertmanager", "alertmanager-app")
@@ -280,7 +280,7 @@ class TestConfigFile(unittest.TestCase):
 
         # THEN the `alertmanager_url` property is blank again
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["ruler"]["alertmanager_url"], None)
+        self.assertEqual(config["ruler"]["alertmanager_url"], "")
 
     @patch("socket.getfqdn", new=lambda *args: "fqdn")
     def test_instance_address_is_set_to_this_unit_ip(self):

@@ -16,9 +16,8 @@ import logging
 import os
 import re
 import socket
-import textwrap
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, cast
 from urllib import request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -31,6 +30,7 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiAlertRulesChanged,
     LokiPushApiProvider,
 )
+from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
@@ -43,6 +43,7 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
+from config_builder import ConfigBuilder
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 from ops.charm import CharmBase
 from ops.main import main
@@ -50,8 +51,16 @@ from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 
 # Paths in workload container
-LOKI_CONFIG = "/etc/loki/loki-local-config.yaml"
+LOKI_CONFIG_DIR = "/etc/loki"
+LOKI_CONFIG = os.path.join(LOKI_CONFIG_DIR, "loki-local-config.yaml")
+LOKI_CERTS_DIR = os.path.join(LOKI_CONFIG_DIR, "certs")
+
+CERT_FILE = os.path.join(LOKI_CERTS_DIR, "loki.cert.pem")
+KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
+
 LOKI_DIR = "/loki"
+CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
+BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
 logger = logging.getLogger(__name__)
@@ -71,7 +80,13 @@ class LokiOperatorCharm(CharmBase):
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
         # https://grafana.com/docs/loki/latest/rules/#ruler-storage
         tenant_id = "fake"
-        self._rules_dir = os.path.join(RULES_DIR, tenant_id)
+        self.loki_dir = LOKI_DIR
+        self.loki_cert_path = CERT_FILE
+        self.loki_key_path = KEY_FILE
+        self.chunks_dir = CHUNKS_DIR
+        self.boltdb_dir = BOLTDB_DIR
+        self.rules_dir = RULES_DIR
+        self.rules_dir_tenant = os.path.join(self.rules_dir, tenant_id)
 
         self.service_patch = KubernetesServicePatch(
             self, [ServicePort(self._port, name=self.app.name)]
@@ -82,6 +97,20 @@ class LokiOperatorCharm(CharmBase):
             self._container.name,
             resource_reqs_func=self._resource_reqs_from_config,
         )
+
+        url = self.hostname
+        extra_sans_dns = [cast(str, urlparse(url).hostname)] if url else None
+        self.server_cert = CertHandler(
+            self,
+            key="loki-server-cert",
+            peer_relation_name="replicas",
+            extra_sans_dns=extra_sans_dns,
+        )
+        self.framework.observe(
+            self.server_cert.on.cert_changed,  # pyright: ignore
+            self._on_server_cert_changed,
+        )
+
         self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
 
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
@@ -110,6 +139,7 @@ class LokiOperatorCharm(CharmBase):
                 self.ingress_per_unit.on.ready_for_unit,
                 self.ingress_per_unit.on.revoked_for_unit,
                 self.on.ingress_relation_departed,
+                self.server_cert.on.cert_changed,
             ],
         )
 
@@ -142,6 +172,9 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_upgrade_charm(self, _):
+        self._configure()
+
+    def _on_server_cert_changed(self, _):
         self._configure()
 
     def _on_loki_pebble_ready(self, _):
@@ -225,26 +258,18 @@ class LokiOperatorCharm(CharmBase):
         # are routable virtually exclusively inside the cluster (as they rely)
         # on the cluster's DNS service, while the ip address is _sometimes_
         # routable from the outside, e.g., when deploying on MicroK8s on Linux.
-        return f"http://{self.hostname}:{self._port}"
+        scheme = "https" if self.server_cert.cert else "http"
+        return f"{scheme}://{self.hostname}:{self._port}"
 
     @property
-    def scrape_jobs(self) -> list:
+    def scrape_jobs(self) -> List[Dict[str, Any]]:
         """Generate scrape jobs."""
-        if not self.ingress_per_unit.url:
-            return [
-                {
-                    "static_configs": [{"targets": [f"*:{self._port}"]}],
-                }
-            ]
+        job: Dict[str, Any] = {"static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]}
 
-        external_url = urlparse(self.ingress_per_unit.url)
+        if self.server_cert.cert:
+            job["scheme"] = "https"
 
-        return [
-            {
-                "metrics_path": f"{external_url.path}/metrics",
-                "static_configs": [{"targets": [f"{external_url.hostname}:{external_url.port}"]}],
-            }
-        ]
+        return [job]
 
     ##############################################
     #             UTILITY METHODS                #
@@ -264,18 +289,12 @@ class LokiOperatorCharm(CharmBase):
 
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
-
-        if current_layer.services != new_layer.services:
-            restart = True
-
-        config = self._loki_config()
+        restart = True if current_layer.services != new_layer.services else False
+        config = ConfigBuilder(self).build()
 
         try:
-            if self._running_config() != config:
-                config_as_yaml = yaml.safe_dump(config)
-                self._container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
-                logger.info("Pushed new configuration")
-                restart = True
+            self._push_certs()
+            restart = self._update_config(config)
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
             return
@@ -308,6 +327,25 @@ class LokiOperatorCharm(CharmBase):
             return
 
         self.unit.status = ActiveStatus()
+
+    def _update_config(self, config: dict) -> bool:
+        if self._running_config() != config:
+            config_as_yaml = yaml.safe_dump(config)
+            self._container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
+            logger.info("Pushed new configuration")
+            return True
+
+        return False
+
+    def _push_certs(self):
+        self._container.remove_path(self.loki_cert_path, recursive=True)
+        self._container.remove_path(self.loki_key_path, recursive=True)
+
+        if self.server_cert.cert:
+            self._container.push(self.loki_cert_path, self.server_cert.cert, make_dirs=True)
+
+        if self.server_cert.key:
+            self._container.push(self.loki_key_path, self.server_cert.key, make_dirs=True)
 
     def _loki_ready(self) -> bool:
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
@@ -348,66 +386,6 @@ class LokiOperatorCharm(CharmBase):
         except (FileNotFoundError, Error):
             return {}
 
-    def _loki_config(self) -> Dict[str, Any]:
-        """Construct Loki configuration.
-
-        Some minimal configuration is required for Loki to start, including: storage paths, schema,
-        ring.
-
-        Reference: https://grafana.com/docs/loki/latest/configuration/
-
-        Returns:
-            Dictionary representation of the Loki YAML config
-        """
-        config = textwrap.dedent(
-            f"""
-            target: all
-            auth_enabled: false
-
-            server:
-              http_listen_port: {self._port}
-              http_listen_address: 0.0.0.0
-
-            common:
-              path_prefix: {LOKI_DIR}
-              storage:
-                filesystem:
-                  chunks_directory: {os.path.join(LOKI_DIR, "chunks")}
-                  rules_directory: {RULES_DIR}
-              replication_factor: 1
-              ring:
-                instance_addr: {socket.getfqdn() or ""}
-                kvstore:
-                  store: inmemory
-
-            storage_config:
-              boltdb:
-                directory: /loki/boltdb-shipper-active
-              filesystem:
-                directory: /loki/chunks
-
-            schema_config:
-              configs:
-                - from: 2020-10-24
-                  store: boltdb
-                  object_store: filesystem
-                  schema: v11
-                  index:
-                    prefix: index_
-                    period: 24h
-
-            ingester:
-              wal:
-                enabled: true
-                dir: {os.path.join(LOKI_DIR, "chunks", "wal")}
-                flush_on_shutdown: true
-            ruler:
-              external_url: {self._external_url}
-              alertmanager_url: {self._alerting_config()}
-        """
-        )
-        return yaml.safe_load(config)
-
     def _loki_push_api_alert_rules_changed(self, _: LokiPushApiAlertRulesChanged) -> None:
         """Perform all operations needed to keep alert rules in the right status."""
         if self._ensure_alert_rules_path():
@@ -423,7 +401,7 @@ class LokiOperatorCharm(CharmBase):
         # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
         if self._container.can_connect():
             try:
-                self._container.make_dir(self._rules_dir, make_parents=True)
+                self._container.make_dir(self.rules_dir_tenant, make_parents=True)
                 return True
             except (FileNotFoundError, ProtocolError, PathError):
                 logger.debug("Could not create loki directory.")
@@ -455,7 +433,7 @@ class LokiOperatorCharm(CharmBase):
 
         if self._container.can_connect():
             for filename, content in file_mappings.items():
-                path = os.path.join(self._rules_dir, filename)
+                path = os.path.join(self.rules_dir_tenant, filename)
                 self._container.push(path, content, make_dirs=True)
         logger.debug("Saved alert rules to disk")
 
@@ -465,7 +443,7 @@ class LokiOperatorCharm(CharmBase):
             logger.debug("Cannot connect to container to remove alert rule files!")
             return
 
-        files = self._container.list_files(self._rules_dir)
+        files = self._container.list_files(self.rules_dir_tenant)
         for f in files:
             self._container.remove_path(f.path)
 
