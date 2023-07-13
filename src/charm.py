@@ -139,7 +139,6 @@ class LokiOperatorCharm(CharmBase):
                 self.ingress_per_unit.on.ready_for_unit,
                 self.ingress_per_unit.on.revoked_for_unit,
                 self.on.ingress_relation_departed,
-                self.server_cert.on.cert_changed,
             ],
         )
 
@@ -176,6 +175,7 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_server_cert_changed(self, _):
         self._configure()
+        self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
 
     def _on_loki_pebble_ready(self, _):
         if self._ensure_alert_rules_path():
@@ -264,12 +264,23 @@ class LokiOperatorCharm(CharmBase):
     @property
     def scrape_jobs(self) -> List[Dict[str, Any]]:
         """Generate scrape jobs."""
-        job: Dict[str, Any] = {"static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]}
+        if not self.ingress_per_unit.url:
+            job: Dict[str, Any] = {
+                "static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]
+            }
 
-        if self.server_cert.cert:
-            job["scheme"] = "https"
+            if self.server_cert.cert:
+                job["scheme"] = "https"
 
-        return [job]
+            return [job]
+
+        external_url = urlparse(self.ingress_per_unit.url)
+        return [
+            {
+                "metrics_path": f"{external_url.path}/metrics",
+                "static_configs": [{"targets": [f"{external_url.hostname}:{external_url.port}"]}],
+            }
+        ]
 
     ##############################################
     #             UTILITY METHODS                #
