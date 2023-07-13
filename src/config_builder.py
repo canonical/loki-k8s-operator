@@ -91,8 +91,6 @@ class ConfigBuilder:
             _server["http_tls_config"] = {
                 "cert_file": self._charm.loki_cert_path,  # HTTP server cert path.
                 "key_file": self._charm.loki_key_path,  # HTTP server key path.
-                "client_auth_type": "",  # HTTP TLS Client Auth type.
-                "client_ca_file": "",  # HTTP TLS Client CA path.
             }
 
         return _server
