@@ -45,6 +45,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from config_builder import (
     CERT_FILE,
+    HTTP_LISTEN_PORT,
     KEY_FILE,
     LOKI_CONFIG,
     RULES_DIR,
@@ -62,7 +63,7 @@ logger = logging.getLogger(__name__)
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
-    _port = 3100
+    _port = HTTP_LISTEN_PORT
     _name = "loki"
 
     def __init__(self, *args):

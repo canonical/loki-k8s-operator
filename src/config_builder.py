@@ -6,6 +6,7 @@
 import os
 
 # Paths in workload container
+HTTP_LISTEN_PORT = 3100
 LOKI_CONFIG_DIR = "/etc/loki"
 LOKI_CONFIG = os.path.join(LOKI_CONFIG_DIR, "loki-local-config.yaml")
 LOKI_CERTS_DIR = os.path.join(LOKI_CONFIG_DIR, "certs")
@@ -97,7 +98,7 @@ class ConfigBuilder:
     def _server(self) -> dict:
         _server = {
             "http_listen_address": "0.0.0.0",
-            "http_listen_port": self._charm._port,
+            "http_listen_port": HTTP_LISTEN_PORT,
         }
 
         if self._charm.server_cert.cert:
