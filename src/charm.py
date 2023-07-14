@@ -291,7 +291,13 @@ class LokiOperatorCharm(CharmBase):
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
         restart = True if current_layer.services != new_layer.services else False
-        config = ConfigBuilder(self).build()
+
+        config = ConfigBuilder(
+            instance_addr=self.hostname,
+            alertmanager_url=self._alerting_config(),
+            external_url=self._external_url,
+            http_tls=self.server_cert.cert,
+        ).build()
 
         try:
             self._push_certs()

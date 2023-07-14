@@ -32,9 +32,14 @@ class ConfigBuilder:
     _target: str = "all"
     _auth_enabled: bool = False
 
-    def __init__(self, charm):
+    def __init__(
+        self, instance_addr: str, alertmanager_url: str, external_url: str, http_tls: bool = False
+    ):
         """Init method."""
-        self._charm = charm
+        self.instance_addr = instance_addr
+        self.alertmanager_url = alertmanager_url
+        self.external_url = external_url
+        self.http_tls = http_tls
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -54,7 +59,7 @@ class ConfigBuilder:
         return {
             "path_prefix": LOKI_DIR,
             "replication_factor": 1,
-            "ring": {"instance_addr": self._charm.hostname, "kvstore": {"store": "inmemory"}},
+            "ring": {"instance_addr": self.instance_addr, "kvstore": {"store": "inmemory"}},
             "storage": {
                 "filesystem": {
                     "chunks_directory": CHUNKS_DIR,
@@ -76,8 +81,8 @@ class ConfigBuilder:
     @property
     def _ruler(self) -> dict:
         return {
-            "alertmanager_url": self._charm._alerting_config(),
-            "external_url": self._charm._external_url,
+            "alertmanager_url": self.alertmanager_url,
+            "external_url": self.external_url,
         }
 
     @property
@@ -101,7 +106,7 @@ class ConfigBuilder:
             "http_listen_port": HTTP_LISTEN_PORT,
         }
 
-        if self._charm.server_cert.cert:
+        if self.http_tls:
             _server["http_tls_config"] = {
                 "cert_file": CERT_FILE,  # HTTP server cert path.
                 "key_file": KEY_FILE,  # HTTP server key path.
