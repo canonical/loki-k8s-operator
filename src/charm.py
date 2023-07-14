@@ -74,8 +74,6 @@ class LokiOperatorCharm(CharmBase):
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
         # https://grafana.com/docs/loki/latest/rules/#ruler-storage
         tenant_id = "fake"
-        self.loki_cert_path = CERT_FILE
-        self.loki_key_path = KEY_FILE
         self.rules_dir_tenant = os.path.join(RULES_DIR, tenant_id)
 
         self.service_patch = KubernetesServicePatch(
@@ -345,14 +343,14 @@ class LokiOperatorCharm(CharmBase):
         return False
 
     def _push_certs(self):
-        self._container.remove_path(self.loki_cert_path, recursive=True)
-        self._container.remove_path(self.loki_key_path, recursive=True)
+        self._container.remove_path(CERT_FILE, recursive=True)
+        self._container.remove_path(KEY_FILE, recursive=True)
 
         if self.server_cert.cert:
-            self._container.push(self.loki_cert_path, self.server_cert.cert, make_dirs=True)
+            self._container.push(CERT_FILE, self.server_cert.cert, make_dirs=True)
 
         if self.server_cert.key:
-            self._container.push(self.loki_key_path, self.server_cert.key, make_dirs=True)
+            self._container.push(KEY_FILE, self.server_cert.key, make_dirs=True)
 
     def _loki_ready(self) -> bool:
         """Gets LokiPushApiProvider instance into `self.loki_provider`."""
