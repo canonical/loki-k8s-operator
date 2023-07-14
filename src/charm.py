@@ -43,25 +43,18 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
-from config_builder import ConfigBuilder
+from config_builder import (
+    CERT_FILE,
+    KEY_FILE,
+    LOKI_CONFIG,
+    RULES_DIR,
+    ConfigBuilder,
+)
 from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
-
-# Paths in workload container
-LOKI_CONFIG_DIR = "/etc/loki"
-LOKI_CONFIG = os.path.join(LOKI_CONFIG_DIR, "loki-local-config.yaml")
-LOKI_CERTS_DIR = os.path.join(LOKI_CONFIG_DIR, "certs")
-
-CERT_FILE = os.path.join(LOKI_CERTS_DIR, "loki.cert.pem")
-KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
-
-LOKI_DIR = "/loki"
-CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
-BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
-RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +73,9 @@ class LokiOperatorCharm(CharmBase):
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
         # https://grafana.com/docs/loki/latest/rules/#ruler-storage
         tenant_id = "fake"
-        self.loki_dir = LOKI_DIR
         self.loki_cert_path = CERT_FILE
         self.loki_key_path = KEY_FILE
-        self.chunks_dir = CHUNKS_DIR
-        self.boltdb_dir = BOLTDB_DIR
-        self.rules_dir = RULES_DIR
-        self.rules_dir_tenant = os.path.join(self.rules_dir, tenant_id)
+        self.rules_dir_tenant = os.path.join(RULES_DIR, tenant_id)
 
         self.service_patch = KubernetesServicePatch(
             self, [ServicePort(self._port, name=self.app.name)]

@@ -5,6 +5,19 @@
 
 import os
 
+# Paths in workload container
+LOKI_CONFIG_DIR = "/etc/loki"
+LOKI_CONFIG = os.path.join(LOKI_CONFIG_DIR, "loki-local-config.yaml")
+LOKI_CERTS_DIR = os.path.join(LOKI_CONFIG_DIR, "certs")
+
+CERT_FILE = os.path.join(LOKI_CERTS_DIR, "loki.cert.pem")
+KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
+
+LOKI_DIR = "/loki"
+CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
+BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
+RULES_DIR = os.path.join(LOKI_DIR, "rules")
+
 
 class ConfigBuilder:
     """Loki configuration builder class.
@@ -38,13 +51,13 @@ class ConfigBuilder:
     @property
     def _common(self) -> dict:
         return {
-            "path_prefix": self._charm.loki_dir,
+            "path_prefix": LOKI_DIR,
             "replication_factor": 1,
             "ring": {"instance_addr": self._charm.hostname, "kvstore": {"store": "inmemory"}},
             "storage": {
                 "filesystem": {
-                    "chunks_directory": self._charm.chunks_dir,
-                    "rules_directory": self._charm.rules_dir,
+                    "chunks_directory": CHUNKS_DIR,
+                    "rules_directory": RULES_DIR,
                 }
             },
         }
@@ -53,7 +66,7 @@ class ConfigBuilder:
     def _ingester(self) -> dict:
         return {
             "wal": {
-                "dir": os.path.join(self._charm.chunks_dir, "wal"),
+                "dir": os.path.join(CHUNKS_DIR, "wal"),
                 "enabled": True,
                 "flush_on_shutdown": True,
             }
@@ -89,8 +102,8 @@ class ConfigBuilder:
 
         if self._charm.server_cert.cert:
             _server["http_tls_config"] = {
-                "cert_file": self._charm.loki_cert_path,  # HTTP server cert path.
-                "key_file": self._charm.loki_key_path,  # HTTP server key path.
+                "cert_file": CERT_FILE,  # HTTP server cert path.
+                "key_file": KEY_FILE,  # HTTP server key path.
             }
 
         return _server
@@ -98,6 +111,6 @@ class ConfigBuilder:
     @property
     def _storage_config(self) -> dict:
         return {
-            "boltdb": {"directory": self._charm.boltdb_dir},
-            "filesystem": {"directory": self._charm.chunks_dir},
+            "boltdb": {"directory": BOLTDB_DIR},
+            "filesystem": {"directory": CHUNKS_DIR},
         }
