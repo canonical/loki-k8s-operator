@@ -251,7 +251,12 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def scrape_jobs(self) -> List[Dict[str, Any]]:
-        """Generate scrape jobs."""
+        """Generate scrape jobs.
+        
+        Note: We're generating a scrape job for the leader only because loki is not intended to
+        be scaled beyond one unit. If we wanted to scrape all potential units, we would need
+        to collect all the peer addresses over peer relation data.
+        """
         if not self.ingress_per_unit.url:
             job: Dict[str, Any] = {
                 "static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]
