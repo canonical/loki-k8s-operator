@@ -164,6 +164,7 @@ class LokiOperatorCharm(CharmBase):
     def _on_server_cert_changed(self, _):
         self._configure()
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
+        self.grafana_source_provider.update_source(source_url=self._external_url)
 
     def _on_loki_pebble_ready(self, _):
         if self._ensure_alert_rules_path():
