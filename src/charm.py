@@ -379,13 +379,13 @@ class LokiOperatorCharm(CharmBase):
             to send notifications to.
         """
         alerting_config = ""
-        alertmanagers = self.alertmanager_consumer.get_cluster_info()
+        alertmanagers = self.alertmanager_consumer.get_cluster_info_with_scheme()
 
         if not alertmanagers:
             logger.debug("No alertmanagers available")
             return alerting_config
 
-        return ",".join([f"http://{am}" for am in alertmanagers])
+        return ",".join(alertmanagers)
 
     def _running_config(self) -> Dict[str, Any]:
         """Get the on-disk Loki config."""

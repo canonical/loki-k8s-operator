@@ -127,14 +127,14 @@ class TestCharm(unittest.TestCase):
 
     def test__alerting_config(self):
         self.harness.charm.alertmanager_consumer = Mock()
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = [
-            "10.1.2.52",
-            "10.1.3.52",
+        self.harness.charm.alertmanager_consumer.get_cluster_info_with_scheme.return_value = [
+            "http://10.1.2.52",
+            "http://10.1.3.52",
         ]
         expected_value = "http://10.1.2.52,http://10.1.3.52"
         self.assertEqual(self.harness.charm._alerting_config(), expected_value)
 
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = []
+        self.harness.charm.alertmanager_consumer.get_cluster_info_with_scheme.return_value = []
         expected_value = ""
         self.assertEqual(self.harness.charm._alerting_config(), expected_value)
 
