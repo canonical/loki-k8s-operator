@@ -51,7 +51,6 @@ from config_builder import (
     RULES_DIR,
     ConfigBuilder,
 )
-from loki_server import LokiServer, LokiServerError, LokiServerNotReadyError
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
@@ -130,7 +129,6 @@ class LokiOperatorCharm(CharmBase):
             ],
         )
 
-        self._loki_server = LokiServer()
         external_url = urlparse(self._external_url)
         self.loki_provider = LokiPushApiProvider(
             self,
@@ -358,19 +356,6 @@ class LokiOperatorCharm(CharmBase):
 
         if self.server_cert.key:
             self._container.push(KEY_FILE, self.server_cert.key, make_dirs=True)
-
-    def _loki_ready(self) -> bool:
-        """Gets LokiPushApiProvider instance into `self.loki_provider`."""
-        try:
-            version = self._loki_server.version
-            logger.debug("Loki Provider is available. Loki version: %s", version)
-            return True
-        except LokiServerNotReadyError as e:
-            self.unit.status = WaitingStatus(str(e))
-            return False
-        except LokiServerError as e:
-            self.unit.status = BlockedStatus(str(e))
-            return False
 
     def _alerting_config(self) -> str:
         """Construct Loki altering configuration.

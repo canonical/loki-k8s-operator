@@ -14,7 +14,6 @@ import yaml
 from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
 from charm import LokiOperatorCharm
 from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
-from loki_server import LokiServerError, LokiServerNotReadyError
 from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
 from ops.testing import Harness
 
@@ -115,7 +114,9 @@ class TestCharm(unittest.TestCase):
     def setUp(self, *_):
         self.container_name: str = "loki"
         version_patcher = patch(
-            "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
+            "charm.LokiOperatorCharm._loki_version",
+            new_callable=PropertyMock,
+            return_value="3.14159",
         )
         self.mock_version = version_patcher.start()
         self.harness = Harness(LokiOperatorCharm)
@@ -164,61 +165,6 @@ class TestCharm(unittest.TestCase):
         # be emitted by hand to actually trigger _configure()
         self.harness.charm.on.config_changed.emit()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
-
-    def test__loki_ready(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._loki_ready()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
-
-    def test__loki_ready_not_ready(self):
-        self.mock_version.side_effect = LokiServerNotReadyError
-        self.harness.charm._loki_ready()
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
-
-    def test__loki_ready_server_error(self):
-        self.mock_version.side_effect = LokiServerError
-        self.harness.charm._loki_ready()
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-
-    def test__loki_config(self):
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._loki_ready()
-            self.assertEqual(
-                sorted(logger.output),
-                ["DEBUG:charm:Loki Provider is available. Loki version: 3.14159"],
-            )
-
-
-class TestWorkloadUnavailable(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def setUp(self, *_):
-        self.container_name: str = "loki"
-        version_patcher = patch(
-            "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
-        )
-        self.mock_version = version_patcher.start()
-        self.harness = Harness(LokiOperatorCharm)
-        self.addCleanup(self.harness.cleanup)
-        self.addCleanup(version_patcher.stop)
-        self.harness.set_leader(True)
-        self.harness.begin_with_initial_hooks()
-        self.harness.container_pebble_ready("loki")
-
-    def test_loki_not_ready(self):
-        self.mock_version.side_effect = LokiServerNotReadyError
-        self.harness.charm._loki_ready()
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
-
-    def test_loki_server_error(self):
-        self.mock_version.side_effect = LokiServerError
-        self.harness.charm._loki_ready()
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
 
 
 class TestConfigFile(unittest.TestCase):
@@ -365,7 +311,9 @@ class TestDelayedPebbleReady(unittest.TestCase):
         )
         self.check_alert_rules_patcher.start()
         self.version_patcher = patch(
-            "loki_server.LokiServer.version", new_callable=PropertyMock, return_value="3.14159"
+            "charm.LokiOperatorCharm._loki_version",
+            new_callable=PropertyMock,
+            return_value="3.14159",
         )
         self.version_patcher.start()
         self.harness = Harness(LokiOperatorCharm)
