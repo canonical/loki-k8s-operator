@@ -269,7 +269,7 @@ class LokiOperatorCharm(CharmBase):
 
         external_url = urlparse(self.ingress_per_unit.url)
 
-        metrics_path = f"{external_url.path if external_url.path else ''}/metrics"
+        metrics_path = f"{external_url.path.rstrip("/")}/metrics"
         target = (
             f"{external_url.hostname}{':'+str(external_url.port) if external_url.port else ''}"
         )
