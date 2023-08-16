@@ -268,12 +268,20 @@ class LokiOperatorCharm(CharmBase):
             return [job]
 
         external_url = urlparse(self.ingress_per_unit.url)
-        return [
-            {
-                "metrics_path": f"{external_url.path}/metrics",
-                "static_configs": [{"targets": [f"{external_url.hostname}:{external_url.port}"]}],
-            }
-        ]
+
+        metrics_path = f"{external_url.path.rstrip('/')}/metrics"
+        target = (
+            f"{external_url.hostname}{':'+str(external_url.port) if external_url.port else ''}"
+        )
+        job = {
+            "metrics_path": metrics_path,
+            "static_configs": [{"targets": [target]}],
+        }
+
+        if external_url.scheme == "https":
+            job["scheme"] = "https"
+
+        return [job]
 
     ##############################################
     #             UTILITY METHODS                #
