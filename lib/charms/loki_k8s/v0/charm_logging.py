@@ -14,6 +14,8 @@ from ops import Framework, CharmBase
 if TYPE_CHECKING:
     from ops.model import _ModelBackend  # noqa
 
+import logging_loki
+
 
 # The unique Charmhub library identifier, never change it
 LIBID = "52ee6051f4e54aedaa60aa04134d1a6d"
@@ -24,6 +26,9 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 LIBPATCH = 1
+
+
+PYDEPS = ['python-logging-loki==0.3.1']
 
 logger = logging.getLogger("charm_logging")
 
@@ -102,12 +107,22 @@ def _setup_log_forwarding(
 
     @functools.wraps(original_init)
     def wrap_init(self: CharmBase, framework: Framework, *args, **kwargs):
+        # fixme: whatever logs emitted on init are lost.
+        #  could fix this by capturing the logs and flushing them to the loki
+        #  handler as soon as we initialize it
+
         original_init(self, framework, *args, **kwargs)
         if not is_enabled():
-            logger.info("Tracing DISABLED: skipping root span initialization")
+            logger.info("Charm Logging DISABLED: skipping root span initialization")
             return
 
-        labels = {
+        logging_endpoints = _get_logging_endpoints(logging_endpoints_getter, self, charm)
+        if not logging_endpoints:
+            return
+
+        logger.debug(f"Setting up log push to endpoint: {logging_endpoints}")
+
+        tags = {
             "service.name": service_name,
             "charm_type": type(self).__name__,
             # juju topology
@@ -116,25 +131,37 @@ def _setup_log_forwarding(
             "juju_model": self.model.name,
             "juju_model_uuid": self.model.uuid,
         }
-        logging_endpoints = _get_logging_endpoints(logging_endpoints_getter, self, charm)
-        if not logging_endpoints:
-            return
 
-        logger.debug(f"Setting up log push to endpoint: {logging_endpoints}")
+        # todo: tls
+        # server_cert: Optional[str] = (
+        #     _get_server_cert(server_cert_getter, self, charm) if server_cert_getter else None
+        # )
+        # insecure = False if server_cert else True
 
-        server_cert: Optional[str] = (
-            _get_server_cert(server_cert_getter, self, charm) if server_cert_getter else None
+        # todo create one handler per endpoint
+
+        handler = logging_loki.LokiHandler(
+            url=logging_endpoints[0],
+            tags=tags,
+            # auth=("username", "password"),
+            version="1",
         )
-        insecure = False if server_cert else True
 
-        # todo:
-        # pushlogs
-        original_juju_log = framework.model._backend.juju_log
-        @functools.wraps(original_juju_log)
-        def wrap_juju_log(self: "_ModelBackend", level, msg):
-            raise Todo()
+        rootlogger = logging.getLogger()
+        rootlogger.addHandler(handler)
+        rootlogger.info(
+            f"Setup charm logging for {charm}. Hello world.",
+        )
 
-        framework.model._backend.juju_log = wrap_juju_log
+        # original_juju_log = framework.model._backend.juju_log
+        # @functools.wraps(original_juju_log)
+        # def wrap_juju_log(level, msg):
+        #     # rootlogger.log only wants level as integer
+        #     root_loglevel = level if isinstance(level, int) else getattr(logging, level, "DEBUG")
+        #     rootlogger.log(root_loglevel, msg)
+        #     original_juju_log(level, msg)
+        #
+        # framework.model._backend.juju_log = wrap_juju_log
 
     charm.__init__ = wrap_init
 

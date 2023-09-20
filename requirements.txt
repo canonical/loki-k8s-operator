@@ -11,3 +11,5 @@ lightkube-models
 # Cryptography
 # Deps: tls_certificates
 cryptography
+# Deps: charm_logging
+python-logging-loki==0.3.1
