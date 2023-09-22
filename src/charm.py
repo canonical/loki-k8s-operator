@@ -17,7 +17,7 @@ import os
 import re
 import socket
 import time
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 from urllib import request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -85,13 +85,11 @@ class LokiOperatorCharm(CharmBase):
             resource_reqs_func=self._resource_reqs_from_config,
         )
 
-        url = self.hostname
-        extra_sans_dns = [cast(str, urlparse(url).hostname)] if url else None
         self.server_cert = CertHandler(
             self,
             key="loki-server-cert",
             peer_relation_name="replicas",
-            extra_sans_dns=extra_sans_dns,
+            extra_sans_dns=[self.hostname],
         )
         self.framework.observe(
             self.server_cert.on.cert_changed,  # pyright: ignore
@@ -106,7 +104,11 @@ class LokiOperatorCharm(CharmBase):
         )
 
         self.ingress_per_unit = IngressPerUnitRequirer(
-            self, relation_name="ingress", port=self._port, strip_prefix=True
+            self,
+            relation_name="ingress",
+            port=self._port,
+            scheme=lambda: "https" if self._tls_ready else "http",
+            strip_prefix=True,
         )
         self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
         self.framework.observe(self.ingress_per_unit.on.revoked_for_unit, self._on_ingress_changed)
@@ -257,31 +259,20 @@ class LokiOperatorCharm(CharmBase):
         be scaled beyond one unit. If we wanted to scrape all potential units, we would need
         to collect all the peer addresses over peer relation data.
         """
-        if not self.ingress_per_unit.url:
-            job: Dict[str, Any] = {
-                "static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]
-            }
+        job: Dict[str, Any] = {"static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]}
 
-            if self.server_cert.cert:
-                job["scheme"] = "https"
-
-            return [job]
-
-        external_url = urlparse(self.ingress_per_unit.url)
-
-        metrics_path = f"{external_url.path.rstrip('/')}/metrics"
-        target = (
-            f"{external_url.hostname}{':'+str(external_url.port) if external_url.port else ''}"
-        )
-        job = {
-            "metrics_path": metrics_path,
-            "static_configs": [{"targets": [target]}],
-        }
-
-        if external_url.scheme == "https":
+        if self._tls_ready:
             job["scheme"] = "https"
 
         return [job]
+
+    @property
+    def _tls_ready(self) -> bool:
+        return (
+            self._container.can_connect()
+            and self._container.exists(CERT_FILE)
+            and self._container.exists(KEY_FILE)
+        )
 
     ##############################################
     #             UTILITY METHODS                #
