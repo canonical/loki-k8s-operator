@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
 import yaml
-from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
+from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from charms.loki_k8s.v0.loki_push_api import (
@@ -364,7 +364,7 @@ class LokiOperatorCharm(CharmBase):
             to send notifications to.
         """
         alerting_config = ""
-        alertmanagers = self.alertmanager_consumer.get_cluster_info_with_scheme()
+        alertmanagers = self.alertmanager_consumer.get_cluster_info()
 
         if not alertmanagers:
             logger.debug("No alertmanagers available")
