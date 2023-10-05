@@ -135,7 +135,7 @@ class LokiOperatorCharm(CharmBase):
         self.loki_provider = LokiPushApiProvider(
             self,
             address=external_url.hostname or self.hostname,
-            port=external_url.port or 80,
+            port=external_url.port or 443 if self._tls_ready else 80,
             scheme=external_url.scheme,
             path=f"{external_url.path}/loki/api/v1/push",
         )
@@ -166,6 +166,9 @@ class LokiOperatorCharm(CharmBase):
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
         self.grafana_source_provider.update_source(source_url=self._external_url)
         self.loki_provider.update_endpoint(url=self._external_url)
+        self.ingress_per_unit.provide_ingress_requirements(
+            scheme="https" if self._tls_ready else "http", port=self._port
+        )
 
     def _on_loki_pebble_ready(self, _):
         if self._ensure_alert_rules_path():
