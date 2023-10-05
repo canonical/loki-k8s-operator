@@ -128,12 +128,10 @@ class TestCharm(unittest.TestCase):
 
     def test__alerting_config(self):
         self.harness.charm.alertmanager_consumer = Mock()
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = {
-            "http://10.1.2.52",
-            "http://10.1.3.52",
-        }
+        mock_cluster = {"http://10.1.2.52", "http://10.1.3.52"}
+        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = mock_cluster
         expected_value = "http://10.1.2.52,http://10.1.3.52"
-        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
+        self.assertEqual(mock_cluster, set(self.harness.charm._alerting_config().split(",")))
 
         self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = set()
         expected_value = ""
@@ -219,7 +217,10 @@ class TestConfigFile(unittest.TestCase):
 
         # THEN the `alertmanager_url` property has their ip addresses
         config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["ruler"]["alertmanager_url"], "http://10.0.0.1,http://10.0.0.2")
+        self.assertEqual(
+            set(config["ruler"]["alertmanager_url"].split(",")),
+            {"http://10.0.0.1", "http://10.0.0.2"},
+        )
 
         # WHEN the relation is broken
         self.harness.remove_relation(self.alerting_rel_id)
