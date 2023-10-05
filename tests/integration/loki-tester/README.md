@@ -37,7 +37,7 @@ Make Loki tester send an error log
 juju run-action loki-tester/0 log-error message="some error message"
 ```
 
-Check a if the `log-error` action is triggering an alert by querrying
+Check if the `log-error` action is triggering an alert by querying
 the alerts raised by Loki.
 ```
 curl -G -s http://$(lokiaddr):3100/prometheus/api/v1/alerts
