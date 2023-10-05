@@ -61,6 +61,8 @@ requires:
     limit: 1
     description: |
       Certificate and key files for the loki server.
+  catalogue:
+    interface: catalogue
 
 peers:
   replicas:

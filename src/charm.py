@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 
 import yaml
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
+from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from charms.loki_k8s.v0.loki_push_api import (
@@ -142,6 +143,8 @@ class LokiOperatorCharm(CharmBase):
 
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
+        self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
+
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
@@ -189,6 +192,20 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #                 PROPERTIES                 #
     ##############################################
+
+    @property
+    def _catalogue_item(self) -> CatalogueItem:
+        return CatalogueItem(
+            name="Loki",
+            icon="math-log",
+            # Loki does not have a flashy web UI but something is better than nothing
+            # https://grafana.com/docs/loki/latest/reference/api/
+            url=f"{self._external_url}/services",
+            description=(
+                "Loki collects, stores and serves logs, "
+                "alongside optional key-value pairs called labels."
+            ),
+        )
 
     @property
     def _loki_command(self):
@@ -335,6 +352,7 @@ class LokiOperatorCharm(CharmBase):
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
         self.grafana_source_provider.update_source(source_url=self._external_url)
         self.loki_provider.update_endpoint(url=self._external_url)
+        self.catalogue.update_item(item=self._catalogue_item)
 
         self.unit.status = ActiveStatus()
 
