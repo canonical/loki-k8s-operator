@@ -10,7 +10,13 @@ bases:
       channel: "20.04"
 parts:
   charm:
-    charm-binary-python-packages: [cryptography, jsonschema]
+    charm-binary-python-packages:
+      # For v2.tls_certificates
+      - cryptography
+      - jsonschema
+
+      # For v1.alertmanager_dispatch
+      - pydantic
     build-packages: [git]
   cos-tool:
     plugin: dump
