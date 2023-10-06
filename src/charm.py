@@ -23,7 +23,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
 import yaml
-from charms.alertmanager_k8s.v0.alertmanager_dispatch import AlertmanagerConsumer
+from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
+from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from charms.loki_k8s.v0.loki_push_api import (
@@ -135,12 +136,14 @@ class LokiOperatorCharm(CharmBase):
         self.loki_provider = LokiPushApiProvider(
             self,
             address=external_url.hostname or self.hostname,
-            port=external_url.port or 80,
+            port=external_url.port or 443 if self._tls_ready else 80,
             scheme=external_url.scheme,
             path=f"{external_url.path}/loki/api/v1/push",
         )
 
         self.dashboard_provider = GrafanaDashboardProvider(self)
+
+        self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -163,9 +166,6 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_server_cert_changed(self, _):
         self._configure()
-        self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
-        self.grafana_source_provider.update_source(source_url=self._external_url)
-        self.loki_provider.update_endpoint(url=self._external_url)
 
     def _on_loki_pebble_ready(self, _):
         if self._ensure_alert_rules_path():
@@ -182,9 +182,6 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_ingress_changed(self, _):
         self._configure()
-        self.loki_provider.update_endpoint(url=self._external_url)
-        self.grafana_source_provider.update_source(source_url=self._external_url)
-        self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
 
     def _on_logging_relation_changed(self, event):
         # If there is a change in logging relation, let's update Loki endpoint
@@ -195,6 +192,20 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #                 PROPERTIES                 #
     ##############################################
+
+    @property
+    def _catalogue_item(self) -> CatalogueItem:
+        return CatalogueItem(
+            name="Loki",
+            icon="math-log",
+            # Loki does not have a flashy web UI but something is better than nothing
+            # https://grafana.com/docs/loki/latest/reference/api/
+            url=f"{self._external_url}/services",
+            description=(
+                "Loki collects, stores and serves logs, "
+                "alongside optional key-value pairs called labels."
+            ),
+        )
 
     @property
     def _loki_command(self):
@@ -335,6 +346,14 @@ class LokiOperatorCharm(CharmBase):
             self._check_alert_rules()
             return
 
+        self.ingress_per_unit.provide_ingress_requirements(
+            scheme="https" if self._tls_ready else "http", port=self._port
+        )
+        self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
+        self.grafana_source_provider.update_source(source_url=self._external_url)
+        self.loki_provider.update_endpoint(url=self._external_url)
+        self.catalogue.update_item(item=self._catalogue_item)
+
         self.unit.status = ActiveStatus()
 
     def _update_config(self, config: dict) -> bool:
@@ -364,7 +383,7 @@ class LokiOperatorCharm(CharmBase):
             to send notifications to.
         """
         alerting_config = ""
-        alertmanagers = self.alertmanager_consumer.get_cluster_info_with_scheme()
+        alertmanagers = self.alertmanager_consumer.get_cluster_info()
 
         if not alertmanagers:
             logger.debug("No alertmanagers available")

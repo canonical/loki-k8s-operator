@@ -80,6 +80,7 @@ class ConfigBuilder:
 
     @property
     def _ruler(self) -> dict:
+        # Reference: https://grafana.com/docs/loki/latest/configure/#ruler
         return {
             "alertmanager_url": self.alertmanager_url,
             "external_url": self.external_url,
