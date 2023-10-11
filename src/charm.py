@@ -309,7 +309,7 @@ class LokiOperatorCharm(CharmBase):
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
             external_url=self._external_url,
-            http_tls=self.server_cert.cert,
+            http_tls=(self.server_cert.cert is not None),
         ).build()
 
         try:
@@ -507,7 +507,7 @@ class LokiOperatorCharm(CharmBase):
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
     def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
-        self.unit.status = BlockedStatus(event.message)
+        self.unit.status = BlockedStatus(str(event.message))
 
     @property
     def _loki_version(self) -> Optional[str]:
