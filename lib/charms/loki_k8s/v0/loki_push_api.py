@@ -875,7 +875,7 @@ class AlertRules:
         All group names are augmented with juju topology.
 
         Args:
-            path: either a rules file or a dir of rules files.
+            path_str: either a rules file or a dir of rules files.
             recursive: whether to read files recursively or not (no impact if `path` is a file).
 
         Raises:
@@ -995,7 +995,7 @@ class LokiPushApiAlertRulesChanged(EventBase):
     def snapshot(self) -> Dict:
         """Save event information."""
         if not self.relation:
-            return dict()
+            return {}
         snapshot = {"relation_name": self.relation.name, "relation_id": self.relation.id}
         if self.app:
             snapshot["app_name"] = self.app.name
@@ -1963,7 +1963,9 @@ class LogProxyConsumer(ConsumerBase):
                 }
             },
         }
-        self._container.add_layer(self._container_name, pebble_layer, combine=True)  # pyright: ignore
+        self._container.add_layer(
+            self._container_name, pebble_layer, combine=True
+        )  # pyright: ignore
 
     def _create_directories(self) -> None:
         """Creates the directories for Promtail binary and config file."""
