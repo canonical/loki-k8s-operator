@@ -1964,8 +1964,8 @@ class LogProxyConsumer(ConsumerBase):
             },
         }
         self._container.add_layer(
-            self._container_name, pebble_layer, combine=True
-        )  # pyright: ignore
+            self._container_name, pebble_layer, combine=True  # pyright: ignore
+        )
 
     def _create_directories(self) -> None:
         """Creates the directories for Promtail binary and config file."""
