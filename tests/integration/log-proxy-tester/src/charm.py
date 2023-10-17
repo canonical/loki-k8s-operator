@@ -34,7 +34,10 @@ class LogProxyTesterCharm(CharmBase):
                 "workload-b": self._log_files,
             },
             relation_name="log-proxy",
-            enable_syslog=self._enable_syslog,
+            containers_syslog_port={
+                "workload-a": 1514,
+                "workload-b": 1515,
+            },
         )
         self.framework.observe(
             self._log_proxy.on.promtail_digest_error,

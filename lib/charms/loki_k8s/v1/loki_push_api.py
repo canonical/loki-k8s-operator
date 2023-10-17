@@ -1733,8 +1733,7 @@ class LogProxyConsumer(ConsumerBase):
             name is returned. If none or multiple relations with the provided interface
             are found, this method will raise either a NoRelationWithInterfaceFoundError or
             MultipleRelationsWithInterfaceFoundError exception, respectively.
-        enable_syslog: Whether to enable syslog integration.
-        syslog_port: The port syslog is attached to.
+        containers_syslog_port: a dict which maps (and enable) containers and syslog port.
         alert_rules_path: an optional path for the location of alert rules
             files. Defaults to "./src/loki_alert_rules",
             resolved from the directory hosting the charm entry file.
@@ -1763,8 +1762,7 @@ class LogProxyConsumer(ConsumerBase):
         containers_log_files: Dict[str, List[str]],
         *,
         relation_name: str = DEFAULT_LOG_PROXY_RELATION_NAME,
-        enable_syslog: bool = False,
-        syslog_port: int = 1514,
+        containers_syslog_port: Dict[str, int] = {},
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = False,
         promtail_resource_name: Optional[str] = None,
@@ -1772,11 +1770,9 @@ class LogProxyConsumer(ConsumerBase):
     ):
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._charm = charm
-        self._relation_name = relation_name
         self._containers_log_files = containers_log_files
-
-        self._syslog_port = syslog_port
-        self._is_syslog = enable_syslog
+        self._relation_name = relation_name
+        self._containers_syslog_port = containers_syslog_port
         self.topology = JujuTopology.from_charm(charm)
         self._promtail_resource_name = promtail_resource_name or "promtail-bin"
         self.insecure_skip_verify = insecure_skip_verify
@@ -2149,11 +2145,11 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             A dict representing the `scrape_configs` section.
         """
-        job_name = "juju_{}".format(self.topology.identifier)
+        job_name = f"juju_{self.topology.identifier}"
 
         # The new JujuTopology doesn't include unit, but LogProxyConsumer should have it
         common_labels = {
-            "juju_{}".format(k): v
+            f"juju_{k}": v
             for k, v in self.topology.as_dict(remapped_keys={"charm_name": "charm"}).items()
         }
         common_labels["container"] = container_name
@@ -2175,7 +2171,7 @@ class LogProxyConsumer(ConsumerBase):
         scrape_configs.append(scrape_config)
 
         # Syslog config
-        if self._is_syslog:
+        if self._containers_syslog_port.get(container_name):
             relabel_mappings = [
                 "severity",
                 "facility",
@@ -2185,16 +2181,16 @@ class LogProxyConsumer(ConsumerBase):
                 "msg_id",
             ]
             syslog_labels = common_labels.copy()
-            syslog_labels.update({"job": "{}_syslog".format(job_name)})
+            syslog_labels.update({"job": f"{job_name}_syslog"})
             syslog_config = {
                 "job_name": "syslog",
                 "syslog": {
-                    "listen_address": "127.0.0.1:{}".format(self._syslog_port),
+                    "listen_address": f"127.0.0.1:{self._containers_syslog_port[container_name]}",
                     "label_structured_data": True,
                     "labels": syslog_labels,
                 },
                 "relabel_configs": [
-                    {"source_labels": ["__syslog_message_{}".format(val)], "target_label": val}
+                    {"source_labels": [f"__syslog_message_{val}"], "target_label": val}
                     for val in relabel_mappings
                 ]
                 + [{"action": "labelmap", "regex": "__syslog_message_sd_(.+)"}],
