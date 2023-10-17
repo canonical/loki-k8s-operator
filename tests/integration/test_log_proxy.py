@@ -53,6 +53,7 @@ async def test_alert_rules_do_fire_from_log_proxy(ops_test, loki_charm, log_prox
         for alert in alerts
     )
 
+
 @pytest.mark.abort_on_fail
 async def test_check_both_containers_send_logs(ops_test, loki_charm, log_proxy_tester_charm):
     loki_app_name = "loki"
