@@ -244,7 +244,10 @@ Adopting this object in a Charmed Operator consist of two steps:
                    "workload-b": LOG_FILES,
                },
                relation_name="log-proxy",
-               enable_syslog=True,
+               containers_syslog_port={
+                   "workload-a": 1514,
+                   "workload-b": 1515,
+               },
            )
            self.framework.observe(
                self._log_proxy.on.promtail_digest_error,
@@ -292,12 +295,9 @@ Adopting this object in a Charmed Operator consist of two steps:
    ]
    ```
 
-   - `container_name` is the name of the container in which the application is running.
-      If in the Pod there is only one container, this argument can be omitted.
-
    - You can configure your syslog software using `localhost` as the address and the method
-     `LogProxyConsumer.syslog_port` to get the port, or, alternatively, if you are using rsyslog
-     you may use the method `LogProxyConsumer.rsyslog_config()`.
+     `LogProxyConsumer.syslog_port("container_name")` to get the port, or, alternatively, if you are using rsyslog
+     you may use the method `LogProxyConsumer.rsyslog_config("container_name")`.
 
 2. Modify the `metadata.yaml` file to add:
 
@@ -2293,24 +2293,22 @@ class LogProxyConsumer(ConsumerBase):
 
         return ret
 
-    @property
-    def syslog_port(self) -> str:
-        """Gets the port on which promtail is listening for syslog.
+    def syslog_port(self, container_name: str) -> str:
+        """Gets the port on which promtail is listening for syslog in this container.
 
         Returns:
             A str representing the port
         """
-        return str(self._syslog_port)
+        return str(self._containers_syslog_port.get(container_name))
 
-    @property
-    def rsyslog_config(self) -> str:
+    def rsyslog_config(self, container_name: str) -> str:
         """Generates a config line for use with rsyslog.
 
         Returns:
             The rsyslog config line as a string
         """
         return 'action(type="omfwd" protocol="tcp" target="127.0.0.1" port="{}" Template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")'.format(
-            self._syslog_port
+            self._containers_syslog_port.get(container_name)
         )
 
     @property
