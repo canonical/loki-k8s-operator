@@ -8,7 +8,7 @@
 
 import logging
 
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+from charms.loki_k8s.v1.loki_push_api import LogProxyConsumer
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, ModelError, WaitingStatus
@@ -29,9 +29,12 @@ class LogProxyTesterCharm(CharmBase):
 
         self._log_proxy = LogProxyConsumer(
             charm=self,
-            container_name="workload",
+            containers_log_files={
+                "workload-a": self._log_files,
+                "workload-b": self._log_files,
+            },
+            relation_name="log-proxy",
             enable_syslog=self._enable_syslog,
-            log_files=self._log_files if self._enable_file_forwarding else [],
         )
         self.framework.observe(
             self._log_proxy.on.promtail_digest_error,
@@ -42,7 +45,8 @@ class LogProxyTesterCharm(CharmBase):
             self._promtail_success,
         )
 
-        self.framework.observe(self.on.workload_pebble_ready, self._on_workload_pebble_ready)
+        self.framework.observe(self.on.workload_a_pebble_ready, self._on_workload_pebble_ready)
+        self.framework.observe(self.on.workload_b_pebble_ready, self._on_workload_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
     def _promtail_error(self, event):
@@ -57,13 +61,13 @@ class LogProxyTesterCharm(CharmBase):
 
         Learn more about Pebble layers at https://github.com/canonical/pebble
         """
-        container = self.unit.get_container("workload")
+        container = event.workload
         if not container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
 
         try:
-            self._update_layer()
+            self._update_layer(container)
         except (ModelError, TypeError, ChangeError) as e:
             self.unit.status = BlockedStatus("Layer update failed: {}".format(str(e)))
         else:
@@ -128,8 +132,7 @@ class LogProxyTesterCharm(CharmBase):
             }
         )
 
-    def _update_layer(self):
-        container = self.unit.get_container("workload")  # container name from metadata.yaml
+    def _update_layer(self, container):
         plan = container.get_plan()
         overlay = self._flog_layer()
 
@@ -138,9 +141,13 @@ class LogProxyTesterCharm(CharmBase):
             container.replan()
 
     def _on_config_changed(self, event):
-        container = self.unit.get_container("workload")
-        if container.can_connect():
-            self._update_layer()
+        container_a = self.unit.get_container("workload-a")
+        if container_a.can_connect():
+            self._update_layer(container_a)
+
+        container_b = self.unit.get_container("workload-b")
+        if container_b.can_connect():
+            self._update_layer(container_b)
 
 
 if __name__ == "__main__":
