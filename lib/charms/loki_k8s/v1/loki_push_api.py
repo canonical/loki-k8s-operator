@@ -238,16 +238,15 @@ Adopting this object in a Charmed Operator consist of two steps:
        def __init__(self, *args):
            ...
            self._log_proxy = LogProxyConsumer(
-               charm=self,
-               containers_log_files={
-                   "workload-a": LOG_FILES,
-                   "workload-b": LOG_FILES,
+               self,
+               logs_scheme={
+                   "workload-a": {
+                       "log-files": ["/tmp/worload-a-1.log", "/tmp/worload-a-2.log"],
+                       "syslog-port": 1514,
+                   },
+                   "workload-b": {"log-files": ["/tmp/worload-b.log"], "syslog-port": 1515},
                },
                relation_name="log-proxy",
-               containers_syslog_port={
-                   "workload-a": 1514,
-                   "workload-b": 1515,
-               },
            )
            self.framework.observe(
                self._log_proxy.on.promtail_digest_error,
@@ -284,16 +283,6 @@ Adopting this object in a Charmed Operator consist of two steps:
    The consumer charm can then choose to update its configuration in both situations.
 
    Note that:
-
-   - `LOG_FILES` is a `list` containing the log files we want to send to `Loki` or
-   `Grafana Agent`, for instance:
-
-   ```python
-   LOG_FILES = [
-       "/var/log/apache2/access.log",
-       "/var/log/alternatives.log",
-   ]
-   ```
 
    - You can configure your syslog software using `localhost` as the address and the method
      `LogProxyConsumer.syslog_port("container_name")` to get the port, or, alternatively, if you are using rsyslog
@@ -518,6 +507,9 @@ WORKLOAD_CONFIG_PATH = "{}/{}".format(WORKLOAD_CONFIG_DIR, WORKLOAD_CONFIG_FILE_
 WORKLOAD_POSITIONS_PATH = "{}/positions.yaml".format(WORKLOAD_BINARY_DIR)
 WORKLOAD_SERVICE_NAME = "promtail"
 
+# These are the initial port values. As we can have more than one container,
+# we use odd and even numbers to avoid collisions.
+# Each new container adds 2 to the previous value.
 HTTP_LISTEN_PORT_START = 9080  # even start port
 GRPC_LISTEN_PORT_START = 9095  # odd start port
 
@@ -1722,12 +1714,22 @@ class LogProxyConsumer(ConsumerBase):
     which traditionally log to syslog or do not have native Loki integration.
     The `LogProxyConsumer` can be instantiated as follows:
 
-        self._log_proxy_consumer = LogProxyConsumer(self, log_files=["/var/log/messages"])
+        self._log_proxy = LogProxyConsumer(
+            self,
+            logs_scheme={
+                "workload-a": {
+                    "log-files": ["/tmp/worload-a-1.log", "/tmp/worload-a-2.log"],
+                    "syslog-port": 1514,
+                },
+                "workload-b": {"log-files": ["/tmp/worload-b.log"], "syslog-port": 1515},
+            },
+            relation_name="log-proxy",
+        )
 
     Args:
         charm: a `CharmBase` object that manages this `LokiPushApiConsumer` object.
             Typically, this is `self` in the instantiating class.
-        containers_log_files: a dict which maps containers and a list of log files.
+        logs_scheme: a dict which maps containers and a list of log files and syslog port.
         relation_name: the string name of the relation interface to look up.
             If `charm` has exactly one relation with this interface, the relation's
             name is returned. If none or multiple relations with the provided interface
@@ -1759,10 +1761,9 @@ class LogProxyConsumer(ConsumerBase):
     def __init__(
         self,
         charm,
-        containers_log_files: Dict[str, List[str]],
         *,
+        logs_scheme={},
         relation_name: str = DEFAULT_LOG_PROXY_RELATION_NAME,
-        containers_syslog_port: Dict[str, int] = {},
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = False,
         promtail_resource_name: Optional[str] = None,
@@ -1770,14 +1771,13 @@ class LogProxyConsumer(ConsumerBase):
     ):
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._charm = charm
-        self._containers_log_files = containers_log_files
+        self._logs_scheme = logs_scheme
         self._relation_name = relation_name
-        self._containers_syslog_port = containers_syslog_port
         self.topology = JujuTopology.from_charm(charm)
         self._promtail_resource_name = promtail_resource_name or "promtail-bin"
         self.insecure_skip_verify = insecure_skip_verify
+        self._promtails_ports = self._generate_promtails_ports(logs_scheme)
 
-        self._promtails_ports = self._generate_promtails_ports(containers_log_files)
         # architecture used for promtail binary
         arch = platform.processor()
         self._arch = "amd64" if arch == "x86_64" else arch
@@ -1789,7 +1789,7 @@ class LogProxyConsumer(ConsumerBase):
         self._observe_pebble_ready()
 
     def _observe_pebble_ready(self):
-        for container in self._containers_log_files:
+        for container in self._containers.keys():
             snake_case_container_name = container.replace("-", "_")
             self.framework.observe(
                 getattr(self._charm.on, f"{snake_case_container_name}_pebble_ready"),
@@ -1804,9 +1804,8 @@ class LogProxyConsumer(ConsumerBase):
     def _on_relation_created(self, _: RelationCreatedEvent) -> None:
         """Event handler for `relation_created`."""
         for container in self._containers.values():
-            if not container.can_connect():
-                continue
-            self._setup_promtail(container)
+            if container.can_connect():
+                self._setup_promtail(container)
 
     def _on_relation_changed(self, event: RelationEvent) -> None:
         """Event handler for `relation_changed`.
@@ -2166,12 +2165,13 @@ class LogProxyConsumer(ConsumerBase):
         config = {"targets": ["localhost"], "labels": labels}
         scrape_config = {
             "job_name": "system",
-            "static_configs": self._generate_static_configs(config),
+            "static_configs": self._generate_static_configs(config, container_name),
         }
         scrape_configs.append(scrape_config)
 
         # Syslog config
-        if self._containers_syslog_port.get(container_name):
+        syslog_port = self._logs_scheme.get(container_name, {}).get("syslog-port")
+        if syslog_port:
             relabel_mappings = [
                 "severity",
                 "facility",
@@ -2185,7 +2185,7 @@ class LogProxyConsumer(ConsumerBase):
             syslog_config = {
                 "job_name": "syslog",
                 "syslog": {
-                    "listen_address": f"127.0.0.1:{self._containers_syslog_port[container_name]}",
+                    "listen_address": f"127.0.0.1:{syslog_port}",
                     "label_structured_data": True,
                     "labels": syslog_labels,
                 },
@@ -2199,7 +2199,7 @@ class LogProxyConsumer(ConsumerBase):
 
         return {"scrape_configs": scrape_configs}
 
-    def _generate_static_configs(self, config: dict) -> list:
+    def _generate_static_configs(self, config: dict, container_name: str) -> list:
         """Generates static_configs section.
 
         Returns:
@@ -2207,11 +2207,10 @@ class LogProxyConsumer(ConsumerBase):
         """
         static_configs = []
 
-        for log_list in self._containers_log_files.values():
-            for _file in log_list:
-                conf = deepcopy(config)
-                conf["labels"]["__path__"] = _file
-                static_configs.append(conf)
+        for _file in self._logs_scheme.get(container_name, {}).get("log-files", []):
+            conf = deepcopy(config)
+            conf["labels"]["__path__"] = _file
+            static_configs.append(conf)
 
         return static_configs
 
@@ -2231,26 +2230,18 @@ class LogProxyConsumer(ConsumerBase):
         if not promtail_binaries:
             return
 
-        if not self._is_promtail_installed(promtail_binaries[self._arch], container):
-            try:
-                self._obtain_promtail(promtail_binaries[self._arch], container)
-            except HTTPError as e:
-                msg = "Promtail binary couldn't be downloaded - {}".format(str(e))
-                logger.warning(msg)
-                self.on.promtail_digest_error.emit(msg)
-                return
-
-        workload_binary_path = os.path.join(
-            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
-        )
-
         self._create_directories(container)
+        self._ensure_promtail_binary(promtail_binaries, container)
+
         container.push(
             WORKLOAD_CONFIG_PATH,
             yaml.safe_dump(self._promtail_config(container.name)),
             make_dirs=True,
         )
 
+        workload_binary_path = os.path.join(
+            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
+        )
         self._add_pebble_layer(workload_binary_path, container)
 
         if self._current_config(container).get("clients"):
@@ -2262,6 +2253,17 @@ class LogProxyConsumer(ConsumerBase):
                 self.on.log_proxy_endpoint_joined.emit()
         else:
             self.on.promtail_digest_error.emit("No promtail client endpoints available!")
+
+    def _ensure_promtail_binary(self, promtail_binaries: dict, container: Container):
+        if self._is_promtail_installed(promtail_binaries[self._arch], container):
+            return
+
+        try:
+            self._obtain_promtail(promtail_binaries[self._arch], container)
+        except HTTPError as e:
+            msg = f"Promtail binary couldn't be downloaded - {str(e)}"
+            logger.warning(msg)
+            self.on.promtail_digest_error.emit(msg)
 
     def _is_promtail_installed(self, promtail_info: dict, container: Container) -> bool:
         """Determine if promtail has already been installed to the container.
@@ -2279,19 +2281,14 @@ class LogProxyConsumer(ConsumerBase):
             return False
         return True
 
-    def _generate_promtails_ports(self, containers) -> dict:
-        http_listen_port = HTTP_LISTEN_PORT_START
-        grpc_listen_port = GRPC_LISTEN_PORT_START
-        ret = {}
-        for container in containers:
-            ret[container] = {
-                "http_listen_port": http_listen_port,
-                "grpc_listen_port": grpc_listen_port,
+    def _generate_promtails_ports(self, logs_scheme) -> dict:
+        return {
+            container: {
+                "http_listen_port": HTTP_LISTEN_PORT_START + 2 * i,
+                "grpc_listen_port": GRPC_LISTEN_PORT_START + 2 * i,
             }
-            http_listen_port += 2
-            grpc_listen_port += 2
-
-        return ret
+            for i, container in enumerate(logs_scheme.keys())
+        }
 
     def syslog_port(self, container_name: str) -> str:
         """Gets the port on which promtail is listening for syslog in this container.
@@ -2299,7 +2296,7 @@ class LogProxyConsumer(ConsumerBase):
         Returns:
             A str representing the port
         """
-        return str(self._containers_syslog_port.get(container_name))
+        return str(self._logs_scheme.get(container_name, {}).get("syslog-port"))
 
     def rsyslog_config(self, container_name: str) -> str:
         """Generates a config line for use with rsyslog.
@@ -2308,12 +2305,12 @@ class LogProxyConsumer(ConsumerBase):
             The rsyslog config line as a string
         """
         return 'action(type="omfwd" protocol="tcp" target="127.0.0.1" port="{}" Template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")'.format(
-            self._containers_syslog_port.get(container_name)
+            self._logs_scheme.get(container_name, {}).get("syslog-port")
         )
 
     @property
     def _containers(self) -> Dict[str, Container]:
-        return {cont: self._charm.unit.get_container(cont) for cont in self._containers_log_files}
+        return {cont: self._charm.unit.get_container(cont) for cont in self._logs_scheme.keys()}
 
 
 class CosTool:

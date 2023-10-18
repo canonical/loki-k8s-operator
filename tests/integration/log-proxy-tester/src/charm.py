@@ -28,16 +28,15 @@ class LogProxyTesterCharm(CharmBase):
         self._log_files = ["/bin/driver.log"]
 
         self._log_proxy = LogProxyConsumer(
-            charm=self,
-            containers_log_files={
-                "workload-a": self._log_files,
-                "workload-b": self._log_files,
+            self,
+            logs_scheme={
+                "workload-a": {
+                    "log-files": ["/tmp/worload-a-1.log", "/tmp/worload-a-2.log"],
+                    "syslog-port": 1514,
+                },
+                "workload-b": {"log-files": ["/tmp/worload-b.log"], "syslog-port": 1515},
             },
             relation_name="log-proxy",
-            containers_syslog_port={
-                "workload-a": 1514,
-                "workload-b": 1515,
-            },
         )
         self.framework.observe(
             self._log_proxy.on.promtail_digest_error,
