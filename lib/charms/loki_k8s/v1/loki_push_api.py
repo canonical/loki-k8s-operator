@@ -1771,7 +1771,7 @@ class LogProxyConsumer(ConsumerBase):
     ):
         super().__init__(charm, relation_name, alert_rules_path, recursive)
         self._charm = charm
-        self._logs_scheme = logs_scheme
+        self._logs_scheme = logs_scheme or {}
         self._relation_name = relation_name
         self.topology = JujuTopology.from_charm(charm)
         self._promtail_resource_name = promtail_resource_name or "promtail-bin"
