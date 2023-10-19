@@ -1762,7 +1762,7 @@ class LogProxyConsumer(ConsumerBase):
         self,
         charm,
         *,
-        logs_scheme={},
+        logs_scheme=None,
         relation_name: str = DEFAULT_LOG_PROXY_RELATION_NAME,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = False,
