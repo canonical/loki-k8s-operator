@@ -26,16 +26,17 @@ class LogProxyTesterCharm(CharmBase):
         self._enable_syslog = self.model.config.get("syslog")
         self._enable_file_forwarding = self.model.config.get("file_forwarding")
         self._log_files = ["/bin/driver.log"]
+        self._log_scheme = {
+            "workload-a": {
+                "log-files": ["/tmp/worload-a-1.log", "/tmp/worload-a-2.log"],
+                "syslog-port": 1514,
+            },
+            "workload-b": {"log-files": ["/tmp/worload-b.log"], "syslog-port": 1515},
+        }
 
         self._log_proxy = LogProxyConsumer(
             self,
-            logs_scheme={
-                "workload-a": {
-                    "log-files": ["/tmp/worload-a-1.log", "/tmp/worload-a-2.log"],
-                    "syslog-port": 1514,
-                },
-                "workload-b": {"log-files": ["/tmp/worload-b.log"], "syslog-port": 1515},
-            },
+            logs_scheme=self._log_scheme,
             relation_name="log-proxy",
         )
         self.framework.observe(
@@ -105,10 +106,11 @@ class LogProxyTesterCharm(CharmBase):
             }
         }
 
-    def _build_services(self) -> dict:
+    def _build_services(self, container) -> dict:
         services = {}
 
         if self._enable_syslog:
+            port = self._log_scheme[container.name]["syslog-port"] or 1514
             command = self._build_command("rfc5424", "stdout")
             # TODO: UDP support in Promtail merged on 04052022. Get a new Promtail and use
             # UCP transport when it releases
@@ -116,27 +118,32 @@ class LogProxyTesterCharm(CharmBase):
                 # Loop this command forever since it will fail if no promtail is listening, but
                 # we still want the pebble services to start
                 self._build_service_template(
-                    "syslog",
-                    f"/usr/bin/bash -c 'while true; do {command} | logger -n 127.0.0.1 -P 1514 -T --socket-errors=off || true; done'",
+                    f"syslog-{container.name}",
+                    f"/usr/bin/bash -c 'while true; do {command} | logger -n 127.0.0.1 -P {port} -T --socket-errors=off || true; done'",
                 )
             )
         if self._enable_file_forwarding:
-            services.update(self._build_service_template("file-logger", self._build_command()))
+            filename = self._log_scheme[container.name]["log-files"][0] or "/bin/driver.log"
+            services.update(
+                self._build_service_template(
+                    "file-logger", self._build_command(output_filename=filename)
+                )
+            )
 
         return services
 
-    def _flog_layer(self) -> Layer:
+    def _flog_layer(self, container) -> Layer:
         return Layer(
             {
                 "summary": "flog layer",
                 "description": "pebble config layer for flog",
-                "services": self._build_services(),
+                "services": self._build_services(container),
             }
         )
 
     def _update_layer(self, container):
         plan = container.get_plan()
-        overlay = self._flog_layer()
+        overlay = self._flog_layer(container)
 
         if overlay.services != plan.services:
             container.add_layer("flog layer", overlay, combine=True)
