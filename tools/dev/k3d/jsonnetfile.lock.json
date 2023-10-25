@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "dependencies": [
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "consul"
+        }
+      },
+      "version": "c0abc546c782a095a22c277d36f871bb94ffc944",
+      "sum": "Po3c1Ic96ngrJCtOazic/7OsLkoILOKZWXWyZWl+od8="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "enterprise-metrics"
+        }
+      },
+      "version": "c0abc546c782a095a22c277d36f871bb94ffc944",
+      "sum": "hi2ZpHKl7qWXmSZ46sAycjWEQK6oGsoECuDKQT1dA+k="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "etcd-operator"
+        }
+      },
+      "version": "c0abc546c782a095a22c277d36f871bb94ffc944",
+      "sum": "duHm6wmUju5KHQurOe6dnXoKgl5gTUsfGplgbmAOsHw="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "grafana"
+        }
+      },
+      "version": "c0abc546c782a095a22c277d36f871bb94ffc944",
+      "sum": "Y5nheroSOIwmE+djEVPq4OvvTxKenzdHhpEwaR3Ebjs="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "jaeger-agent-mixin"
+        }
+      },
+      "version": "c0abc546c782a095a22c277d36f871bb94ffc944",
+      "sum": "NyRKfJyqLhB9oHLpr+b47b5yiB3BuBB9ZmRcVk0IVEk="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "ksonnet-util"
+        }
+      },
+      "version": "c0abc546c782a095a22c277d36f871bb94ffc944",
+      "sum": "0y3AFX9LQSpfWTxWKSwoLgbt0Wc9nnCwhMH2szKzHv0="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "loki-simple-scalable"
+        }
+      },
+      "version": "0dfdeb96f42f2050ba923b92dfdbf090d26569f4",
+      "sum": "788HNReqyKDNH7ARqwepctP7bqBAfawarD4jgK+2ugQ="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "memcached"
+        }
+      },
+      "version": "c0abc546c782a095a22c277d36f871bb94ffc944",
+      "sum": "Cc715Y3rgTuimgDFIw+FaKzXSJGRYwt1pFTMbdrNBD8="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs.git",
+          "subdir": "tanka-util"
+        }
+      },
+      "version": "c0abc546c782a095a22c277d36f871bb94ffc944",
+      "sum": "ShSIissXdvCy1izTCDZX6tY7qxCoepE5L+WJ52Hw7ZQ="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/mimir.git",
+          "subdir": "operations/mimir"
+        }
+      },
+      "version": "99c90795b497ea372d0cdebfd0e6d69d23e1063e",
+      "sum": "MhA3qnMbcM4zi+hHPSrn+QbCoathsgcpzC2dDZy8C7I="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/jsonnet-libs/docsonnet.git",
+          "subdir": "doc-util"
+        }
+      },
+      "version": "7c865ec0606f2b68c0f6b2721f101e6a99cd2593",
+      "sum": "zjjufxN4yAIevldYEERiZEp27vK0BJKj1VvZcVtWiOo="
+    },
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/jsonnet-libs/k8s-libsonnet.git",
+          "subdir": "1.20"
+        }
+      },
+      "version": "44a9f3d21c089a01f62b22e25bdf553f488a74e8",
+      "sum": "KXx5RVXiqTJQo2GVfrD8DIvlm292s0TxfTKT8I591+c="
+    }
+  ],
+  "legacyImports": false
+}
