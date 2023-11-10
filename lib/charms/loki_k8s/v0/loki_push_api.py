@@ -12,7 +12,7 @@ This document explains how to use the two principal objects this library provide
 implement the provider side of the `loki_push_api` relation interface. For instance, a Loki charm.
 The provider side of the relation represents the server side, to which logs are being pushed.
 
-- `LokiPushApiConsumer`: Used to obtain the loki api endpoint. This is useful for configuring 
+- `LokiPushApiConsumer`: Used to obtain the loki api endpoint. This is useful for configuring
   applications such as pebble, or charmed operators of workloads such as grafana-agent or promtail,
   that can communicate with loki directly.
 
@@ -480,7 +480,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 23
+LIBPATCH = 24
 
 logger = logging.getLogger(__name__)
 
