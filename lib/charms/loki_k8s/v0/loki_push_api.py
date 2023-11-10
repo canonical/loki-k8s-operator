@@ -12,9 +12,9 @@ This document explains how to use the two principal objects this library provide
 implement the provider side of the `loki_push_api` relation interface. For instance, a Loki charm.
 The provider side of the relation represents the server side, to which logs are being pushed.
 
-- `LokiPushApiConsumer`: This object is meant to be used by any Charmed Operator that needs to
-send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
-For instance, a Promtail or Grafana agent charm which needs to send logs to Loki.
+- `LokiPushApiConsumer`: Used to obtain the loki api endpoint. This is useful for configuring 
+  applications such as pebble, or charmed operators of workloads such as grafana-agent or promtail,
+  that can communicate with loki directly.
 
 - `LogProxyConsumer`: This object can be used by any Charmed Operator which needs to
 send telemetry, such as logs, to Loki through a Log Proxy by implementing the consumer side of the
