@@ -8,7 +8,7 @@
 
 import logging
 
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+from charms.loki_k8s.v1.loki_push_api import LogProxyConsumer
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, ModelError, WaitingStatus
@@ -26,12 +26,18 @@ class LogProxyTesterCharm(CharmBase):
         self._enable_syslog = self.model.config.get("syslog")
         self._enable_file_forwarding = self.model.config.get("file_forwarding")
         self._log_files = ["/bin/driver.log"]
+        self._log_scheme = {
+            "workload-a": {
+                "log-files": ["/tmp/worload-a-1.log", "/tmp/worload-a-2.log"],
+                "syslog-port": 1514,
+            },
+            "workload-b": {"log-files": ["/tmp/worload-b.log"], "syslog-port": 1515},
+        }
 
         self._log_proxy = LogProxyConsumer(
-            charm=self,
-            container_name="workload",
-            enable_syslog=self._enable_syslog,
-            log_files=self._log_files if self._enable_file_forwarding else [],
+            self,
+            logs_scheme=self._log_scheme,
+            relation_name="log-proxy",
         )
         self.framework.observe(
             self._log_proxy.on.promtail_digest_error,
@@ -42,7 +48,8 @@ class LogProxyTesterCharm(CharmBase):
             self._promtail_success,
         )
 
-        self.framework.observe(self.on.workload_pebble_ready, self._on_workload_pebble_ready)
+        self.framework.observe(self.on.workload_a_pebble_ready, self._on_workload_pebble_ready)
+        self.framework.observe(self.on.workload_b_pebble_ready, self._on_workload_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
     def _promtail_error(self, event):
@@ -57,13 +64,13 @@ class LogProxyTesterCharm(CharmBase):
 
         Learn more about Pebble layers at https://github.com/canonical/pebble
         """
-        container = self.unit.get_container("workload")
+        container = event.workload
         if not container.can_connect():
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
 
         try:
-            self._update_layer()
+            self._update_layer(container)
         except (ModelError, TypeError, ChangeError) as e:
             self.unit.status = BlockedStatus("Layer update failed: {}".format(str(e)))
         else:
@@ -99,10 +106,11 @@ class LogProxyTesterCharm(CharmBase):
             }
         }
 
-    def _build_services(self) -> dict:
+    def _build_services(self, container) -> dict:
         services = {}
 
         if self._enable_syslog:
+            port = self._log_scheme[container.name]["syslog-port"] or 1514
             command = self._build_command("rfc5424", "stdout")
             # TODO: UDP support in Promtail merged on 04052022. Get a new Promtail and use
             # UCP transport when it releases
@@ -110,37 +118,45 @@ class LogProxyTesterCharm(CharmBase):
                 # Loop this command forever since it will fail if no promtail is listening, but
                 # we still want the pebble services to start
                 self._build_service_template(
-                    "syslog",
-                    f"/usr/bin/bash -c 'while true; do {command} | logger -n 127.0.0.1 -P 1514 -T --socket-errors=off || true; done'",
+                    f"syslog-{container.name}",
+                    f"/usr/bin/bash -c 'while true; do {command} | logger -n 127.0.0.1 -P {port} -T --socket-errors=off || true; done'",
                 )
             )
         if self._enable_file_forwarding:
-            services.update(self._build_service_template("file-logger", self._build_command()))
+            filename = self._log_scheme[container.name]["log-files"][0] or "/bin/driver.log"
+            services.update(
+                self._build_service_template(
+                    "file-logger", self._build_command(output_filename=filename)
+                )
+            )
 
         return services
 
-    def _flog_layer(self) -> Layer:
+    def _flog_layer(self, container) -> Layer:
         return Layer(
             {
                 "summary": "flog layer",
                 "description": "pebble config layer for flog",
-                "services": self._build_services(),
+                "services": self._build_services(container),
             }
         )
 
-    def _update_layer(self):
-        container = self.unit.get_container("workload")  # container name from metadata.yaml
+    def _update_layer(self, container):
         plan = container.get_plan()
-        overlay = self._flog_layer()
+        overlay = self._flog_layer(container)
 
         if overlay.services != plan.services:
             container.add_layer("flog layer", overlay, combine=True)
             container.replan()
 
     def _on_config_changed(self, event):
-        container = self.unit.get_container("workload")
-        if container.can_connect():
-            self._update_layer()
+        container_a = self.unit.get_container("workload-a")
+        if container_a.can_connect():
+            self._update_layer(container_a)
+
+        container_b = self.unit.get_container("workload-b")
+        if container_b.can_connect():
+            self._update_layer(container_b)
 
 
 if __name__ == "__main__":

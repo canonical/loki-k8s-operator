@@ -1,6 +1,6 @@
 # Static releases of Promtail binaries
 
-In order to support any container running Linux with the [LogProxyConsumer](lib/charms/loki_k8s/v0/loki_push_api.py), we need builds of `promtail` that are statically linked.
+In order to support any container running Linux with the [LogProxyConsumer](lib/charms/loki_k8s/v1/loki_push_api.py), we need builds of `promtail` that are statically linked.
 
 ## Why statically linking Promtail?
 

@@ -5,6 +5,7 @@ import asyncio
 import grp
 import json
 import logging
+import subprocess
 import urllib.request
 from pathlib import Path
 from typing import List
@@ -328,3 +329,29 @@ def initial_workload_is_ready(ops_test, app_names) -> bool:
         ops_test.model.applications[name].units[0].workload_status == "active"
         for name in app_names
     )
+
+
+async def generate_log_file(
+    model_name: str, app_name: str, unit_num: int, container_name: str, filepath: str
+) -> bytes:
+    cmd = [
+        "juju",
+        "ssh",
+        "--model",
+        model_name,
+        "--container",
+        container_name,
+        f"{app_name}/{unit_num}",
+        "flog",
+        "-t",
+        "log",
+        "-w",
+        "-o",
+        filepath,
+    ]
+    try:
+        res = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as e:
+        logger.error(e.stdout.decode())
+        raise e
+    return res.stdout

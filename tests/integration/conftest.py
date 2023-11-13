@@ -53,7 +53,7 @@ def timed_memoizer(func):
 @pytest.fixture(scope="module", autouse=True)
 def copy_loki_library_into_test_charms(ops_test):
     """Ensure that the tester charm uses the current Prometheus library."""
-    library_path = "lib/charms/loki_k8s/v0/loki_push_api.py"
+    library_path = "lib/charms/loki_k8s/v1/loki_push_api.py"
     for tester in ["loki-tester", "log-proxy-tester"]:
         install_path = "tests/integration/{}/{}".format(tester, library_path)
         os.makedirs(os.path.dirname(install_path), exist_ok=True)

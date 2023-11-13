@@ -9,7 +9,9 @@ description: Fake log generator
 summary: NTA
 
 containers:
-  workload:
+  workload-a:
+    resource: workload-image
+  workload-b:
     resource: workload-image
 
 resources:
