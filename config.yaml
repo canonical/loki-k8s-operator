@@ -15,3 +15,25 @@ options:
       automatically deduced from it).
       See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
     type: string
+  ingestion-rate-mb:
+    description: |
+      Per-user ingestion rate limit (MB/s).
+      This config option matches exactly Loki's `ingestion_rate_mb`, except that it is an integer here
+      (Loki takes a float).
+      This same value is used internally for setting `per_stream_rate_limit`. Loki uses a default of 3 for
+      `ingestion_rate_mb`, but 4 for `per_stream_rate_limit`. For this reason we use 4 as the default here.
+      
+      Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
+    type: int
+    default: 4
+  ingestion-burst-size-mb:
+    description: |
+      This config option matches exactly Loki's `ingestion_burst_size_mb`, except that it is an integer here
+      (Loki takes a float).
+      This same value is used internally for setting `per_stream_rate_limit_burst`. Loki uses a default of 6 for 
+      `ingestion_burst_size_mb`, but 15 for `per_stream_rate_limit_burst`. For this reason we use 15 as the default
+      here.
+      
+      Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
+    type: int
+    default: 15
