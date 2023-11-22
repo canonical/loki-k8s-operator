@@ -33,12 +33,21 @@ class ConfigBuilder:
     _auth_enabled: bool = False
 
     def __init__(
-        self, instance_addr: str, alertmanager_url: str, external_url: str, http_tls: bool = False
+        self,
+        *,
+        instance_addr: str,
+        alertmanager_url: str,
+        external_url: str,
+        ingestion_rate_mb: int,
+        ingestion_burst_size_mb: int,
+        http_tls: bool = False,
     ):
         """Init method."""
         self.instance_addr = instance_addr
         self.alertmanager_url = alertmanager_url
         self.external_url = external_url
+        self.ingestion_rate_mb = ingestion_rate_mb
+        self.ingestion_burst_size_mb = ingestion_burst_size_mb
         self.http_tls = http_tls
 
     def build(self) -> dict:
@@ -52,6 +61,7 @@ class ConfigBuilder:
             "schema_config": self._schema_config,
             "server": self._server,
             "storage_config": self._storage_config,
+            "limits_config": self._limits_config,
         }
 
     @property
@@ -120,4 +130,17 @@ class ConfigBuilder:
         return {
             "boltdb": {"directory": BOLTDB_DIR},
             "filesystem": {"directory": CHUNKS_DIR},
+        }
+
+    @property
+    def _limits_config(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
+        return {
+            # For convenience, we use an integer but Loki takes a float
+            "ingestion_rate_mb": float(self.ingestion_rate_mb),
+            "ingestion_burst_size_mb": float(self.ingestion_burst_size_mb),
+            # The per-stream limits are intentionally set to match the per-user limits, to simplify UX and address the
+            # case of one stream per user.
+            "per_stream_rate_limit": f"{self.ingestion_rate_mb}MB",
+            "per_stream_rate_limit_burst": f"{self.ingestion_burst_size_mb}MB",
         }

@@ -309,6 +309,8 @@ class LokiOperatorCharm(CharmBase):
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
             external_url=self._external_url,
+            ingestion_rate_mb=int(self.config["ingestion-rate-mb"]),
+            ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
             http_tls=(self.server_cert.cert is not None),
         ).build()
 

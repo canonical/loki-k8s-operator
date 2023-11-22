@@ -3,3 +3,4 @@
 *.charm
 .#*
 cos-tool*
+/doc
