@@ -158,7 +158,7 @@ class ConfigBuilder:
                 "cache": {
                     "embedded_cache": {
                         # https://community.grafana.com/t/too-many-outstanding-requests-on-loki-2-7-1/78249/11
-                        "enabled": "true"
+                        "enabled": True
                     }
                 }
             }
@@ -171,7 +171,7 @@ class ConfigBuilder:
             "chunk_cache_config": {
                 "embedded_cache": {
                     # https://community.grafana.com/t/too-many-outstanding-requests-on-loki-2-7-1/78249/11
-                    "enabled": "true"
+                    "enabled": True
                 }
             }
         }
