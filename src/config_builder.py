@@ -64,6 +64,8 @@ class ConfigBuilder:
             "limits_config": self._limits_config,
             "query_range": self._query_range,
             "chunk_store_config": self._chunk_store_config,
+            "frontend": self._frontend,
+            "querier": self._querier,
         }
 
     @property
@@ -154,6 +156,7 @@ class ConfigBuilder:
     def _query_range(self) -> dict:
         # Ref: https://grafana.com/docs/loki/latest/configure/#query_range
         return {
+            "parallelise_shardable_queries": False,
             "results_cache": {
                 "cache": {
                     "embedded_cache": {
@@ -161,7 +164,7 @@ class ConfigBuilder:
                         "enabled": True
                     }
                 }
-            }
+            },
         }
 
     @property
@@ -174,4 +177,23 @@ class ConfigBuilder:
                     "enabled": True
                 }
             }
+        }
+
+    @property
+    def _frontend(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#frontend
+        return {
+            # Maximum number of outstanding requests per tenant per frontend; requests beyond this error with HTTP 429.
+            # Default is 2048, but 8cpu16gb can ingest ~3 times more, so set to 4x.
+            "max_outstanding_per_tenant": 8192,
+            # Compress HTTP responses.
+            "compress_responses": True,
+        }
+
+    @property
+    def _querier(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#querier
+        return {
+            # The maximum number of concurrent queries allowed. Default is 10.
+            "max_concurrent": 20,
         }
