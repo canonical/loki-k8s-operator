@@ -62,6 +62,10 @@ class ConfigBuilder:
             "server": self._server,
             "storage_config": self._storage_config,
             "limits_config": self._limits_config,
+            "query_range": self._query_range,
+            "chunk_store_config": self._chunk_store_config,
+            "frontend": self._frontend,
+            "querier": self._querier,
         }
 
     @property
@@ -143,4 +147,53 @@ class ConfigBuilder:
             # case of one stream per user.
             "per_stream_rate_limit": f"{self.ingestion_rate_mb}MB",
             "per_stream_rate_limit_burst": f"{self.ingestion_burst_size_mb}MB",
+            # This charmed operator is intended for running a single loki instances, so we don't need to split queries
+            # https://community.grafana.com/t/too-many-outstanding-requests-on-loki-2-7-1/78249/9
+            "split_queries_by_interval": "0",
+        }
+
+    @property
+    def _query_range(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#query_range
+        return {
+            "parallelise_shardable_queries": False,
+            "results_cache": {
+                "cache": {
+                    "embedded_cache": {
+                        # https://community.grafana.com/t/too-many-outstanding-requests-on-loki-2-7-1/78249/11
+                        "enabled": True
+                    }
+                }
+            },
+        }
+
+    @property
+    def _chunk_store_config(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#chunk_store_config
+        return {
+            "chunk_cache_config": {
+                "embedded_cache": {
+                    # https://community.grafana.com/t/too-many-outstanding-requests-on-loki-2-7-1/78249/11
+                    "enabled": True
+                }
+            }
+        }
+
+    @property
+    def _frontend(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#frontend
+        return {
+            # Maximum number of outstanding requests per tenant per frontend; requests beyond this error with HTTP 429.
+            # Default is 2048, but 8cpu16gb can ingest ~3 times more, so set to 4x.
+            "max_outstanding_per_tenant": 8192,
+            # Compress HTTP responses.
+            "compress_responses": True,
+        }
+
+    @property
+    def _querier(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#querier
+        return {
+            # The maximum number of concurrent queries allowed. Default is 10.
+            "max_concurrent": 20,
         }
