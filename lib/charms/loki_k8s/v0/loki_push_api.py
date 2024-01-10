@@ -2116,11 +2116,19 @@ class LogProxyConsumer(ConsumerBase):
                - "binsha": sha256 sum of unpacked promtail binary
         """
         # Check for Juju proxy variables and fall back to standard ones if not set
-        proxy_handler = request.ProxyHandler({
-            'http': os.environ.get('JUJU_CHARM_HTTP_PROXY') or os.environ.get('HTTP_PROXY') or '',
-            'https': os.environ.get('JUJU_CHARM_HTTPS_PROXY') or os.environ.get('HTTPS_PROXY') or '',
-            'no_proxy': os.environ.get('JUJU_CHARM_NO_PROXY') or os.environ.get('NO_PROXY') or '',
-        })
+        proxy_handler = request.ProxyHandler(
+            {
+                "http": os.environ.get("JUJU_CHARM_HTTP_PROXY")
+                or os.environ.get("HTTP_PROXY")
+                or "",
+                "https": os.environ.get("JUJU_CHARM_HTTPS_PROXY")
+                or os.environ.get("HTTPS_PROXY")
+                or "",
+                "no_proxy": os.environ.get("JUJU_CHARM_NO_PROXY")
+                or os.environ.get("NO_PROXY")
+                or "",
+            }
+        )
         opener = request.build_opener(proxy_handler)
 
         with opener.open(promtail_info["url"]) as r:
