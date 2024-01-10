@@ -2045,7 +2045,15 @@ class LogProxyConsumer(ConsumerBase):
                - "binsha": sha256 sum of unpacked promtail binary
             container: container into which promtail is to be uploaded.
         """
-        with request.urlopen(promtail_info["url"]) as r:
+        # Check for Juju proxy variables and fall back to standard ones if not set
+        proxy_handler = request.ProxyHandler({
+            'http': os.environ.get('JUJU_CHARM_HTTP_PROXY') or os.environ.get('HTTP_PROXY') or '',
+            'https': os.environ.get('JUJU_CHARM_HTTPS_PROXY') or os.environ.get('HTTPS_PROXY') or '',
+            'no_proxy': os.environ.get('JUJU_CHARM_NO_PROXY') or os.environ.get('NO_PROXY') or '',
+        })
+        opener = request.build_opener(proxy_handler)
+
+        with opener.open(promtail_info["url"]) as r:
             file_bytes = r.read()
             file_path = os.path.join(BINARY_DIR, promtail_info["filename"] + ".gz")
             with open(file_path, "wb") as f:
