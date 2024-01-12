@@ -2313,6 +2313,60 @@ class LogProxyConsumer(ConsumerBase):
         return {cont: self._charm.unit.get_container(cont) for cont in self._logs_scheme.keys()}
 
 
+class PebbleLogForwarder:
+    def __init__(
+        self,
+        charm: CharmBase,
+        layer_name: str,
+        *,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        loki_endpoints: Optional[List[str]] = None,
+    ):
+        self._charm = charm
+        self._layer_name = layer_name
+        self._relation_name = relation_name
+        self.topology = JujuTopology.from_charm(charm)
+        
+        if loki_endpoints is None:
+            self.loki_endpoints = [] # TODO: get from relation data
+            # TODO: If endpoints are None and there's no relation
+            #   then don't do anything
+        else:
+            self.loki_endpoints = loki_endpoints
+
+
+        # TODO: do we want to this in the constructor?
+        self.extend_pebble_layer()
+        
+    @property
+    def container(self):
+        return self.charm.whatever # TODO return charm container
+
+    @property
+    def log_targets(self):
+        targets = {}
+        for endpoint in self.loki_endpoints:
+            targets["production-logs"] = { # TODO: make a unique name per URL
+                "override": "merge",
+                "type": "loki",
+                "location": endpoint,
+                "services": ["all"], # TODO: do we want this to be configurable?
+            }
+
+        return targets
+
+    def extend_pebble_layer(self):
+        layer = Layer({
+            "log-targets": self.log_targets,
+            "log-labels": {
+                # TODO: add topology labels from self.topology
+            }
+        })
+        # TODO: does this merge at the top level or under "services" ?
+        #   we need it to the merge at the top level
+        self.container.add_layer(self._layer_name, layer, combine=True)
+
+
 class CosTool:
     """Uses cos-tool to inject label matchers into alert rule expressions and validate rules."""
 
