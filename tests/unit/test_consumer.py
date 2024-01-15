@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 from charms.loki_k8s.v0.loki_push_api import AlertRules, LokiPushApiConsumer
-from charms.observability_libs.v0.juju_topology import JujuTopology
+from cosl import JujuTopology
 from fs.tempfs import TempFS
 from ops.charm import CharmBase
 from ops.framework import StoredState

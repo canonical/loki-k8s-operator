@@ -9,7 +9,7 @@ from multiprocessing import Queue
 
 import logging_loki  # type: ignore
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
-from charms.observability_libs.v0.juju_topology import JujuTopology
+from cosl import JujuTopology
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
