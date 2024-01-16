@@ -445,7 +445,7 @@ from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib import request
 from urllib.error import HTTPError
 
@@ -474,7 +474,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -2314,6 +2314,8 @@ class LogProxyConsumer(ConsumerBase):
 
 
 class PebbleLogForwarder:
+    """Forward the StdOut output to one or multiple Loki endpoints."""
+
     def __init__(
         self,
         charm: CharmBase,
@@ -2331,6 +2333,7 @@ class PebbleLogForwarder:
             self.loki_endpoints = loki_endpoints
 
     def log_targets(self, enable=False):
+        """Build the targets for the log forwarding Pebble layer."""
         targets = {}
 
         for i, endpoint in enumerate(self.loki_endpoints):
@@ -2347,14 +2350,17 @@ class PebbleLogForwarder:
         return targets
 
     def handle_logging(self, enable=False):
-        layer = {
-            "log-targets": self.log_targets(enable),
-            "log-labels": self.topology.charm_name,
-            }
+        """Enable or disable the log forwarding."""
+        layer = Layer(
+            {
+                "log-targets": self.log_targets(enable),
+                "log-labels": self.topology.charm_name,
+            }  # pyright: ignore
+        )
 
         for container_name, container in self._charm.unit.containers.items():
-            container.add_layer(f'{container_name}-log-forwarding',layer, combine=True)
-        
+            container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
+
     def fetch_endpoints(self) -> List[str]:
         """Fetch Loki Push API endpoints through relation data.
 
