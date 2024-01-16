@@ -445,11 +445,12 @@ from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from urllib import request
 from urllib.error import HTTPError
 
 import yaml
+from charms.loki_k8s.v0.loki_push_api import MultipleContainersFoundError
 from charms.observability_libs.v0.juju_topology import JujuTopology
 from ops.charm import (
     CharmBase,
@@ -2317,54 +2318,70 @@ class PebbleLogForwarder:
     def __init__(
         self,
         charm: CharmBase,
-        layer_name: str,
         *,
         relation_name: str = DEFAULT_RELATION_NAME,
         loki_endpoints: Optional[List[str]] = None,
     ):
         self._charm = charm
-        self._layer_name = layer_name
         self._relation_name = relation_name
         self.topology = JujuTopology.from_charm(charm)
-        
+
         if loki_endpoints is None:
-            self.loki_endpoints = [] # TODO: get from relation data
-            # TODO: If endpoints are None and there's no relation
-            #   then don't do anything
+            self.loki_endpoints = self.fetch_endpoints()
         else:
             self.loki_endpoints = loki_endpoints
 
-
-        # TODO: do we want to this in the constructor?
-        self.extend_pebble_layer()
-        
-    @property
-    def container(self):
-        return self.charm.whatever # TODO return charm container
-
-    @property
-    def log_targets(self):
+    def log_targets(self, enable=False):
         targets = {}
-        for endpoint in self.loki_endpoints:
-            targets["production-logs"] = { # TODO: make a unique name per URL
+
+        for i, endpoint in enumerate(self.loki_endpoints):
+            dest_name = f"loki{i}"
+            services_value = ["all"] if enable else ["-all"]
+
+            targets[dest_name] = {
                 "override": "merge",
                 "type": "loki",
                 "location": endpoint,
-                "services": ["all"], # TODO: do we want this to be configurable?
+                "services": services_value,
             }
 
         return targets
 
-    def extend_pebble_layer(self):
-        layer = Layer({
-            "log-targets": self.log_targets,
-            "log-labels": {
-                # TODO: add topology labels from self.topology
+    def handle_logging(self, enable=False):
+        layer = {
+            "log-targets": self.log_targets(enable),
+            "log-labels": self.topology.charm_name,
             }
-        })
-        # TODO: does this merge at the top level or under "services" ?
-        #   we need it to the merge at the top level
-        self.container.add_layer(self._layer_name, layer, combine=True)
+
+        for container_name, container in self._charm.unit.containers.items():
+            container.add_layer(f'{container_name}-log-forwarding',layer, combine=True)
+        
+    def fetch_endpoints(self) -> List[str]:
+        """Fetch Loki Push API endpoints through relation data.
+
+        Returns:
+            A list of Loki Push API endpoint URLs, for instance:
+            [
+                "http://loki1:3100/loki/api/v1/push",
+                "http://loki2:3100/loki/api/v1/push",
+            ]
+        """
+        endpoints = []  # type: list
+
+        for relation in self._charm.model.relations[self._relation_name]:
+            for unit in relation.units:
+                if unit.app == self._charm.app:
+                    # This is a peer unit
+                    continue
+
+                endpoint = relation.data[unit].get("endpoint")
+                if endpoint:
+                    deserialized_endpoint = json.loads(endpoint)
+                    url = deserialized_endpoint.get("url")
+                    if url:
+                        endpoints.append(url)
+
+        return endpoints
 
 
 class CosTool:
