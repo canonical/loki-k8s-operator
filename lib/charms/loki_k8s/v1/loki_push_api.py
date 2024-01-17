@@ -2313,9 +2313,9 @@ class LogProxyConsumer(ConsumerBase):
         return {cont: self._charm.unit.get_container(cont) for cont in self._logs_scheme.keys()}
 
 
-class PebbleLogForwarder:
-    """Forward the StdOut output to one or multiple Loki endpoints."""
 
+class PebbleLogForwarder(Object):
+    """Forward the StdOut output to one or multiple Loki endpoints."""
     def __init__(
         self,
         charm: CharmBase,
@@ -2323,14 +2323,31 @@ class PebbleLogForwarder:
         relation_name: str = DEFAULT_RELATION_NAME,
         loki_endpoints: Optional[List[str]] = None,
     ):
+        super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
         self.topology = JujuTopology.from_charm(charm)
+        self.loki_endpoints = loki_endpoints
 
-        if loki_endpoints is None:
-            self.loki_endpoints = self.fetch_endpoints()
-        else:
-            self.loki_endpoints = loki_endpoints
+        on_relation = self._charm.on[self._relation_name]
+        self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
+        self.framework.observe(on_relation.relation_changed, self._on_logging_relation_changed)
+        self.framework.observe(on_relation.relation_departed, self._on_logging_relation_departed)
+        self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
+
+    def _on_logging_relation_joined(self, _):
+        self.loki_endpoints = self._fetch_endpoints
+        self.handle_logging(self.loki_endpoints, enable=True)
+
+    def _on_logging_relation_changed(self, _):
+        self.loki_endpoints = self._fetch_endpoints
+        self.handle_logging(self.loki_endpoints, enable=True)
+
+    def _on_logging_relation_departed(self, _):
+        self.handle_logging(self.loki_endpoints, enable=False)
+
+    def _on_logging_relation_broken(self, _):
+        self.handle_logging(self.loki_endpoints, enable=False)
 
     def _build_log_target(self, endpoint, index, enable=False):
         """Build a log target for the log forwarding Pebble layer."""
@@ -2354,24 +2371,28 @@ class PebbleLogForwarder:
             }
         }
 
-    def _build_log_targets(self, enable=False):
+    def _build_log_targets(self, endpoints: List[str], enable=False):
         """Build the targets for the log forwarding Pebble layer."""
         targets = {}
 
-        for i, endpoint in enumerate(self.loki_endpoints):
+        for i, endpoint in enumerate(endpoints):
             targets.update(self._build_log_target(endpoint, i, enable))
 
         return targets
 
-    def handle_logging(self, enable=False):
+    def handle_logging(self, endpoints: List[str], enable=False):
         """Enable or disable the log forwarding."""
-        layer_config = {"log-targets": self._build_log_targets(enable)}
-        layer = Layer(layer_config)  # pyright: ignore
+        if endpoints:
+            layer_config = {"log-targets": self._build_log_targets(endpoints, enable)}
+            layer = Layer(layer_config)  # pyright: ignore
 
-        for container_name, container in self._charm.unit.containers.items():
-            container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
+            for container_name, container in self._charm.unit.containers.items():
+                container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
+        else:
+            logger.warning("No loki endpoints available")
 
-    def fetch_endpoints(self) -> List[str]:
+    @property
+    def _fetch_endpoints(self) -> List[str]:
         """Fetch Loki Push API endpoints through relation data.
 
         Returns:
