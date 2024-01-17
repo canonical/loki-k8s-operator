@@ -2345,11 +2345,11 @@ class PebbleLogForwarder:
                 "services": services_value,
                 "labels": {
                     "product": "Juju",
-                    "charm_name": self.topology._charm_name,
-                    "model": self.topology._model,
-                    "model_uuid": self.topology._model_uuid,
-                    "application": self.topology._application,
-                    "unit": self.topology._unit,
+                    "charm": self.topology._charm_name,
+                    "juju_model": self.topology._model,
+                    "juju_model_uuid": self.topology._model_uuid,
+                    "juju_application": self.topology._application,
+                    "juju_unit": self.topology._unit,
                 },
             }
         }
