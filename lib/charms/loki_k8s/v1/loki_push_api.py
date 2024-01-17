@@ -2332,31 +2332,41 @@ class PebbleLogForwarder:
         else:
             self.loki_endpoints = loki_endpoints
 
-    def log_targets(self, enable=False):
-        """Build the targets for the log forwarding Pebble layer."""
-        targets = {}
+    def _build_log_target(self, endpoint, index, enable=False):
+        """Build a log target for the log forwarding Pebble layer."""
+        dest_name = f"loki{index}"
+        services_value = ["all"] if enable else ["-all"]
 
-        for i, endpoint in enumerate(self.loki_endpoints):
-            dest_name = f"loki{i}"
-            services_value = ["all"] if enable else ["-all"]
-
-            targets[dest_name] = {
+        return {
+            dest_name: {
                 "override": "merge",
                 "type": "loki",
                 "location": endpoint,
                 "services": services_value,
+                "labels": {
+                    "product": "Juju",
+                    "charm_name": self.topology._charm_name,
+                    "model": self.topology._model,
+                    "model_uuid": self.topology._model_uuid,
+                    "application": self.topology._application,
+                    "unit": self.topology._unit,
+                },
             }
+        }
+
+    def _build_log_targets(self, enable=False):
+        """Build the targets for the log forwarding Pebble layer."""
+        targets = {}
+
+        for i, endpoint in enumerate(self.loki_endpoints):
+            targets.update(self._build_log_target(endpoint, i, enable))
 
         return targets
 
     def handle_logging(self, enable=False):
         """Enable or disable the log forwarding."""
-        layer = Layer(
-            {
-                "log-targets": self.log_targets(enable),
-                "log-labels": self.topology.charm_name,
-            }  # pyright: ignore
-        )
+        layer_config = {"log-targets": self._build_log_targets(enable)}
+        layer = Layer(layer_config)  # pyright: ignore
 
         for container_name, container in self._charm.unit.containers.items():
             container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
