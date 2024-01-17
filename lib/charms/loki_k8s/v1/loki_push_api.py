@@ -2313,9 +2313,9 @@ class LogProxyConsumer(ConsumerBase):
         return {cont: self._charm.unit.get_container(cont) for cont in self._logs_scheme.keys()}
 
 
-
 class PebbleLogForwarder(Object):
     """Forward the StdOut output to one or multiple Loki endpoints."""
+
     def __init__(
         self,
         charm: CharmBase,
@@ -2371,16 +2371,15 @@ class PebbleLogForwarder(Object):
             }
         }
 
-    def _build_log_targets(self, endpoints: List[str], enable=False):
+    def _build_log_targets(self, endpoints: Optional[List[str]], enable=False):
         """Build the targets for the log forwarding Pebble layer."""
         targets = {}
-
-        for i, endpoint in enumerate(endpoints):
-            targets.update(self._build_log_target(endpoint, i, enable))
-
+        if endpoints:
+            for i, endpoint in enumerate(endpoints):
+                targets.update(self._build_log_target(endpoint, i, enable))
         return targets
 
-    def handle_logging(self, endpoints: List[str], enable=False):
+    def handle_logging(self, endpoints: Optional[List[str]], enable=False):
         """Enable or disable the log forwarding."""
         if endpoints:
             layer_config = {"log-targets": self._build_log_targets(endpoints, enable)}
