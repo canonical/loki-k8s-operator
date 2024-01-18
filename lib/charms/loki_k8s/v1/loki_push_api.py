@@ -20,7 +20,7 @@ For instance, a Promtail or Grafana agent charm which needs to send logs to Loki
 send telemetry, such as logs, to Loki through a Log Proxy by implementing the consumer side of the
 `loki_push_api` relation interface.
 
-- 'LogForwarder': This object can be used by any Charmed Operator which needs to send its
+- 'LogForwarder': This object can be used by any Charmed Operator which needs to send the workload
 standard output (stdout) to Loki, through Pebble's log forwarding mechanism.
 
 Filtering logs in Loki is largely performed on the basis of labels. In the Juju ecosystem, Juju
@@ -2396,15 +2396,15 @@ class LogForwarder(Object):
         self._charm = charm
         self._relation_name = relation_name
         self.topology = JujuTopology.from_charm(charm)
-        self.endpoints_getter: Callable = self._fetch_endpoints if loki_endpoint_getter is None else loki_endpoint_getter
+        self.endpoints_getter: Callable = (
+            self._fetch_endpoints if loki_endpoint_getter is None else loki_endpoint_getter
+        )
         self.loki_endpoints = self.endpoints_getter(relation_name)
 
         on_relation = self._charm.on[self._relation_name]
         self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(on_relation.relation_changed, self._on_logging_relation_changed)
-        self.framework.observe(
-            on_relation.relation_departed, self._on_logging_relation_departed
-        )
+        self.framework.observe(on_relation.relation_departed, self._on_logging_relation_departed)
         self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_joined(self, _):
