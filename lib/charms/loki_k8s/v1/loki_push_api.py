@@ -354,23 +354,23 @@ These can be monitored via the PromtailDigestError events via:
 
 ## LogForwarder Library Usage
 
-Let's say that we have a workload charm that produces logs to the standard output (stdout), 
-and we need to send those logs to a workload implementing the `loki_push_api` interface, 
+Let's say that we have a workload charm that produces logs to the standard output (stdout),
+and we need to send those logs to a workload implementing the `loki_push_api` interface,
 such as `Loki` or `Grafana Agent`.
 
 Use the `LogForwarder` class by instantiating it in the `__init__` method of the charmed
 operator. There are two ways to provide Loki endpoint(s) to the forwarder. You can let the
 object extract the endpoint(s) from relation data, or you can explicitly pass the Loki
-endpoint(s) to forward your logs to. 
+endpoint(s) to forward your logs to.
 
 1. If you want your charm to relate to another implementing the `loki_push_api` interface,
    you only need to instantiate the object; for example:
 
    ```python
    from charms.loki_k8s.v1.loki_push_api import LogForwarder
-   
+
    ...
-   
+
       def __init__(self, *args):
           ...
           self._log_forwarder = LogForwarder(self)
@@ -392,7 +392,7 @@ endpoint(s) to forward your logs to.
    the endpoint(s) from another different relation, this is the approach to follow.
    However, you also need to manually enable and disable the log forwarding. For example,
    let's say the charm gets the endpoint(s) from the `foo` relation:
-   
+
    ```python
    from charms.loki_k8s.v1.loki_push_api import LogForwarder
 
@@ -415,7 +415,7 @@ endpoint(s) to forward your logs to.
 
    ```
 
-Once the library is implemented in a Charmed Operator, and log forwarding is enabled, the library 
+Once the library is implemented in a Charmed Operator, and log forwarding is enabled, the library
 will inject a Pebble layer in the workload container to send logs.
 
 ## Alerting Rules
@@ -2402,7 +2402,9 @@ class LogForwarder(Object):
             on_relation = self._charm.on[self._relation_name]
             self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
             self.framework.observe(on_relation.relation_changed, self._on_logging_relation_changed)
-            self.framework.observe(on_relation.relation_departed, self._on_logging_relation_departed)
+            self.framework.observe(
+                on_relation.relation_departed, self._on_logging_relation_departed
+            )
             self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_joined(self, _):
