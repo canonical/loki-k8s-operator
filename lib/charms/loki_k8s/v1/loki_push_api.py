@@ -514,7 +514,7 @@ from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from urllib import request
 from urllib.error import HTTPError
 
@@ -2390,29 +2390,27 @@ class LogForwarder(Object):
         charm: CharmBase,
         *,
         relation_name: str = DEFAULT_RELATION_NAME,
-        loki_endpoints: Optional[List[str]] = None,
+        loki_endpoint_getter: Optional[Callable[[str], List[str]]] = None,
     ):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
         self.topology = JujuTopology.from_charm(charm)
-        self.loki_endpoints = loki_endpoints
+        self.endpoints_getter: Callable = self._fetch_endpoints if loki_endpoint_getter is None else loki_endpoint_getter
+        self.loki_endpoints = self.endpoints_getter(relation_name)
 
-        if not loki_endpoints:
-            on_relation = self._charm.on[self._relation_name]
-            self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
-            self.framework.observe(on_relation.relation_changed, self._on_logging_relation_changed)
-            self.framework.observe(
-                on_relation.relation_departed, self._on_logging_relation_departed
-            )
-            self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
+        on_relation = self._charm.on[self._relation_name]
+        self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
+        self.framework.observe(on_relation.relation_changed, self._on_logging_relation_changed)
+        self.framework.observe(
+            on_relation.relation_departed, self._on_logging_relation_departed
+        )
+        self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_joined(self, _):
-        self.loki_endpoints = self._fetch_endpoints
         self.enable()
 
     def _on_logging_relation_changed(self, _):
-        self.loki_endpoints = self._fetch_endpoints
         self.enable()
 
     def _on_logging_relation_departed(self, _):
@@ -2470,8 +2468,7 @@ class LogForwarder(Object):
         else:
             logger.warning("No loki endpoints available")
 
-    @property
-    def _fetch_endpoints(self) -> List[str]:
+    def _fetch_endpoints(self, relation_name: str) -> List[str]:
         """Fetch Loki Push API endpoints through relation data.
 
         Returns:
@@ -2483,7 +2480,7 @@ class LogForwarder(Object):
         """
         endpoints = []  # type: list
 
-        for relation in self._charm.model.relations[self._relation_name]:
+        for relation in self._charm.model.relations[relation_name]:
             for unit in relation.units:
                 if unit.app == self._charm.app:
                     # This is a peer unit
