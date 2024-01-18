@@ -20,6 +20,9 @@ For instance, a Promtail or Grafana agent charm which needs to send logs to Loki
 send telemetry, such as logs, to Loki through a Log Proxy by implementing the consumer side of the
 `loki_push_api` relation interface.
 
+- 'LogForwarder': This object can be used by any Charmed Operator which needs to send its
+standard output (stdout) to Loki, through Pebble's log forwarding mechanism.
+
 Filtering logs in Loki is largely performed on the basis of labels. In the Juju ecosystem, Juju
 topology labels are used to uniquely identify the workload which generates telemetry like logs.
 
@@ -348,6 +351,72 @@ These can be monitored via the PromtailDigestError events via:
        self.unit.status = BlockedStatus(event.message)
     )
 ```
+
+## LogForwarder Library Usage
+
+Let's say that we have a workload charm that produces logs to the standard output (stdout), 
+and we need to send those logs to a workload implementing the `loki_push_api` interface, 
+such as `Loki` or `Grafana Agent`.
+
+Use the `LogForwarder` class by instantiating it in the `__init__` method of the charmed
+operator. There are two ways to provide Loki endpoint(s) to the forwarder. You can let the
+object extract the endpoint(s) from relation data, or you can explicitly pass the Loki
+endpoint(s) to forward your logs to. 
+
+1. If you want your charm to relate to another implementing the `loki_push_api` interface,
+   you only need to instantiate the object; for example:
+
+   ```python
+   from charms.loki_k8s.v1.loki_push_api import LogForwarder
+   
+   ...
+   
+      def __init__(self, *args):
+          ...
+          self._log_forwarder = LogForwarder(self)
+   ```
+
+   The `LogForwarder` will listen to relation events out-of-the-box and enable or disable
+   the log forwarding accordingly. Next, modify the `metadata.yaml` file to add:
+
+   - The `log-forwarding` relation in the `requires` section:
+     ```yaml
+     requires:
+       log-forwarding:
+         interface: loki_push_api
+         optional: true
+     ```
+
+2. If you don't want to relate your charm to another implementing the `loki_push_api` interface,
+   you need to explicitly provide the endpoint(s) to forward your logs to. If your charm receives
+   the endpoint(s) from another different relation, this is the approach to follow.
+   However, you also need to manually enable and disable the log forwarding. For example,
+   let's say the charm gets the endpoint(s) from the `foo` relation:
+   
+   ```python
+   from charms.loki_k8s.v1.loki_push_api import LogForwarder
+
+   ...
+
+     def __init__(self, *args):
+         ...
+         self._log_forwarder = LogForwarder(
+             self,
+             loki_endpoints=self.get_loki_endpoints,
+         )
+         self.framework.observe(self.on["foo"].relation_joined, self._log_forwarder.enable())
+         self.framework.observe(self.on["foo"].relation_changed, self._log_forwarder.enable())
+         self.framework.observe(self.on["foo"].relation_departed, self._log_forwarder.disable())
+         self.framework.observe(self.on["foo"].relation_broken, self._log_forwarder.disable())
+
+
+     def get_loki_endpoints(self) -> List[str]:
+         return self.model.relations["foo"].get("loki_endpoints", None)
+
+   ```
+
+Once the library is implemented in a Charmed Operator, and log forwarding is enabled, the library 
+will inject a Pebble layer in the workload container to send logs.
 
 ## Alerting Rules
 
@@ -2329,30 +2398,39 @@ class LogForwarder(Object):
         self.topology = JujuTopology.from_charm(charm)
         self.loki_endpoints = loki_endpoints
 
-        on_relation = self._charm.on[self._relation_name]
-        self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
-        self.framework.observe(on_relation.relation_changed, self._on_logging_relation_changed)
-        self.framework.observe(on_relation.relation_departed, self._on_logging_relation_departed)
-        self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
+        if not loki_endpoints:
+            on_relation = self._charm.on[self._relation_name]
+            self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
+            self.framework.observe(on_relation.relation_changed, self._on_logging_relation_changed)
+            self.framework.observe(on_relation.relation_departed, self._on_logging_relation_departed)
+            self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_joined(self, _):
         self.loki_endpoints = self._fetch_endpoints
-        self.handle_logging(self.loki_endpoints, enable=True)
+        self.enable()
 
     def _on_logging_relation_changed(self, _):
         self.loki_endpoints = self._fetch_endpoints
-        self.handle_logging(self.loki_endpoints, enable=True)
+        self.enable()
 
     def _on_logging_relation_departed(self, _):
-        self.handle_logging(self.loki_endpoints, enable=False)
+        self.disable()
 
     def _on_logging_relation_broken(self, _):
-        self.handle_logging(self.loki_endpoints, enable=False)
+        self.disable()
 
-    def _build_log_target(self, endpoint, index, enable=False):
+    def enable(self):
+        """Enable log forwarding."""
+        self.handle_logging(enabled=True)
+
+    def disable(self):
+        """Disable log forwarding."""
+        self.handle_logging(enabled=False)
+
+    def _build_log_target(self, endpoint, index, enabled=False):
         """Build a log target for the log forwarding Pebble layer."""
         dest_name = f"loki{index}"
-        services_value = ["all"] if enable else ["-all"]
+        services_value = ["all"] if enabled else ["-all"]
 
         return {
             dest_name: {
@@ -2379,10 +2457,10 @@ class LogForwarder(Object):
                 targets.update(self._build_log_target(endpoint, i, enable))
         return targets
 
-    def handle_logging(self, endpoints: Optional[List[str]], enable=False):
+    def handle_logging(self, enabled=False):
         """Enable or disable the log forwarding."""
-        if endpoints:
-            layer_config = {"log-targets": self._build_log_targets(endpoints, enable)}
+        if self.loki_endpoints:
+            layer_config = {"log-targets": self._build_log_targets(self.loki_endpoints, enabled)}
             layer = Layer(layer_config)  # pyright: ignore
 
             for container_name, container in self._charm.unit.containers.items():
