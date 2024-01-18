@@ -2415,7 +2415,7 @@ class LogForwarder(Object):
                     url = deserialized_endpoint.get("url")
                     if url:
                         endpoints.append(url)
-
+        endpoints.sort()
         return endpoints
 
 
