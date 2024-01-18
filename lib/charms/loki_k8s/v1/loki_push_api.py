@@ -2313,7 +2313,7 @@ class LogProxyConsumer(ConsumerBase):
         return {cont: self._charm.unit.get_container(cont) for cont in self._logs_scheme.keys()}
 
 
-class PebbleLogForwarder(Object):
+class LogForwarder(Object):
     """Forward the StdOut output to one or multiple Loki endpoints."""
 
     def __init__(
