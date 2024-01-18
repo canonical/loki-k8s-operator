@@ -354,9 +354,10 @@ These can be monitored via the PromtailDigestError events via:
 
 ## LogForwarder Library Usage
 
-Let's say that we have a workload charm that produces logs to the standard output (stdout),
+Let's say that we have a charm's workload that writes logs to the standard output (stdout),
 and we need to send those logs to a workload implementing the `loki_push_api` interface,
-such as `Loki` or `Grafana Agent`.
+such as `Loki` or `Grafana Agent`. To know how to reach a Loki instance, a charm would
+typically use the `loki_push_api` interface.
 
 Use the `LogForwarder` class by instantiating it in the `__init__` method of the charm.
 The easiest way to pass a Loki endpoint to the forwarder is to provide it with the name of
@@ -418,8 +419,9 @@ from there all the data it needs.
          return endpoints
    ```
 
-Once the library is implemented in a charm and the relation is joined, the library
-will inject a Pebble layer in the workload container to send logs.
+Once the library is implemented in a charm and a logging relation (loki_push_api) is
+active and healthy, the library will inject a Pebble layer in the workload container
+to configure Pebble's log forwarding feature and start sending logs to Loki.
 
 ## Alerting Rules
 
@@ -2386,7 +2388,7 @@ class LogProxyConsumer(ConsumerBase):
 
 
 class LogForwarder(Object):
-    """Forward the StdOut output to one or multiple Loki endpoints."""
+    """Forward the standard outputs of all workloads operated by a charm to one or multiple Loki endpoints."""
 
     def __init__(
         self,
