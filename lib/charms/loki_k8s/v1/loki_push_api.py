@@ -358,13 +358,13 @@ Let's say that we have a workload charm that produces logs to the standard outpu
 and we need to send those logs to a workload implementing the `loki_push_api` interface,
 such as `Loki` or `Grafana Agent`.
 
-Use the `LogForwarder` class by instantiating it in the `__init__` method of the charmed
-operator. There are two ways to provide Loki endpoint(s) to the forwarder. You can let the
-object extract the endpoint(s) from relation data, or you can explicitly pass the Loki
-endpoint(s) to forward your logs to.
+Use the `LogForwarder` class by instantiating it in the `__init__` method of the charm.
+The easiest way to pass a Loki endpoint to the forwarder is to provide it with the name of
+an endpoint which uses the `loki_push_api` interface. The forwarder will automatically extract
+from there all the data it needs.
 
-1. If you want your charm to relate to another implementing the `loki_push_api` interface,
-   you only need to instantiate the object; for example:
+1. To use the LogForwarder, the first you need to do is instantiate in in your charm's
+   constructor:
 
    ```python
    from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -373,25 +373,28 @@ endpoint(s) to forward your logs to.
 
       def __init__(self, *args):
           ...
-          self._log_forwarder = LogForwarder(self)
+          self._log_forwarder = LogForwarder(
+              self,
+              relation_name="logging"  # optional, defaults to `logging`
+          )
    ```
 
-   The `LogForwarder` will listen to relation events out-of-the-box and enable or disable
-   the log forwarding accordingly. Next, modify the `metadata.yaml` file to add:
+   The `LogForwarder` by default will observe relation events on the `logging` endpoint and
+   enable/disable log forwarding automatically.
+   Next, modify the `metadata.yaml` file to add:
 
    - The `log-forwarding` relation in the `requires` section:
      ```yaml
      requires:
-       log-forwarding:
+       logging:
          interface: loki_push_api
          optional: true
      ```
 
 2. If you don't want to relate your charm to another implementing the `loki_push_api` interface,
-   you need to explicitly provide the endpoint(s) to forward your logs to. If your charm receives
-   the endpoint(s) from another different relation, this is the approach to follow.
-   However, you also need to manually enable and disable the log forwarding. For example,
-   let's say the charm gets the endpoint(s) from the `foo` relation:
+   you need to provide two things: the `relation_name` of the relation containing the endpoint(s),
+   and a `loki_endpoints_getter` function that extracts the endpoint(s) from that relation.
+   For example, let's say the charm gets the endpoint(s) from the `foo` relation:
 
    ```python
    from charms.loki_k8s.v1.loki_push_api import LogForwarder
@@ -402,20 +405,20 @@ endpoint(s) to forward your logs to.
          ...
          self._log_forwarder = LogForwarder(
              self,
-             loki_endpoints=self.get_loki_endpoints,
+             relation_name="foo",
+             loki_endpoints_getter=self.get_loki_endpoints("foo"),
          )
-         self.framework.observe(self.on["foo"].relation_joined, self._log_forwarder.enable())
-         self.framework.observe(self.on["foo"].relation_changed, self._log_forwarder.enable())
-         self.framework.observe(self.on["foo"].relation_departed, self._log_forwarder.disable())
-         self.framework.observe(self.on["foo"].relation_broken, self._log_forwarder.disable())
 
+     def get_loki_endpoints(self, relation_name: str) -> List[str]:
+         endpoints = []
+         for relation in self.model.relations[relation_name]:
+             endpoint = some_way_to_retrieve_the_endpoint()
+             endpoints.append(endpoint)
 
-     def get_loki_endpoints(self) -> List[str]:
-         return self.model.relations["foo"].get("loki_endpoints", None)
-
+         return endpoints
    ```
 
-Once the library is implemented in a Charmed Operator, and log forwarding is enabled, the library
+Once the library is implemented in a charm and the relation is joined, the library
 will inject a Pebble layer in the workload container to send logs.
 
 ## Alerting Rules
