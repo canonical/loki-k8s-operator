@@ -528,7 +528,7 @@ from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib import request
 from urllib.error import HTTPError
 
@@ -546,6 +546,7 @@ from ops.charm import (
     WorkloadEvent,
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.jujuversion import JujuVersion
 from ops.model import Container, ModelError, Relation, Unit
 from ops.pebble import APIError, ChangeError, Layer, PathError, ProtocolError
 
@@ -2404,26 +2405,32 @@ class LogForwarder(ConsumerBase):
         charm: CharmBase,
         *,
         relation_name: str = DEFAULT_RELATION_NAME,
-        loki_endpoints_getter: Optional[Callable[[Relation], List[str]]] = None,
+        custom_loki_endpoints: Optional[Dict[str, str]] = None,
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = True,
         skip_alert_topology_labeling: bool = False,
     ):
-        super().__init__(
-            charm, relation_name, alert_rules_path, recursive, skip_alert_topology_labeling
-        )
+        # Juju version should support Pebble log forwarding
+        juju_version = JujuVersion.from_environ()
+        if not juju_version >= JujuVersion(version=str("3.4")):
+            msg = f"Juju version {juju_version} does not support Pebble log forwarding. Juju >= 3.4 is needed."
+            logger.error(msg)
+            raise RuntimeError(msg)
+        # Only setup alert rules if no loki_endpoints are explicitly passed
+        if custom_loki_endpoints is None:
+            super().__init__(
+                charm, relation_name, alert_rules_path, recursive, skip_alert_topology_labeling
+            )
         self._charm = charm
         self._relation_name = relation_name
         self._topology = JujuTopology.from_charm(charm)
-        self._endpoints_getter: Callable = (
-            self._extract_urls if loki_endpoints_getter is None else loki_endpoints_getter
-        )
+        self._custom_loki_endpoints = custom_loki_endpoints
 
-        on_relation = self._charm.on[self._relation_name]
-        self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
-        self.framework.observe(on_relation.relation_changed, self._on_logging_relation_changed)
-        self.framework.observe(on_relation.relation_departed, self._on_logging_relation_departed)
-        self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
+        on = self._charm.on[self._relation_name]
+        self.framework.observe(on.relation_joined, self._on_logging_relation_joined)
+        self.framework.observe(on.relation_changed, self._on_logging_relation_changed)
+        self.framework.observe(on.relation_departed, self._on_logging_relation_departed)
+        self.framework.observe(on.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_joined(self, _):
         self._enable_logging()
@@ -2441,7 +2448,11 @@ class LogForwarder(ConsumerBase):
             self._disable_logging(unit=unit)
 
     def _build_log_target(self, unit_name, endpoint, enabled=False):
-        """Build a log target for the log forwarding Pebble layer."""
+        """Build a log target for the log forwarding Pebble layer.
+
+        Log target's syntax for enabling/disabling forwardig is explained here:
+        https://github.com/canonical/pebble?tab=readme-ov-file#log-forwarding
+        """
         services_value = ["all"] if enabled else ["-all"]
 
         log_target = {
@@ -2469,25 +2480,32 @@ class LogForwarder(ConsumerBase):
     def _build_log_targets(self, endpoints: Optional[Dict[str, str]], enable=False):
         """Build the targets for the log forwarding Pebble layer."""
         targets = {}
-        if endpoints:
-            for unit_name, endpoint in endpoints.items():
-                targets.update(self._build_log_target(unit_name, endpoint, enable))
+        if not endpoints:
+            return targets
+
+        for unit_name, endpoint in endpoints.items():
+            targets.update(self._build_log_target(unit_name, endpoint, enable))
         return targets
 
     def _enable_logging(self):
         """Enable the log forwarding."""
         loki_endpoints = {}
-        for relation in self._charm.model.relations[self._relation_name]:
-            loki_endpoints.update(self._fetch_endpoints(relation))
 
-        if loki_endpoints:
-            layer_config = {"log-targets": self._build_log_targets(loki_endpoints, enable=True)}
-            layer = Layer(layer_config)  # pyright: ignore
-
-            for container_name, container in self._charm.unit.containers.items():
-                container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
+        if self._custom_loki_endpoints:
+            loki_endpoints = self._custom_loki_endpoints
         else:
+            for relation in self._charm.model.relations[self._relation_name]:
+                loki_endpoints.update(self._fetch_endpoints(relation))
+
+        if not loki_endpoints:
             logger.warning("No loki endpoints available")
+            return
+
+        layer_config = {"log-targets": self._build_log_targets(loki_endpoints, enable=True)}
+        layer = Layer(layer_config)  # pyright: ignore
+
+        for container_name, container in self._charm.unit.containers.items():
+            container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
 
     def _disable_logging(self, unit: Unit):
         """Disable the log forwarding for a certain unit."""
@@ -2506,8 +2524,9 @@ class LogForwarder(ConsumerBase):
             return all(self.is_ready(relation) for relation in relations)
 
         try:
-            self._endpoints_getter(relation)
-            return True
+            if self.loki_endpoints or self.loki_endpoints:
+                return True
+            return False
         except (KeyError, json.JSONDecodeError):
             return False
 
@@ -2541,7 +2560,7 @@ class LogForwarder(ConsumerBase):
 
         # if the code gets here, the function won't raise anymore because it's
         # also called in is_ready()
-        endpoints = self._endpoints_getter(relation)
+        endpoints = self._extract_urls(relation)
 
         return endpoints
 
