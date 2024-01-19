@@ -352,7 +352,7 @@ These can be monitored via the PromtailDigestError events via:
     )
 ```
 
-## LogForwarder Library Usage
+## LogForwarder class Usage
 
 Let's say that we have a charm's workload that writes logs to the standard output (stdout),
 and we need to send those logs to a workload implementing the `loki_push_api` interface,
@@ -364,7 +364,7 @@ The easiest way to pass a Loki endpoint to the forwarder is to provide it with t
 an endpoint which uses the `loki_push_api` interface. The forwarder will automatically extract
 from there all the data it needs.
 
-1. To use the LogForwarder, the first you need to do is instantiate in in your charm's
+1. To use the LogForwarder, the first thing you need to do is instantiate it in your charm's
    constructor:
 
    ```python
@@ -384,17 +384,20 @@ from there all the data it needs.
    enable/disable log forwarding automatically.
    Next, modify the `metadata.yaml` file to add:
 
-   - The `log-forwarding` relation in the `requires` section:
-     ```yaml
-     requires:
-       logging:
-         interface: loki_push_api
-         optional: true
-     ```
+   The `log-forwarding` relation in the `requires` section:
+   ```yaml
+   requires:
+     logging:
+       interface: loki_push_api
+       optional: true
+   ```
 
-2. If you don't want to relate your charm to another implementing the `loki_push_api` interface,
-   you need to provide two things: the `relation_name` of the relation containing the endpoint(s),
-   and a `loki_endpoints_getter` function that extracts the endpoint(s) from that relation.
+2. Alternatively, you need to provide two things: the `relation_name` of the relation
+   containing the endpoint(s), and optioanlly a `loki_endpoints_getter` function to define
+   how to extract the Loki endpoint(s) from that relation.
+   If you don't specify a custom `loki_endpoints_getter`, the default will follow the schema
+   of the `loki_push_api` interface.
+
    For example, let's say the charm gets the endpoint(s) from the `foo` relation:
 
    ```python
@@ -407,14 +410,19 @@ from there all the data it needs.
          self._log_forwarder = LogForwarder(
              self,
              relation_name="foo",
-             loki_endpoints_getter=self.get_loki_endpoints("foo"),
+             loki_endpoints_getter=self.get_loki_endpoints,
          )
 
-     def get_loki_endpoints(self, relation_name: str) -> List[str]:
-         endpoints = []
-         for relation in self.model.relations[relation_name]:
-             endpoint = some_way_to_retrieve_the_endpoint()
-             endpoints.append(endpoint)
+     def get_loki_endpoints(self, relation: Relation) -> Dict[str,str]:
+         endpoints = {}
+
+         for unit in relation.units:
+             if unit.app == self.app:
+                 # This is a peer unit
+                 continue
+
+             url = some_way_to_retrieve_the_endpoint_url(relation.data)
+             endpoints[unit.name] = url
 
          return endpoints
    ```
@@ -537,7 +545,7 @@ from ops.charm import (
     WorkloadEvent,
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
-from ops.model import Container, ModelError, Relation
+from ops.model import Container, ModelError, Relation, Unit
 from ops.pebble import APIError, ChangeError, Layer, PathError, ProtocolError
 
 # The unique Charmhub library identifier, never change it
@@ -2395,16 +2403,15 @@ class LogForwarder(Object):
         charm: CharmBase,
         *,
         relation_name: str = DEFAULT_RELATION_NAME,
-        loki_endpoint_getter: Optional[Callable[[str], List[str]]] = None,
+        loki_endpoints_getter: Optional[Callable[[Relation], List[str]]] = None,
     ):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-        self.topology = JujuTopology.from_charm(charm)
-        self.endpoints_getter: Callable = (
-            self._fetch_endpoints if loki_endpoint_getter is None else loki_endpoint_getter
+        self._topology = JujuTopology.from_charm(charm)
+        self._endpoints_getter: Callable = (
+            self._extract_urls if loki_endpoints_getter is None else loki_endpoints_getter
         )
-        self.loki_endpoints = self.endpoints_getter(relation_name)
 
         on_relation = self._charm.on[self._relation_name]
         self.framework.observe(on_relation.relation_joined, self._on_logging_relation_joined)
@@ -2413,59 +2420,62 @@ class LogForwarder(Object):
         self.framework.observe(on_relation.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_joined(self, _):
-        self.enable()
+        self._enable_logging()
 
     def _on_logging_relation_changed(self, _):
-        self.enable()
+        self._enable_logging()
 
-    def _on_logging_relation_departed(self, _):
-        self.disable()
+    def _on_logging_relation_departed(self, event: RelationDepartedEvent):
+        self._disable_logging(unit=event.unit)
 
-    def _on_logging_relation_broken(self, _):
-        self.disable()
+    def _on_logging_relation_broken(self, event: RelationBrokenEvent):
+        for unit in event.relation.units:
+            if unit.app == self._charm.app:
+                continue
+            self._disable_logging(unit=unit)
 
-    def enable(self):
-        """Enable log forwarding."""
-        self.handle_logging(enabled=True)
-
-    def disable(self):
-        """Disable log forwarding."""
-        self.handle_logging(enabled=False)
-
-    def _build_log_target(self, endpoint, index, enabled=False):
+    def _build_log_target(self, unit_name, endpoint, enabled=False):
         """Build a log target for the log forwarding Pebble layer."""
-        dest_name = f"loki{index}"
         services_value = ["all"] if enabled else ["-all"]
 
-        return {
-            dest_name: {
-                "override": "merge",
-                "type": "loki",
-                "location": endpoint,
-                "services": services_value,
-                "labels": {
-                    "product": "Juju",
-                    "charm": self.topology._charm_name,
-                    "juju_model": self.topology._model,
-                    "juju_model_uuid": self.topology._model_uuid,
-                    "juju_application": self.topology._application,
-                    "juju_unit": self.topology._unit,
-                },
-            }
+        log_target = {
+            "override": "merge",
+            "services": services_value,
         }
+        if enabled:
+            log_target.update(
+                {
+                    "type": "loki",
+                    "location": endpoint,
+                    "labels": {
+                        "product": "Juju",
+                        "charm": self._topology._charm_name,
+                        "juju_model": self._topology._model,
+                        "juju_model_uuid": self._topology._model_uuid,
+                        "juju_application": self._topology._application,
+                        "juju_unit": self._topology._unit,
+                    },
+                }
+            )
 
-    def _build_log_targets(self, endpoints: Optional[List[str]], enable=False):
+        return {unit_name: log_target}
+
+    def _build_log_targets(self, endpoints: Optional[Dict[str, str]], enable=False):
         """Build the targets for the log forwarding Pebble layer."""
         targets = {}
         if endpoints:
-            for i, endpoint in enumerate(endpoints):
-                targets.update(self._build_log_target(endpoint, i, enable))
+            for unit_name, endpoint in endpoints.items():
+                targets.update(self._build_log_target(unit_name, endpoint, enable))
         return targets
 
-    def handle_logging(self, enabled=False):
-        """Enable or disable the log forwarding."""
-        if self.loki_endpoints:
-            layer_config = {"log-targets": self._build_log_targets(self.loki_endpoints, enabled)}
+    def _enable_logging(self):
+        """Enable the log forwarding."""
+        loki_endpoints = {}
+        for relation in self._charm.model.relations[self._relation_name]:
+            loki_endpoints.update(self._fetch_endpoints(relation))
+
+        if loki_endpoints:
+            layer_config = {"log-targets": self._build_log_targets(loki_endpoints, enable=True)}
             layer = Layer(layer_config)  # pyright: ignore
 
             for container_name, container in self._charm.unit.containers.items():
@@ -2473,31 +2483,64 @@ class LogForwarder(Object):
         else:
             logger.warning("No loki endpoints available")
 
-    def _fetch_endpoints(self, relation_name: str) -> List[str]:
-        """Fetch Loki Push API endpoints through relation data.
+    def _disable_logging(self, unit: Unit):
+        """Disable the log forwarding for a certain unit."""
+        layer_config = {"log-targets": self._build_log_targets({unit.name: ""}, enable=False)}
+        layer = Layer(layer_config)  # pyright: ignore
+
+        for container_name, container in self._charm.unit.containers.items():
+            container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
+
+    def is_ready(self, relation: Optional[Relation] = None):
+        """Check if the relation is active and healthy."""
+        if not relation:
+            relations = self._charm.model.relations[self._relation_name]
+            if not relations:
+                return False
+            return all(self.is_ready(relation) for relation in relations)
+
+        try:
+            self._endpoints_getter(relation)
+            return True
+        except (KeyError, json.JSONDecodeError):
+            return False
+
+    def _extract_urls(self, relation: Relation) -> Dict[str, str]:
+        """Default getter function to extract Loki endpoints from a relation.
 
         Returns:
-            A list of Loki Push API endpoint URLs, for instance:
-            [
-                "http://loki1:3100/loki/api/v1/push",
-                "http://loki2:3100/loki/api/v1/push",
-            ]
+            A dictionary of remote units and the respective Loki endpoint.
+            {
+                "loki/0": "http://loki1:3100/loki/api/v1/push",
+                "another-loki/0": "http://loki2:3100/loki/api/v1/push",
+            }
         """
-        endpoints = []  # type: list
+        endpoints: Dict = {}
 
-        for relation in self._charm.model.relations[relation_name]:
-            for unit in relation.units:
-                if unit.app == self._charm.app:
-                    # This is a peer unit
-                    continue
+        for unit in relation.units:
+            if unit.app == self._charm.app:
+                # This is a peer unit
+                continue
 
-                endpoint = relation.data[unit].get("endpoint")
-                if endpoint:
-                    deserialized_endpoint = json.loads(endpoint)
-                    url = deserialized_endpoint.get("url")
-                    if url:
-                        endpoints.append(url)
-        endpoints.sort()
+            endpoint = relation.data[unit]["endpoint"]
+            deserialized_endpoint = json.loads(endpoint)
+            url = deserialized_endpoint["url"]
+            endpoints[unit.name] = url
+
+        return endpoints
+
+    def _fetch_endpoints(self, relation: Relation) -> Dict[str, str]:
+        """Fetch Loki Push API endpoints from relation data using the endpoints getter."""
+        endpoints: Dict = {}
+
+        if not self.is_ready(relation):
+            logger.warn(f"The relation '{relation}' is not ready yet.")
+            return endpoints
+
+        # if the code gets here, the function won't raise anymore because it's
+        # also called in is_ready()
+        endpoints = self._endpoints_getter(relation)
+
         return endpoints
 
 
