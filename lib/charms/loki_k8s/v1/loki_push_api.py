@@ -414,13 +414,14 @@ from there all the data it needs.
          )
 
      def get_loki_endpoints(self, relation: Relation) -> Dict[str,str]:
+         # A dictionary of remote units and resolvable urls of a `loki_push_api`-compliant endpoint.
+         # {
+         #     "loki/0": "http://loki1:3100/loki/api/v1/push",
+         #     "another-loki/0": "http://loki2:3100/loki/api/v1/push",
+         # }
          endpoints = {}
 
          for unit in relation.units:
-             if unit.app == self.app:
-                 # This is a peer unit
-                 continue
-
              url = some_way_to_retrieve_the_endpoint_url(relation.data)
              endpoints[unit.name] = url
 
@@ -2395,7 +2396,7 @@ class LogProxyConsumer(ConsumerBase):
         return {cont: self._charm.unit.get_container(cont) for cont in self._logs_scheme.keys()}
 
 
-class LogForwarder(Object):
+class LogForwarder(ConsumerBase):
     """Forward the standard outputs of all workloads operated by a charm to one or multiple Loki endpoints."""
 
     def __init__(
@@ -2404,8 +2405,13 @@ class LogForwarder(Object):
         *,
         relation_name: str = DEFAULT_RELATION_NAME,
         loki_endpoints_getter: Optional[Callable[[Relation], List[str]]] = None,
+        alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        recursive: bool = True,
+        skip_alert_topology_labeling: bool = False,
     ):
-        super().__init__(charm, relation_name)
+        super().__init__(
+            charm, relation_name, alert_rules_path, recursive, skip_alert_topology_labeling
+        )
         self._charm = charm
         self._relation_name = relation_name
         self._topology = JujuTopology.from_charm(charm)
@@ -2518,10 +2524,6 @@ class LogForwarder(Object):
         endpoints: Dict = {}
 
         for unit in relation.units:
-            if unit.app == self._charm.app:
-                # This is a peer unit
-                continue
-
             endpoint = relation.data[unit]["endpoint"]
             deserialized_endpoint = json.loads(endpoint)
             url = deserialized_endpoint["url"]
