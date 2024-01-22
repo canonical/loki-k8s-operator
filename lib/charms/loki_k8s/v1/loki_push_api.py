@@ -566,6 +566,7 @@ RELATION_INTERFACE_NAME = "loki_push_api"
 DEFAULT_RELATION_NAME = "logging"
 DEFAULT_ALERT_RULES_RELATIVE_PATH = "./src/loki_alert_rules"
 DEFAULT_LOG_PROXY_RELATION_NAME = "log-proxy"
+DEFAULT_LOKI_DATA_KEY = "endpoint"
 
 PROMTAIL_BASE_URL = "https://github.com/canonical/loki-k8s-operator/releases/download"
 # To update Promtail version you only need to change the PROMTAIL_VERSION and
@@ -2409,6 +2410,7 @@ class LogForwarder(ConsumerBase):
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = True,
         skip_alert_topology_labeling: bool = False,
+        loki_endpoints_key: str = DEFAULT_LOKI_DATA_KEY,
     ):
         # Juju version should support Pebble log forwarding
         juju_version = JujuVersion.from_environ()
@@ -2425,7 +2427,7 @@ class LogForwarder(ConsumerBase):
         self._relation_name = relation_name
         self._topology = JujuTopology.from_charm(charm)
         self._custom_loki_endpoints = custom_loki_endpoints
-
+        self._loki_endpoints_key = loki_endpoints_key
         on = self._charm.on[self._relation_name]
         self.framework.observe(on.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(on.relation_changed, self._on_logging_relation_changed)
@@ -2522,13 +2524,15 @@ class LogForwarder(ConsumerBase):
             return all(self.is_ready(relation) for relation in relations)
 
         try:
-            if self._custom_loki_endpoints or self._extract_urls(relation):
+            if self._custom_loki_endpoints or self._extract_urls(
+                relation, self._loki_endpoints_key
+            ):
                 return True
             return False
         except (KeyError, json.JSONDecodeError):
             return False
 
-    def _extract_urls(self, relation: Relation) -> Dict[str, str]:
+    def _extract_urls(self, relation: Relation, loki_endpoints_key: str) -> Dict[str, str]:
         """Default getter function to extract Loki endpoints from a relation.
 
         Returns:
@@ -2541,7 +2545,7 @@ class LogForwarder(ConsumerBase):
         endpoints: Dict = {}
 
         for unit in relation.units:
-            endpoint = relation.data[unit]["endpoint"]
+            endpoint = relation.data[unit][loki_endpoints_key]
             deserialized_endpoint = json.loads(endpoint)
             url = deserialized_endpoint["url"]
             endpoints[unit.name] = url
@@ -2558,7 +2562,7 @@ class LogForwarder(ConsumerBase):
 
         # if the code gets here, the function won't raise anymore because it's
         # also called in is_ready()
-        endpoints = self._extract_urls(relation)
+        endpoints = self._extract_urls(relation, self._loki_endpoints_key)
 
         return endpoints
 
