@@ -111,7 +111,7 @@ class TestLogForwarding(unittest.TestCase):
         }
         self.harness.charm.log_forwarder._custom_loki_endpoints = custom_endpoints
 
-        self.harness.charm.log_forwarder._enable_logging()
+        self.harness.charm.log_forwarder.enable_logging()
         expected_layer_config = {
             "loki/0": {
                 "override": "merge",
@@ -148,7 +148,7 @@ class TestLogForwarding(unittest.TestCase):
         self.assertDictEqual(expected_layer_config, actual_layer_config)
 
         self.harness.charm.log_forwarder._build_log_targets = MagicMock()
-        self.harness.charm.log_forwarder._disable_logging("loki/1")
+        self.harness.charm.log_forwarder.disable_logging("loki/1")
         self.harness.charm.log_forwarder._build_log_targets.assert_called_with(
             {"loki/1": ""}, enable=False
         )

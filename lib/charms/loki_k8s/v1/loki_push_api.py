@@ -2433,17 +2433,17 @@ class LogForwarder(ConsumerBase):
         self.framework.observe(on.relation_broken, self._on_logging_relation_broken)
 
     def _on_logging_relation_joined(self, _):
-        self._enable_logging()
+        self.enable_logging()
 
     def _on_logging_relation_changed(self, _):
-        self._enable_logging()
+        self.enable_logging()
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
-        self._disable_logging(unit_name=event.unit.name)
+        self.disable_logging(unit_name=event.unit.name)
 
     def _on_logging_relation_broken(self, event: RelationBrokenEvent):
         for unit in event.relation.units:
-            self._disable_logging(unit_name=unit.name)
+            self.disable_logging(unit_name=unit.name)
 
     def _build_log_target(self, unit_name, endpoint, enabled=False):
         """Build a log target for the log forwarding Pebble layer.
@@ -2485,7 +2485,7 @@ class LogForwarder(ConsumerBase):
             targets.update(self._build_log_target(unit_name, endpoint, enable))
         return targets
 
-    def _enable_logging(self):
+    def enable_logging(self):
         """Enable the log forwarding."""
         loki_endpoints = {}
 
@@ -2505,7 +2505,7 @@ class LogForwarder(ConsumerBase):
         for container_name, container in self._charm.unit.containers.items():
             container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
 
-    def _disable_logging(self, unit_name: str):
+    def disable_logging(self, unit_name: str):
         """Disable the log forwarding for a certain unit."""
         layer_config = {"log-targets": self._build_log_targets({unit_name: ""}, enable=False)}
         layer = Layer(layer_config)  # pyright: ignore
