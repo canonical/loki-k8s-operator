@@ -2410,7 +2410,7 @@ class _LogForwarderHelpers:
 
     @staticmethod
     def _build_log_target(
-        unit_name: str, loki_endpoint: str, topology: JujuTopology, enable=False
+        unit_name: str, loki_endpoint: str, topology: JujuTopology, enable: bool
     ) -> Dict:
         """Build a log target for the log forwarding Pebble layer.
 
@@ -2443,7 +2443,7 @@ class _LogForwarderHelpers:
 
     @staticmethod
     def _build_log_targets(
-        loki_endpoints: Optional[Dict[str, str]], topology: JujuTopology, enable=False
+        loki_endpoints: Optional[Dict[str, str]], topology: JujuTopology, enable: bool
     ):
         """Build the targets for the log forwarding Pebble layer."""
         targets = {}
@@ -2532,13 +2532,12 @@ class LogForwarder(ConsumerBase):
         )
         self._charm = charm
         self._relation_name = relation_name
-        self._topology = JujuTopology.from_charm(charm)
 
         on = self._charm.on[self._relation_name]
-        self._charm.framework.observe(on.relation_joined, self._update_logging)
-        self._charm.framework.observe(on.relation_changed, self._update_logging)
-        self._charm.framework.observe(on.relation_departed, self._update_logging)
-        self._charm.framework.observe(on.relation_broken, self._update_logging)
+        self.framework.observe(on.relation_joined, self._update_logging)
+        self.framework.observe(on.relation_changed, self._update_logging)
+        self.framework.observe(on.relation_departed, self._update_logging)
+        self.framework.observe(on.relation_broken, self._update_logging)
 
     def _update_logging(self, _):
         """Update the log forwarding to match the active Loki endpoints."""
@@ -2556,10 +2555,10 @@ class LogForwarder(ConsumerBase):
             _LogForwarderHelpers.disable_inactive_endpoints(
                 container=container,
                 active_endpoints=loki_endpoints,
-                topology=self._topology,
+                topology=self.topology,
             )
             _LogForwarderHelpers.enable_endpoints(
-                container=container, active_endpoints=loki_endpoints, topology=self._topology
+                container=container, active_endpoints=loki_endpoints, topology=self.topology
             )
 
     def is_ready(self, relation: Optional[Relation] = None):
@@ -2612,7 +2611,7 @@ class LogForwarder(ConsumerBase):
         return endpoints
 
 
-class ManualLogForwader:
+class ManualLogForwarder(Object):
     """Forward the standard outputs of all workloads to explictly-provided Loki endpoints."""
 
     def __init__(
@@ -2630,10 +2629,10 @@ class ManualLogForwader:
 
         if self._relation_name is not None:
             on = self._charm.on[self._relation_name]
-            self._charm.framework.observe(on.relation_joined, self._update_logging)
-            self._charm.framework.observe(on.relation_changed, self._update_logging)
-            self._charm.framework.observe(on.relation_departed, self._update_logging)
-            self._charm.framework.observe(on.relation_broken, self._update_logging)
+            self.framework.observe(on.relation_joined, self._update_logging)
+            self.framework.observe(on.relation_changed, self._update_logging)
+            self.framework.observe(on.relation_departed, self._update_logging)
+            self.framework.observe(on.relation_broken, self._update_logging)
 
     def _update_logging(self, _):
         """Update the log forwarding to match the active Loki endpoints."""
