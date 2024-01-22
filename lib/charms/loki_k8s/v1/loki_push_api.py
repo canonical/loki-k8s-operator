@@ -547,7 +547,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 from ops.jujuversion import JujuVersion
-from ops.model import Container, ModelError, Relation, Unit
+from ops.model import Container, ModelError, Relation
 from ops.pebble import APIError, ChangeError, Layer, PathError, ProtocolError
 
 # The unique Charmhub library identifier, never change it
@@ -2415,7 +2415,7 @@ class LogForwarder(ConsumerBase):
         if not juju_version >= JujuVersion(version=str("3.4")):
             msg = f"Juju version {juju_version} does not support Pebble log forwarding. Juju >= 3.4 is needed."
             logger.error(msg)
-            raise RuntimeError(msg)
+            # raise RuntimeError(msg)
         # Only setup alert rules if no loki_endpoints are explicitly passed
         if custom_loki_endpoints is None:
             super().__init__(
@@ -2439,18 +2439,16 @@ class LogForwarder(ConsumerBase):
         self._enable_logging()
 
     def _on_logging_relation_departed(self, event: RelationDepartedEvent):
-        self._disable_logging(unit=event.unit)
+        self._disable_logging(unit_name=event.unit.name)
 
     def _on_logging_relation_broken(self, event: RelationBrokenEvent):
         for unit in event.relation.units:
-            if unit.app == self._charm.app:
-                continue
-            self._disable_logging(unit=unit)
+            self._disable_logging(unit_name=unit.name)
 
     def _build_log_target(self, unit_name, endpoint, enabled=False):
         """Build a log target for the log forwarding Pebble layer.
 
-        Log target's syntax for enabling/disabling forwardig is explained here:
+        Log target's syntax for enabling/disabling forwarding is explained here:
         https://github.com/canonical/pebble?tab=readme-ov-file#log-forwarding
         """
         services_value = ["all"] if enabled else ["-all"]
@@ -2507,9 +2505,9 @@ class LogForwarder(ConsumerBase):
         for container_name, container in self._charm.unit.containers.items():
             container.add_layer(f"{container_name}-log-forwarding", layer, combine=True)
 
-    def _disable_logging(self, unit: Unit):
+    def _disable_logging(self, unit_name: str):
         """Disable the log forwarding for a certain unit."""
-        layer_config = {"log-targets": self._build_log_targets({unit.name: ""}, enable=False)}
+        layer_config = {"log-targets": self._build_log_targets({unit_name: ""}, enable=False)}
         layer = Layer(layer_config)  # pyright: ignore
 
         for container_name, container in self._charm.unit.containers.items():
@@ -2524,7 +2522,7 @@ class LogForwarder(ConsumerBase):
             return all(self.is_ready(relation) for relation in relations)
 
         try:
-            if self.loki_endpoints or self.loki_endpoints:
+            if self._custom_loki_endpoints or self._extract_urls(relation):
                 return True
             return False
         except (KeyError, json.JSONDecodeError):
@@ -2555,7 +2553,7 @@ class LogForwarder(ConsumerBase):
         endpoints: Dict = {}
 
         if not self.is_ready(relation):
-            logger.warn(f"The relation '{relation}' is not ready yet.")
+            logger.warn(f"The relation '{relation.name}' is not ready yet.")
             return endpoints
 
         # if the code gets here, the function won't raise anymore because it's
