@@ -2663,7 +2663,7 @@ class ManualLogForwarder(Object):
             self.framework.observe(on.relation_departed, self.update_logging)
             self.framework.observe(on.relation_broken, self.update_logging)
 
-    def update_logging(self, _ = None):
+    def update_logging(self, _=None):
         """Update the log forwarding to match the active Loki endpoints."""
         loki_endpoints = self._loki_endpoints
 
@@ -2680,6 +2680,7 @@ class ManualLogForwarder(Object):
             _LogForwarderHelpers.enable_endpoints(
                 container=container, active_endpoints=loki_endpoints, topology=self._topology
             )
+
 
 class CosTool:
     """Uses cos-tool to inject label matchers into alert rule expressions and validate rules."""
