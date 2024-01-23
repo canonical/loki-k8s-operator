@@ -20,8 +20,13 @@ For instance, a Promtail or Grafana agent charm which needs to send logs to Loki
 send telemetry, such as logs, to Loki through a Log Proxy by implementing the consumer side of the
 `loki_push_api` relation interface.
 
-- 'LogForwarder': This object can be used by any Charmed Operator which needs to send the workload
-standard output (stdout) to Loki, through Pebble's log forwarding mechanism.
+- `LogForwarder`: This object can be used by any Charmed Operator which needs to send the workload
+standard output (stdout) through Pebble's log forwarding mechanism, to Loki endpoints through the
+`loki_push_api` relation interface.
+
+- `ManualLogForwarder`: This object can be used by any Charmed Operator which needs to send the
+workload standard output (stdout) through Pebble's log forwarding mechanism, without a direct
+relation to a charm implementing the `loki_push_api` relation interface.
 
 Filtering logs in Loki is largely performed on the basis of labels. In the Juju ecosystem, Juju
 topology labels are used to uniquely identify the workload which generates telemetry like logs.
@@ -359,78 +364,99 @@ and we need to send those logs to a workload implementing the `loki_push_api` in
 such as `Loki` or `Grafana Agent`. To know how to reach a Loki instance, a charm would
 typically use the `loki_push_api` interface.
 
-Use the `LogForwarder` class by instantiating it in the `__init__` method of the charm.
-The easiest way to pass a Loki endpoint to the forwarder is to provide it with the name of
-an endpoint which uses the `loki_push_api` interface. The forwarder will automatically extract
-from there all the data it needs.
+Use the `LogForwarder` class by instantiating it in the `__init__` method of the charm:
 
-1. To use the LogForwarder, the first thing you need to do is instantiate it in your charm's
-   constructor:
+```python
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 
-   ```python
-   from charms.loki_k8s.v1.loki_push_api import LogForwarder
+...
 
-   ...
+  def __init__(self, *args):
+      ...
+      self._log_forwarder = LogForwarder(
+          self,
+          relation_name="logging"  # optional, defaults to `logging`
+      )
+```
 
-      def __init__(self, *args):
-          ...
-          self._log_forwarder = LogForwarder(
-              self,
-              relation_name="logging"  # optional, defaults to `logging`
-          )
-   ```
+The `LogForwarder` by default will observe relation events on the `logging` endpoint and
+enable/disable log forwarding automatically.
+Next, modify the `metadata.yaml` file to add:
 
-   The `LogForwarder` by default will observe relation events on the `logging` endpoint and
-   enable/disable log forwarding automatically.
-   Next, modify the `metadata.yaml` file to add:
-
-   The `log-forwarding` relation in the `requires` section:
-   ```yaml
-   requires:
-     logging:
-       interface: loki_push_api
-       optional: true
-   ```
-
-2. Alternatively, you need to provide two things: the `relation_name` of the relation
-   containing the endpoint(s), and optioanlly a `loki_endpoints_getter` function to define
-   how to extract the Loki endpoint(s) from that relation.
-   If you don't specify a custom `loki_endpoints_getter`, the default will follow the schema
-   of the `loki_push_api` interface.
-
-   For example, let's say the charm gets the endpoint(s) from the `foo` relation:
-
-   ```python
-   from charms.loki_k8s.v1.loki_push_api import LogForwarder
-
-   ...
-
-     def __init__(self, *args):
-         ...
-         self._log_forwarder = LogForwarder(
-             self,
-             relation_name="foo",
-             loki_endpoints_getter=self.get_loki_endpoints,
-         )
-
-     def get_loki_endpoints(self, relation: Relation) -> Dict[str,str]:
-         # A dictionary of remote units and resolvable urls of a `loki_push_api`-compliant endpoint.
-         # {
-         #     "loki/0": "http://loki1:3100/loki/api/v1/push",
-         #     "another-loki/0": "http://loki2:3100/loki/api/v1/push",
-         # }
-         endpoints = {}
-
-         for unit in relation.units:
-             url = some_way_to_retrieve_the_endpoint_url(relation.data)
-             endpoints[unit.name] = url
-
-         return endpoints
-   ```
+The `log-forwarding` relation in the `requires` section:
+```yaml
+requires:
+ logging:
+   interface: loki_push_api
+   optional: true
+```
 
 Once the library is implemented in a charm and a logging relation (loki_push_api) is
 active and healthy, the library will inject a Pebble layer in the workload container
 to configure Pebble's log forwarding feature and start sending logs to Loki.
+
+## ManualLogForwarder class Usage
+
+Similarly to the `LogForwarder` class, we have a charm's workload that writes logs to the
+standard output (stdout), and we need to send those logs to some Loki-compatible endpoints.
+
+However, if you charm doesn't directly relate to another charm implementing the `loki_push_api`
+interface, this class allows you to explicitly specify the `loki_endpoints` in the constructor.
+
+To handle updating the log forwarding layers, you have two options:
+
+1. Manually call `update_logging()` from your charm whenever you want the log forwarding layer
+   to be updated.
+
+   ```python
+   ...
+   
+       def __init__(self, *args):
+           ...
+           self._log_forwarder = ManualLogForwarder(
+                self,
+                loki_endpoints=get_endpoints_from_somewhere()
+            )
+           
+           self.framework.observe(self.on.some_event, self._log_forwarder.update_logging())
+
+       def get_endpoints_from_somewhere():
+           # Example function that gets the endpoints from Juju config.
+           #
+           # Returns:
+           #     A dictionary of remote units and respective Loki endpoint.
+           #     {
+           #         "loki/0": "http://loki1:3100/loki/api/v1/push",
+           #     }
+           #
+           return self.config["loki_endpoints"]
+   ```
+
+2. Alternatively, you can pass a `relation_name` to the constructor; `update_logging` will
+   automatically be called whenever that relation triggers an event:
+
+   ```python
+   ...
+   
+       def __init__(self, *args):
+           ...
+           self._log_forwarder = ManualLogForwarder(
+                self,
+                loki_endpoints=get_endpoints_from_somewhere(),
+                relation_name="some-relation"
+            )
+
+       def get_endpoints_from_somewhere():
+           # Example function that gets the endpoints from Juju config.
+           #
+           # Returns:
+           #     A dictionary of remote units and respective Loki endpoint.
+           #     {
+           #         "loki/0": "http://loki1:3100/loki/api/v1/push",
+           #     }
+           #
+           return self.config["loki_endpoints"]
+   ```
 
 ## Alerting Rules
 
@@ -2445,7 +2471,7 @@ class _LogForwarderHelpers:
     def _build_log_targets(
         loki_endpoints: Optional[Dict[str, str]], topology: JujuTopology, enable: bool
     ):
-        """Build the targets for the log forwarding Pebble layer."""
+        """Build all the targets for the log forwarding Pebble layer."""
         targets = {}
         if not loki_endpoints:
             return targets
@@ -2465,6 +2491,7 @@ class _LogForwarderHelpers:
     def disable_inactive_endpoints(
         container: Container, active_endpoints: Dict[str, str], topology: JujuTopology
     ):
+        """Disable forwarding for inactive endpoints by checking against the Pebble plan."""
         pebble_layer = container.get_plan().to_dict().get("log-targets", None)
         if not pebble_layer:
             return
@@ -2490,6 +2517,7 @@ class _LogForwarderHelpers:
     def enable_endpoints(
         container: Container, active_endpoints: Dict[str, str], topology: JujuTopology
     ):
+        """Enable forwarding for the specified Loki endpoints."""
         layer = Layer(
             {  # pyright: ignore
                 "log-targets": _LogForwarderHelpers._build_log_targets(
