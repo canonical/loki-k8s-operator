@@ -2422,12 +2422,12 @@ class _LogForwarderHelpers:
         log_target = {
             "override": "replace",
             "services": services_value,
+            "type": "loki",
+            "location": loki_endpoint,
         }
         if enable:
             log_target.update(
                 {
-                    "type": "loki",
-                    "location": loki_endpoint,
                     "labels": {
                         "product": "Juju",
                         "charm": topology._charm_name,
@@ -2478,7 +2478,7 @@ class _LogForwarderHelpers:
                 layer = Layer(
                     {  # pyright: ignore
                         "log-targets": _LogForwarderHelpers._build_log_targets(
-                            loki_endpoints={unit_name: ""},
+                            loki_endpoints={unit_name: "(removed)"},
                             topology=topology,
                             enable=False,
                         )
