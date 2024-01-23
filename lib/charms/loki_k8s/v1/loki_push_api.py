@@ -395,69 +395,6 @@ Once the library is implemented in a charm and a logging relation (loki_push_api
 active and healthy, the library will inject a Pebble layer in the workload container
 to configure Pebble's log forwarding feature and start sending logs to Loki.
 
-## ManualLogForwarder class Usage
-
-Similarly to the `LogForwarder` class, we have a charm's workload that writes logs to the
-standard output (stdout), and we need to send those logs to some Loki-compatible endpoints.
-
-However, if you charm doesn't directly relate to another charm implementing the `loki_push_api`
-interface, this class allows you to explicitly specify the `loki_endpoints` in the constructor.
-
-To handle updating the log forwarding layers, you have two options:
-
-1. Manually call `update_logging()` from your charm whenever you want the log forwarding layer
-   to be updated.
-
-   ```python
-   ...
-
-       def __init__(self, *args):
-           ...
-           self._log_forwarder = ManualLogForwarder(
-                self,
-                loki_endpoints=get_endpoints_from_somewhere()
-            )
-
-           self.framework.observe(self.on.some_event, self._log_forwarder.update_logging())
-
-       def get_endpoints_from_somewhere():
-           # Example function that gets the endpoints from Juju config.
-           #
-           # Returns:
-           #     A dictionary of remote units and respective Loki endpoint.
-           #     {
-           #         "loki/0": "http://loki1:3100/loki/api/v1/push",
-           #     }
-           #
-           return self.config["loki_endpoints"]
-   ```
-
-2. Alternatively, you can pass a `relation_name` to the constructor; `update_logging` will
-   automatically be called whenever that relation triggers an event:
-
-   ```python
-   ...
-
-       def __init__(self, *args):
-           ...
-           self._log_forwarder = ManualLogForwarder(
-                self,
-                loki_endpoints=get_endpoints_from_somewhere(),
-                relation_name="some-relation"
-            )
-
-       def get_endpoints_from_somewhere():
-           # Example function that gets the endpoints from Juju config.
-           #
-           # Returns:
-           #     A dictionary of remote units and respective Loki endpoint.
-           #     {
-           #         "loki/0": "http://loki1:3100/loki/api/v1/push",
-           #     }
-           #
-           return self.config["loki_endpoints"]
-   ```
-
 ## Alerting Rules
 
 This charm library also supports gathering alerting rules from all related Loki client
@@ -2423,7 +2360,7 @@ class LogProxyConsumer(ConsumerBase):
         return {cont: self._charm.unit.get_container(cont) for cont in self._logs_scheme.keys()}
 
 
-class _LogForwarderHelpers:
+class _PebbleLogClient:
     @staticmethod
     def check_juju_version() -> bool:
         """Make sure the Juju version supports Log Forwarding."""
@@ -2478,7 +2415,7 @@ class _LogForwarderHelpers:
 
         for unit_name, endpoint in loki_endpoints.items():
             targets.update(
-                _LogForwarderHelpers._build_log_target(
+                _PebbleLogClient._build_log_target(
                     unit_name=unit_name,
                     loki_endpoint=endpoint,
                     topology=topology,
@@ -2504,7 +2441,7 @@ class _LogForwarderHelpers:
             if unit_name not in active_endpoints:
                 layer = Layer(
                     {  # pyright: ignore
-                        "log-targets": _LogForwarderHelpers._build_log_targets(
+                        "log-targets": _PebbleLogClient._build_log_targets(
                             loki_endpoints={unit_name: "(removed)"},
                             topology=topology,
                             enable=False,
@@ -2520,7 +2457,7 @@ class _LogForwarderHelpers:
         """Enable forwarding for the specified Loki endpoints."""
         layer = Layer(
             {  # pyright: ignore
-                "log-targets": _LogForwarderHelpers._build_log_targets(
+                "log-targets": _PebbleLogClient._build_log_targets(
                     loki_endpoints=active_endpoints,
                     topology=topology,
                     enable=True,
@@ -2528,18 +2465,6 @@ class _LogForwarderHelpers:
             }
         )
         container.add_layer(f"{container.name}-log-forwarding", layer, combine=True)
-
-
-# self.forwarder = ManualLogForwader(
-#     self,
-#     # TODO: if relation_name is none, don't listen to any event; otherwise
-#     # you can register the observe in the ManualLogForwader class (if relation_name is not None)
-#     #    (relation_name defaults to None)
-#     relation_name="mimir_cluster",
-#     custom_loki_endpoints=get_from_relation_data(),
-# )
-
-# self.framework.observe(on['mimir_cluster'.relation_changed, _on_relation_changed())
 
 
 class LogForwarder(ConsumerBase):
@@ -2554,7 +2479,7 @@ class LogForwarder(ConsumerBase):
         recursive: bool = True,
         skip_alert_topology_labeling: bool = False,
     ):
-        _LogForwarderHelpers.check_juju_version()
+        _PebbleLogClient.check_juju_version()
         super().__init__(
             charm, relation_name, alert_rules_path, recursive, skip_alert_topology_labeling
         )
@@ -2580,12 +2505,12 @@ class LogForwarder(ConsumerBase):
             return
 
         for container in self._charm.unit.containers.values():
-            _LogForwarderHelpers.disable_inactive_endpoints(
+            _PebbleLogClient.disable_inactive_endpoints(
                 container=container,
                 active_endpoints=loki_endpoints,
                 topology=self.topology,
             )
-            _LogForwarderHelpers.enable_endpoints(
+            _PebbleLogClient.enable_endpoints(
                 container=container, active_endpoints=loki_endpoints, topology=self.topology
             )
 
@@ -2637,50 +2562,6 @@ class LogForwarder(ConsumerBase):
         endpoints = self._extract_urls(relation)
 
         return endpoints
-
-
-class ManualLogForwarder(Object):
-    """Forward the standard outputs of all workloads to explictly-provided Loki endpoints."""
-
-    def __init__(
-        self,
-        charm: CharmBase,
-        *,
-        loki_endpoints: Optional[Dict[str, str]],
-        relation_name: Optional[str] = None,
-    ):
-        _LogForwarderHelpers.check_juju_version()
-        super().__init__(charm, relation_name)
-        self._charm = charm
-        self._loki_endpoints = loki_endpoints
-        self._relation_name = relation_name
-        self._topology = JujuTopology.from_charm(charm)
-
-        if self._relation_name is not None:
-            on = self._charm.on[self._relation_name]
-            self.framework.observe(on.relation_joined, self.update_logging)
-            self.framework.observe(on.relation_changed, self.update_logging)
-            self.framework.observe(on.relation_departed, self.update_logging)
-            self.framework.observe(on.relation_broken, self.update_logging)
-
-    def update_logging(self, _=None):
-        """Update the log forwarding to match the active Loki endpoints."""
-        loki_endpoints = self._loki_endpoints
-
-        if not loki_endpoints:
-            logger.warning("No Loki endpoints available")
-            return
-
-        for container in self._charm.unit.containers.values():
-            _LogForwarderHelpers.disable_inactive_endpoints(
-                container=container,
-                active_endpoints=loki_endpoints,
-                topology=self._topology,
-            )
-            _LogForwarderHelpers.enable_endpoints(
-                container=container, active_endpoints=loki_endpoints, topology=self._topology
-            )
-
 
 class CosTool:
     """Uses cos-tool to inject label matchers into alert rule expressions and validate rules."""
