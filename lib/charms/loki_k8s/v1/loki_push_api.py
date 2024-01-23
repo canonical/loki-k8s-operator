@@ -410,14 +410,14 @@ To handle updating the log forwarding layers, you have two options:
 
    ```python
    ...
-   
+
        def __init__(self, *args):
            ...
            self._log_forwarder = ManualLogForwarder(
                 self,
                 loki_endpoints=get_endpoints_from_somewhere()
             )
-           
+
            self.framework.observe(self.on.some_event, self._log_forwarder.update_logging())
 
        def get_endpoints_from_somewhere():
@@ -437,7 +437,7 @@ To handle updating the log forwarding layers, you have two options:
 
    ```python
    ...
-   
+
        def __init__(self, *args):
            ...
            self._log_forwarder = ManualLogForwarder(
