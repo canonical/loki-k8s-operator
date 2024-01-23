@@ -2622,7 +2622,7 @@ class ManualLogForwarder(Object):
         relation_name: Optional[str] = None,
     ):
         _LogForwarderHelpers.check_juju_version()
-        super.__init__(charm, relation_name)
+        super().__init__(charm, relation_name)
         self._charm = charm
         self._loki_endpoints = loki_endpoints
         self._relation_name = relation_name
