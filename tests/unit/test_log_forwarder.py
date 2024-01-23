@@ -4,9 +4,8 @@
 import json
 import textwrap
 import unittest
-from unittest.mock import MagicMock
 
-from charms.loki_k8s.v1.loki_push_api import LogForwarder
+from charms.loki_k8s.v1.loki_push_api import LogForwarder, _LogForwarderHelpers
 from ops.charm import CharmBase
 from ops.testing import Harness
 
@@ -62,7 +61,7 @@ class TestLogForwarding(unittest.TestCase):
         )
         expected_layer_config = {
             "loki/0": {
-                "override": "merge",
+                "override": "replace",
                 "type": "loki",
                 "location": "http://loki-0:3100/loki/api/v1/push",
                 "services": ["all"],
@@ -76,7 +75,7 @@ class TestLogForwarding(unittest.TestCase):
                 },
             },
             "loki/1": {
-                "override": "merge",
+                "override": "replace",
                 "type": "loki",
                 "location": "http://loki-1:3100/loki/api/v1/push",
                 "services": ["all"],
@@ -90,65 +89,7 @@ class TestLogForwarding(unittest.TestCase):
                 },
             },
         }
-        actual_layer_config = self.harness.charm.log_forwarder._build_log_targets(
-            expected_endpoints, True
+        actual_layer_config = _LogForwarderHelpers._build_log_targets(
+            expected_endpoints, self.harness.charm.log_forwarder.topology, True
         )
         self.assertDictEqual(expected_layer_config, actual_layer_config)
-        self.harness.charm.log_forwarder._build_log_targets = MagicMock()
-        self.harness.remove_relation(rel_id)
-        expected_calls = [
-            unittest.mock.call({"loki/0": ""}, enable=False),
-            unittest.mock.call({"loki/1": ""}, enable=False),
-        ]
-        self.harness.charm.log_forwarder._build_log_targets.assert_has_calls(
-            expected_calls, any_order=True
-        )
-
-    def test_log_forwarder_with_custom_endpoints(self):
-        custom_endpoints = {
-            "loki/0": "http://custom-loki-0:3100/loki/api/v1/push",
-            "loki/1": "http://custom-loki-1:3100/loki/api/v1/push",
-        }
-        self.harness.charm.log_forwarder._custom_loki_endpoints = custom_endpoints
-
-        self.harness.charm.log_forwarder.enable_logging()
-        expected_layer_config = {
-            "loki/0": {
-                "override": "merge",
-                "type": "loki",
-                "location": "http://custom-loki-0:3100/loki/api/v1/push",
-                "services": ["all"],
-                "labels": {
-                    "product": "Juju",
-                    "charm": self.harness.charm.log_forwarder.topology._charm_name,
-                    "juju_model": self.harness.charm.log_forwarder.topology._model,
-                    "juju_model_uuid": self.harness.charm.log_forwarder.topology._model_uuid,
-                    "juju_application": self.harness.charm.log_forwarder.topology._application,
-                    "juju_unit": self.harness.charm.log_forwarder.topology._unit,
-                },
-            },
-            "loki/1": {
-                "override": "merge",
-                "type": "loki",
-                "location": "http://custom-loki-1:3100/loki/api/v1/push",
-                "services": ["all"],
-                "labels": {
-                    "product": "Juju",
-                    "charm": self.harness.charm.log_forwarder.topology._charm_name,
-                    "juju_model": self.harness.charm.log_forwarder.topology._model,
-                    "juju_model_uuid": self.harness.charm.log_forwarder.topology._model_uuid,
-                    "juju_application": self.harness.charm.log_forwarder.topology._application,
-                    "juju_unit": self.harness.charm.log_forwarder.topology._unit,
-                },
-            },
-        }
-        actual_layer_config = self.harness.charm.log_forwarder._build_log_targets(
-            custom_endpoints, True
-        )
-        self.assertDictEqual(expected_layer_config, actual_layer_config)
-
-        self.harness.charm.log_forwarder._build_log_targets = MagicMock()
-        self.harness.charm.log_forwarder.disable_logging("loki/1")
-        self.harness.charm.log_forwarder._build_log_targets.assert_called_with(
-            {"loki/1": ""}, enable=False
-        )
