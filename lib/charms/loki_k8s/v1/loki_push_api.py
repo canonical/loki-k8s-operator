@@ -24,10 +24,6 @@ send telemetry, such as logs, to Loki through a Log Proxy by implementing the co
 standard output (stdout) through Pebble's log forwarding mechanism, to Loki endpoints through the
 `loki_push_api` relation interface.
 
-- `ManualLogForwarder`: This object can be used by any Charmed Operator which needs to send the
-workload standard output (stdout) through Pebble's log forwarding mechanism, without a direct
-relation to a charm implementing the `loki_push_api` relation interface.
-
 Filtering logs in Loki is largely performed on the basis of labels. In the Juju ecosystem, Juju
 topology labels are used to uniquely identify the workload which generates telemetry like logs.
 
