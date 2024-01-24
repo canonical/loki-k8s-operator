@@ -2363,7 +2363,7 @@ class _PebbleLogClient:
         juju_version = JujuVersion.from_environ()
         if not juju_version > JujuVersion(version=str("3.3")):
             msg = f"Juju version {juju_version} does not support Pebble log forwarding. Juju >= 3.4 is needed."
-            logger.warn(msg)
+            logger.warning(msg)
             return False
         return True
 
@@ -2550,7 +2550,7 @@ class LogForwarder(ConsumerBase):
         endpoints: Dict = {}
 
         if not self.is_ready(relation):
-            logger.warn(f"The relation '{relation.name}' is not ready yet.")
+            logger.warning(f"The relation '{relation.name}' is not ready yet.")
             return endpoints
 
         # if the code gets here, the function won't raise anymore because it's
