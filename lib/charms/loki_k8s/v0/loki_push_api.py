@@ -2122,6 +2122,8 @@ class LogProxyConsumer(ConsumerBase):
                 "http": os.environ["JUJU_CHARM_HTTP_PROXY"],
                 "https": os.environ["JUJU_CHARM_HTTPS_PROXY"],
             }
+            if os.environ.get("JUJU_CHARM_NO_PROXY"):
+                proxies.update({"no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]})
         else:
             proxies = None
 
