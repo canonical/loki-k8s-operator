@@ -2046,19 +2046,16 @@ class LogProxyConsumer(ConsumerBase):
             container: container into which promtail is to be uploaded.
         """
         # Check for Juju proxy variables and fall back to standard ones if not set
-        proxy_handler = request.ProxyHandler(
-            {
-                "http": os.environ.get("JUJU_CHARM_HTTP_PROXY")
-                or os.environ.get("HTTP_PROXY")
-                or "",
-                "https": os.environ.get("JUJU_CHARM_HTTPS_PROXY")
-                or os.environ.get("HTTPS_PROXY")
-                or "",
-                "no_proxy": os.environ.get("JUJU_CHARM_NO_PROXY")
-                or os.environ.get("NO_PROXY")
-                or "",
+        proxies: Optional[Dict[str,str]]
+        if os.environ.get("JUJU_CHARM_HTTP_PROXY") and os.environ.get("JUJU_HTTPS_PROXY"):
+            proxies = {
+                "http": os.environ["JUJU_CHARM_HTTP_PROXY"],
+                "https": os.environ["JUJU_CHARM_HTTPS_PROXY"],
             }
-        )
+        else:
+            proxies = None
+
+        proxy_handler = request.ProxyHandler(proxies)
         opener = request.build_opener(proxy_handler)
 
         with opener.open(promtail_info["url"]) as r:
