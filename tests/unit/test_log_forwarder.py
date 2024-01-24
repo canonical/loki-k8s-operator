@@ -5,7 +5,7 @@ import json
 import textwrap
 import unittest
 
-from charms.loki_k8s.v1.loki_push_api import LogForwarder, _LogForwarderHelpers
+from charms.loki_k8s.v1.loki_push_api import LogForwarder, _PebbleLogClient
 from ops.charm import CharmBase
 from ops.testing import Harness
 
@@ -89,7 +89,7 @@ class TestLogForwarding(unittest.TestCase):
                 },
             },
         }
-        actual_layer_config = _LogForwarderHelpers._build_log_targets(
+        actual_layer_config = _PebbleLogClient._build_log_targets(
             expected_endpoints, self.harness.charm.log_forwarder.topology, True
         )
         self.assertDictEqual(expected_layer_config, actual_layer_config)
