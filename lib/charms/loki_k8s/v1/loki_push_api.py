@@ -2531,8 +2531,8 @@ class LogForwarder(ConsumerBase):
         Returns:
             A dictionary of remote units and the respective Loki endpoint.
             {
-                "loki/0": "http://loki1:3100/loki/api/v1/push",
-                "another-loki/0": "http://loki2:3100/loki/api/v1/push",
+                "loki/0": "http://loki:3100/loki/api/v1/push",
+                "another-loki/0": "http://another-loki:3100/loki/api/v1/push",
             }
         """
         endpoints: Dict = {}
@@ -2558,6 +2558,7 @@ class LogForwarder(ConsumerBase):
         endpoints = self._extract_urls(relation)
 
         return endpoints
+
 
 class CosTool:
     """Uses cos-tool to inject label matchers into alert rule expressions and validate rules."""
