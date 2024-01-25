@@ -387,9 +387,10 @@ requires:
    optional: true
 ```
 
-Once the library is implemented in a charm and a logging relation (loki_push_api) is
-active and healthy, the library will inject a Pebble layer in the workload container
-to configure Pebble's log forwarding feature and start sending logs to Loki.
+Once the LogForwader class is implemented in your charm and the relation (implementing the
+`loki_push_api` interface) is active and healthy, the library will inject a Pebble layer in
+each workload container the charm has access to, to configure Pebble's log forwarding
+feature and start sending logs to Loki.
 
 ## Alerting Rules
 
