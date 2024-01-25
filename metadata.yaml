@@ -71,5 +71,6 @@ peers:
 resources:
   loki-image:
     type: oci-image
-    description: Loki OCI image "ghcr.io/canonical/loki:2.7.4"
-    upstream-source: ghcr.io/canonical/loki:2.7.4
+    description: Loki OCI image
+    #upstream-source: ghcr.io/canonical/loki:2.7.4
+    upstream-source: docker.io/ubuntu/loki:2-22.04
