@@ -2116,14 +2116,13 @@ class LogProxyConsumer(ConsumerBase):
                - "binsha": sha256 sum of unpacked promtail binary
         """
         # Check for Juju proxy variables and fall back to standard ones if not set
-        proxies: Optional[Dict[str, str]]
-        if os.environ.get("JUJU_CHARM_HTTP_PROXY") and os.environ.get("JUJU_HTTPS_PROXY"):
-            proxies = {
-                "http": os.environ["JUJU_CHARM_HTTP_PROXY"],
-                "https": os.environ["JUJU_CHARM_HTTPS_PROXY"],
-            }
-            if os.environ.get("JUJU_CHARM_NO_PROXY"):
-                proxies.update({"no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]})
+        proxies: Optional[Dict[str, str]] = {}
+        if proxies and os.environ.get("JUJU_CHARM_HTTP_PROXY"):
+            proxies.update({"http": os.environ["JUJU_CHARM_HTTP_PROXY"]})
+        if proxies and os.environ.get("JUJU_CHARM_HTTPS_PROXY"):
+            proxies.update({"https": os.environ["JUJU_CHARM_HTTPS_PROXY"]})
+        if proxies and os.environ.get("JUJU_CHARM_NO_PROXY"):
+            proxies.update({"no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]})
         else:
             proxies = None
 
