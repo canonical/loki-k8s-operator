@@ -20,6 +20,10 @@ For instance, a Promtail or Grafana agent charm which needs to send logs to Loki
 send telemetry, such as logs, to Loki through a Log Proxy by implementing the consumer side of the
 `loki_push_api` relation interface.
 
+- `LogForwarder`: This object can be used by any Charmed Operator which needs to send the workload
+standard output (stdout) through Pebble's log forwarding mechanism, to Loki endpoints through the
+`loki_push_api` relation interface.
+
 Filtering logs in Loki is largely performed on the basis of labels. In the Juju ecosystem, Juju
 topology labels are used to uniquely identify the workload which generates telemetry like logs.
 
@@ -349,6 +353,45 @@ These can be monitored via the PromtailDigestError events via:
     )
 ```
 
+## LogForwarder class Usage
+
+Let's say that we have a charm's workload that writes logs to the standard output (stdout),
+and we need to send those logs to a workload implementing the `loki_push_api` interface,
+such as `Loki` or `Grafana Agent`. To know how to reach a Loki instance, a charm would
+typically use the `loki_push_api` interface.
+
+Use the `LogForwarder` class by instantiating it in the `__init__` method of the charm:
+
+```python
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
+
+...
+
+  def __init__(self, *args):
+      ...
+      self._log_forwarder = LogForwarder(
+          self,
+          relation_name="logging"  # optional, defaults to `logging`
+      )
+```
+
+The `LogForwarder` by default will observe relation events on the `logging` endpoint and
+enable/disable log forwarding automatically.
+Next, modify the `metadata.yaml` file to add:
+
+The `log-forwarding` relation in the `requires` section:
+```yaml
+requires:
+ logging:
+   interface: loki_push_api
+   optional: true
+```
+
+Once the LogForwader class is implemented in your charm and the relation (implementing the
+`loki_push_api` interface) is active and healthy, the library will inject a Pebble layer in
+each workload container the charm has access to, to configure Pebble's log forwarding
+feature and start sending logs to Loki.
+
 ## Alerting Rules
 
 This charm library also supports gathering alerting rules from all related Loki client
@@ -463,6 +506,7 @@ from ops.charm import (
     WorkloadEvent,
 )
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.jujuversion import JujuVersion
 from ops.model import Container, ModelError, Relation
 from ops.pebble import APIError, ChangeError, Layer, PathError, ProtocolError
 
@@ -474,7 +518,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -2311,6 +2355,210 @@ class LogProxyConsumer(ConsumerBase):
     @property
     def _containers(self) -> Dict[str, Container]:
         return {cont: self._charm.unit.get_container(cont) for cont in self._logs_scheme.keys()}
+
+
+class _PebbleLogClient:
+    @staticmethod
+    def check_juju_version() -> bool:
+        """Make sure the Juju version supports Log Forwarding."""
+        juju_version = JujuVersion.from_environ()
+        if not juju_version > JujuVersion(version=str("3.3")):
+            msg = f"Juju version {juju_version} does not support Pebble log forwarding. Juju >= 3.4 is needed."
+            logger.warning(msg)
+            return False
+        return True
+
+    @staticmethod
+    def _build_log_target(
+        unit_name: str, loki_endpoint: str, topology: JujuTopology, enable: bool
+    ) -> Dict:
+        """Build a log target for the log forwarding Pebble layer.
+
+        Log target's syntax for enabling/disabling forwarding is explained here:
+        https://github.com/canonical/pebble?tab=readme-ov-file#log-forwarding
+        """
+        services_value = ["all"] if enable else ["-all"]
+
+        log_target = {
+            "override": "replace",
+            "services": services_value,
+            "type": "loki",
+            "location": loki_endpoint,
+        }
+        if enable:
+            log_target.update(
+                {
+                    "labels": {
+                        "product": "Juju",
+                        "charm": topology._charm_name,
+                        "juju_model": topology._model,
+                        "juju_model_uuid": topology._model_uuid,
+                        "juju_application": topology._application,
+                        "juju_unit": topology._unit,
+                    },
+                }
+            )
+
+        return {unit_name: log_target}
+
+    @staticmethod
+    def _build_log_targets(
+        loki_endpoints: Optional[Dict[str, str]], topology: JujuTopology, enable: bool
+    ):
+        """Build all the targets for the log forwarding Pebble layer."""
+        targets = {}
+        if not loki_endpoints:
+            return targets
+
+        for unit_name, endpoint in loki_endpoints.items():
+            targets.update(
+                _PebbleLogClient._build_log_target(
+                    unit_name=unit_name,
+                    loki_endpoint=endpoint,
+                    topology=topology,
+                    enable=enable,
+                )
+            )
+        return targets
+
+    @staticmethod
+    def disable_inactive_endpoints(
+        container: Container, active_endpoints: Dict[str, str], topology: JujuTopology
+    ):
+        """Disable forwarding for inactive endpoints by checking against the Pebble plan."""
+        pebble_layer = container.get_plan().to_dict().get("log-targets", None)
+        if not pebble_layer:
+            return
+
+        for unit_name, target in pebble_layer.items():
+            # If the layer is a disabled log forwarding endpoint, skip it
+            if "-all" in target["services"]:  # pyright: ignore
+                continue
+
+            if unit_name not in active_endpoints:
+                layer = Layer(
+                    {  # pyright: ignore
+                        "log-targets": _PebbleLogClient._build_log_targets(
+                            loki_endpoints={unit_name: "(removed)"},
+                            topology=topology,
+                            enable=False,
+                        )
+                    }
+                )
+                container.add_layer(f"{container.name}-log-forwarding", layer=layer, combine=True)
+
+    @staticmethod
+    def enable_endpoints(
+        container: Container, active_endpoints: Dict[str, str], topology: JujuTopology
+    ):
+        """Enable forwarding for the specified Loki endpoints."""
+        layer = Layer(
+            {  # pyright: ignore
+                "log-targets": _PebbleLogClient._build_log_targets(
+                    loki_endpoints=active_endpoints,
+                    topology=topology,
+                    enable=True,
+                )
+            }
+        )
+        container.add_layer(f"{container.name}-log-forwarding", layer, combine=True)
+
+
+class LogForwarder(ConsumerBase):
+    """Forward the standard outputs of all workloads operated by a charm to one or multiple Loki endpoints."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        *,
+        relation_name: str = DEFAULT_RELATION_NAME,
+        alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
+        recursive: bool = True,
+        skip_alert_topology_labeling: bool = False,
+    ):
+        _PebbleLogClient.check_juju_version()
+        super().__init__(
+            charm, relation_name, alert_rules_path, recursive, skip_alert_topology_labeling
+        )
+        self._charm = charm
+        self._relation_name = relation_name
+
+        on = self._charm.on[self._relation_name]
+        self.framework.observe(on.relation_joined, self._update_logging)
+        self.framework.observe(on.relation_changed, self._update_logging)
+        self.framework.observe(on.relation_departed, self._update_logging)
+        self.framework.observe(on.relation_broken, self._update_logging)
+
+    def _update_logging(self, _):
+        """Update the log forwarding to match the active Loki endpoints."""
+        loki_endpoints = {}
+
+        # Get the endpoints from relation data
+        for relation in self._charm.model.relations[self._relation_name]:
+            loki_endpoints.update(self._fetch_endpoints(relation))
+
+        if not loki_endpoints:
+            logger.warning("No Loki endpoints available")
+            return
+
+        for container in self._charm.unit.containers.values():
+            _PebbleLogClient.disable_inactive_endpoints(
+                container=container,
+                active_endpoints=loki_endpoints,
+                topology=self.topology,
+            )
+            _PebbleLogClient.enable_endpoints(
+                container=container, active_endpoints=loki_endpoints, topology=self.topology
+            )
+
+    def is_ready(self, relation: Optional[Relation] = None):
+        """Check if the relation is active and healthy."""
+        if not relation:
+            relations = self._charm.model.relations[self._relation_name]
+            if not relations:
+                return False
+            return all(self.is_ready(relation) for relation in relations)
+
+        try:
+            if self._extract_urls(relation):
+                return True
+            return False
+        except (KeyError, json.JSONDecodeError):
+            return False
+
+    def _extract_urls(self, relation: Relation) -> Dict[str, str]:
+        """Default getter function to extract Loki endpoints from a relation.
+
+        Returns:
+            A dictionary of remote units and the respective Loki endpoint.
+            {
+                "loki/0": "http://loki:3100/loki/api/v1/push",
+                "another-loki/0": "http://another-loki:3100/loki/api/v1/push",
+            }
+        """
+        endpoints: Dict = {}
+
+        for unit in relation.units:
+            endpoint = relation.data[unit]["endpoint"]
+            deserialized_endpoint = json.loads(endpoint)
+            url = deserialized_endpoint["url"]
+            endpoints[unit.name] = url
+
+        return endpoints
+
+    def _fetch_endpoints(self, relation: Relation) -> Dict[str, str]:
+        """Fetch Loki Push API endpoints from relation data using the endpoints getter."""
+        endpoints: Dict = {}
+
+        if not self.is_ready(relation):
+            logger.warning(f"The relation '{relation.name}' is not ready yet.")
+            return endpoints
+
+        # if the code gets here, the function won't raise anymore because it's
+        # also called in is_ready()
+        endpoints = self._extract_urls(relation)
+
+        return endpoints
 
 
 class CosTool:
