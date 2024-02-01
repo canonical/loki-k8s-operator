@@ -61,7 +61,7 @@ and three optional arguments.
   Subsequently, a Loki charm may instantiate the `LokiPushApiProvider` in its constructor as
   follows:
 
-      from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
+      from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
       from loki_server import LokiServer
       ...
 
@@ -167,7 +167,7 @@ instantiating it, typically in the constructor of your charm (the one which
 sends logs).
 
 ```python
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
 
 class LokiClientCharm(CharmBase):
 
@@ -518,7 +518,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 3
 
 logger = logging.getLogger(__name__)
 
