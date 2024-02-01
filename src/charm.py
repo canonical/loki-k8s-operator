@@ -11,14 +11,15 @@ develop a new k8s charm using the Operator Framework:
 
     https://discourse.charmhub.io/t/4208
 """
-
 import logging
 import os
 import re
 import socket
+import ssl
 import time
+import urllib.request
+from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib import request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
@@ -65,6 +66,7 @@ class LokiOperatorCharm(CharmBase):
 
     _port = HTTP_LISTEN_PORT
     _name = "loki"
+    _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -164,7 +166,17 @@ class LokiOperatorCharm(CharmBase):
     def _on_upgrade_charm(self, _):
         self._configure()
 
+    def _update_ca_certs(self):
+        # Charm container
+        ca_cert_path = Path(self._ca_cert_path)
+        if self.server_cert.ca:
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.server_cert.ca)  # pyright: ignore
+        else:
+            ca_cert_path.unlink(missing_ok=True)
+
     def _on_server_cert_changed(self, _):
+        self._update_ca_certs()  # Will go into error state if not can_connect, and that's ok
         self._configure()
 
     def _on_loki_pebble_ready(self, _):
@@ -464,13 +476,21 @@ class LokiOperatorCharm(CharmBase):
         for f in files:
             self._container.remove_path(f.path)
 
+    @property
+    def _internal_url(self) -> str:
+        """Return the fqdn dns-based in-cluster (private) address of the loki api server."""
+        scheme = "https" if self._tls_ready else "http"
+        return f"{scheme}://{socket.getfqdn()}:{self._port}"
+
     def _check_alert_rules(self):
         """Check alert rules using Loki API."""
-        url = "http://127.0.0.1:{}/loki/api/v1/rules".format(self._port)
-        req = request.Request(url)
+        ssl_context = ssl.create_default_context(
+            cafile=self._ca_cert_path if Path(self._ca_cert_path).exists() else None,
+        )
+        url = f"{self._internal_url}/loki/api/v1/rules"
         try:
-            logger.debug("Checking alert rules via {}.".format(req.full_url))
-            request.urlopen(req, timeout=2.0)
+            logger.debug(f"Checking loki alert rules via {url}.")
+            urllib.request.urlopen(url, timeout=2.0, context=ssl_context)
         except HTTPError as e:
             msg = e.read().decode("utf-8")
 
