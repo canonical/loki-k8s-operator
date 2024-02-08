@@ -44,6 +44,8 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
     ServicePort,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
+from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from config_builder import (
     CERT_FILE,
@@ -61,6 +63,18 @@ from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 logger = logging.getLogger(__name__)
 
 
+@trace_charm(
+    tracing_endpoint="tracing_endpoint",
+    server_cert="server_cert_path",
+    extra_types=[
+        GrafanaDashboardProvider,
+        GrafanaSourceProvider,
+        LokiPushApiProvider,
+        CertHandler,
+        ConfigBuilder,
+        MetricsEndpointProvider,
+    ],
+)
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
@@ -146,6 +160,7 @@ class LokiOperatorCharm(CharmBase):
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
+        self.tracing = TracingEndpointRequirer(self)
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -547,6 +562,16 @@ class LokiOperatorCharm(CharmBase):
         if result is None:
             return result
         return result.group(1)
+
+    @property
+    def tracing_endpoint(self) -> Optional[str]:
+        """Tempo endpoint for charm tracing."""
+        return self.tracing.otlp_http_endpoint()
+
+    @property
+    def server_cert_path(self) -> Optional[str]:
+        """Server certificate path for TLS tracing."""
+        return CERT_FILE
 
 
 if __name__ == "__main__":

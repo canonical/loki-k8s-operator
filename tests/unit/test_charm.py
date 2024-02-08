@@ -139,7 +139,9 @@ class TestCharm(unittest.TestCase):
 
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm._alerting_config()
-            self.assertEqual(sorted(logger.output), ["DEBUG:charm:No alertmanagers available"])
+            searched_message = "DEBUG:charm:No alertmanagers available"
+            any_matches = any(searched_message in log_message for log_message in logger.output)
+            self.assertTrue(any_matches)
 
     @patch("config_builder.ConfigBuilder.build")
     @k8s_resource_multipatch

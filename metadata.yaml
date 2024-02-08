@@ -63,6 +63,9 @@ requires:
       Certificate and key files for the loki server.
   catalogue:
     interface: catalogue
+  tracing:
+    interface: tracing
+    limit: 1
 
 peers:
   replicas:

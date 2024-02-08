@@ -15,8 +15,8 @@ parts:
       - cryptography
       - jsonschema
 
-      # For v1.alertmanager_dispatch
-      - pydantic
+      # For v1.alertmanager_dispatch & v1.tracing
+      - pydantic>=2
     build-packages: [git]
   cos-tool:
     plugin: dump
