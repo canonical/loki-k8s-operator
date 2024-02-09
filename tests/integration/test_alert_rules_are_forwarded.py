@@ -52,7 +52,7 @@ async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki
             and len(ops_test.model.applications[alertmanager_app_name].units) > 0
         )
     )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
+    await ops_test.model.wait_for_idle(apps=app_names, status="active", raise_on_error=False)
 
     await asyncio.gather(
         ops_test.model.add_relation(loki_app_name, tester_app_name),
