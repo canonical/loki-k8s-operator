@@ -5,8 +5,12 @@
 # https://discourse.charmhub.io/t/charm-metadata-v2/3674/15
 
 name: loki-k8s
+
 assumes:
   - k8s-api
+
+  # Juju 3.0.3+ needed for secrets and open-port
+  - juju >= 3.0.3
 
 summary: |
   Loki is a set of components that can be composed into a fully featured logging stack.
