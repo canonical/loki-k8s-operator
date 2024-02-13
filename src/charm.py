@@ -317,8 +317,6 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     def _configure(self):  # noqa: C901
         """Configure Loki charm."""
-        restart = False
-
         if not self.resources_patch.is_ready():
             if isinstance(self.unit.status, ActiveStatus) or self.unit.status.message == "":
                 self.unit.status = WaitingStatus("Waiting for resource limit patch to apply")
@@ -330,7 +328,7 @@ class LokiOperatorCharm(CharmBase):
 
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
-        restart = True if current_layer.services != new_layer.services else False
+        restart = current_layer.services != new_layer.services
 
         config = ConfigBuilder(
             instance_addr=self.hostname,
@@ -343,7 +341,7 @@ class LokiOperatorCharm(CharmBase):
 
         try:
             self._push_certs()
-            restart = self._update_config(config)
+            restart = restart or self._update_config(config)
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
             return
