@@ -343,11 +343,13 @@ class TestDelayedPebbleReady(unittest.TestCase):
     def test_pebble_ready_changes_status_from_waiting_to_active(self):
         """Scenario: a pebble-ready event is delayed."""
         # WHEN all startup hooks except pebble-ready finished
-        # THEN app status is "Waiting" before pebble-ready
+        # THEN app status is "Maintenance" before pebble-ready
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
 
         # AND app status is "Active" after pebble-ready
         self.harness.container_pebble_ready("loki")
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @k8s_resource_multipatch
@@ -358,10 +360,12 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.harness.remove_relation_unit(self.log_rel_id, "consumer-app/1")
 
         # THEN app status is "Waiting" before pebble-ready
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
 
         # AND app status is "Active" after pebble-ready
         self.harness.container_pebble_ready("loki")
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @k8s_resource_multipatch
@@ -372,10 +376,12 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.harness.remove_relation(self.log_rel_id)
 
         # THEN app status is "Waiting" before pebble-ready
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
 
         # AND app status is "Active" after pebble-ready
         self.harness.container_pebble_ready("loki")
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
 
