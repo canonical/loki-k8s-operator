@@ -341,7 +341,7 @@ class LokiOperatorCharm(CharmBase):
 
         try:
             self._push_certs()
-            restart = restart or self._update_config(config)
+            restart = self._update_config(config) or restart
         except (ProtocolError, PathError) as e:
             self.unit.status = BlockedStatus(str(e))
             return
