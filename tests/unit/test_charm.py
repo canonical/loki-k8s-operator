@@ -518,8 +518,8 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         )
 
         # Emit another config changed to make sure we unblock
-        self.harness.charm.on.config_changed.emit()
         self.mock_request.side_effect = None
         self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
+        self.harness.charm.on.config_changed.emit()
         self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
