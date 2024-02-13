@@ -9,15 +9,12 @@ from io import BytesIO
 from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 
-import ops.testing
 import yaml
 from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
 from charm import LokiOperatorCharm
 from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
 from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
 from ops.testing import Harness
-
-ops.testing.SIMULATE_CAN_CONNECT = True
 
 METADATA = {
     "model": "consumer-model",
