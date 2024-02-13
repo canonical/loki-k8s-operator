@@ -39,10 +39,6 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
@@ -57,7 +53,7 @@ from config_builder import (
 )
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, Port, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
 
 logger = logging.getLogger(__name__)
@@ -92,9 +88,7 @@ class LokiOperatorCharm(CharmBase):
         tenant_id = "fake"
         self.rules_dir_tenant = os.path.join(RULES_DIR, tenant_id)
 
-        self.service_patch = KubernetesServicePatch(
-            self, [ServicePort(self._port, name=self.app.name)]
-        )
+        self.unit.set_ports(Port("tcp", self._port))
 
         self.resources_patch = KubernetesComputeResourcesPatch(
             self,

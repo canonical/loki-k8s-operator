@@ -107,7 +107,6 @@ table_manager:
 
 
 class TestCharm(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
@@ -170,7 +169,6 @@ class TestCharm(unittest.TestCase):
 class TestConfigFile(unittest.TestCase):
     """Feature: Loki config file in the workload container is rendered by the charm."""
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @patch("socket.getfqdn", new=lambda *args: "fqdn")
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
@@ -262,7 +260,6 @@ class TestPebblePlan(unittest.TestCase):
     Background: TODO
     """
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
@@ -303,7 +300,6 @@ class TestPebblePlan(unittest.TestCase):
 class TestDelayedPebbleReady(unittest.TestCase):
     """Feature: Charm code must be resilient to any (reasonable) order of startup event firing."""
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     def setUp(self, *_):
@@ -390,7 +386,6 @@ class TestAppRelationData(unittest.TestCase):
     Background: Consumer charms need to have a URL for downloading promtail.
     """
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
@@ -433,7 +428,6 @@ class TestAppRelationData(unittest.TestCase):
 class TestAlertRuleBlockedStatus(unittest.TestCase):
     """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
