@@ -372,7 +372,7 @@ class LokiOperatorCharm(CharmBase):
                 )
 
         # "can_connect" is a racy check, so we do it once here (instead of in collect-status)
-        if self.container.can_connect():
+        if self._container.can_connect():
             self._stored.status["config"] = to_tuple(ActiveStatus())
         else:
             self._stored.status["config"] = to_tuple(MaintenanceStatus("Configuring Loki"))
