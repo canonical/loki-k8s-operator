@@ -9,7 +9,6 @@ from pathlib import Path
 from tempfile import mkdtemp
 from unittest.mock import mock_open, patch
 
-import ops
 from charms.loki_k8s.v0 import loki_push_api
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from ops.charm import CharmBase
@@ -18,7 +17,6 @@ from ops.model import Container
 from ops.pebble import PathError
 from ops.testing import Harness
 
-ops.testing.SIMULATE_CAN_CONNECT = True
 LOG_FILES = ["/var/log/apache2/access.log", "/var/log/alternatives.log", "/var/log/test.log"]
 
 HTTP_LISTEN_PORT = 9080

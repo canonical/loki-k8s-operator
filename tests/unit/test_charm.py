@@ -9,15 +9,12 @@ from io import BytesIO
 from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 
-import ops.testing
 import yaml
 from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
 from charm import LokiOperatorCharm
 from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
-from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.testing import Harness
-
-ops.testing.SIMULATE_CAN_CONNECT = True
 
 METADATA = {
     "model": "consumer-model",
@@ -107,7 +104,6 @@ table_manager:
 
 
 class TestCharm(unittest.TestCase):
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
@@ -153,7 +149,8 @@ class TestCharm(unittest.TestCase):
         # Since harness was not started with begin_with_initial_hooks(), this must
         # be emitted by hand to actually trigger _configure()
         self.harness.charm.on.config_changed.emit()
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+        self.harness.evaluate_status()
+        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
 
     @patch("config_builder.ConfigBuilder.build")
     @k8s_resource_multipatch
@@ -164,13 +161,13 @@ class TestCharm(unittest.TestCase):
         # Since harness was not started with begin_with_initial_hooks(), this must
         # be emitted by hand to actually trigger _configure()
         self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
 
 class TestConfigFile(unittest.TestCase):
     """Feature: Loki config file in the workload container is rendered by the charm."""
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @patch("socket.getfqdn", new=lambda *args: "fqdn")
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
@@ -262,7 +259,6 @@ class TestPebblePlan(unittest.TestCase):
     Background: TODO
     """
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
@@ -303,7 +299,6 @@ class TestPebblePlan(unittest.TestCase):
 class TestDelayedPebbleReady(unittest.TestCase):
     """Feature: Charm code must be resilient to any (reasonable) order of startup event firing."""
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     def setUp(self, *_):
@@ -348,11 +343,13 @@ class TestDelayedPebbleReady(unittest.TestCase):
     def test_pebble_ready_changes_status_from_waiting_to_active(self):
         """Scenario: a pebble-ready event is delayed."""
         # WHEN all startup hooks except pebble-ready finished
-        # THEN app status is "Waiting" before pebble-ready
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+        # THEN app status is "Maintenance" before pebble-ready
+        self.harness.evaluate_status()
+        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
 
         # AND app status is "Active" after pebble-ready
         self.harness.container_pebble_ready("loki")
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @k8s_resource_multipatch
@@ -363,10 +360,12 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.harness.remove_relation_unit(self.log_rel_id, "consumer-app/1")
 
         # THEN app status is "Waiting" before pebble-ready
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+        self.harness.evaluate_status()
+        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
 
         # AND app status is "Active" after pebble-ready
         self.harness.container_pebble_ready("loki")
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @k8s_resource_multipatch
@@ -377,10 +376,12 @@ class TestDelayedPebbleReady(unittest.TestCase):
         self.harness.remove_relation(self.log_rel_id)
 
         # THEN app status is "Waiting" before pebble-ready
-        self.assertIsInstance(self.harness.charm.unit.status, WaitingStatus)
+        self.harness.evaluate_status()
+        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
 
         # AND app status is "Active" after pebble-ready
         self.harness.container_pebble_ready("loki")
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
 
@@ -390,7 +391,6 @@ class TestAppRelationData(unittest.TestCase):
     Background: Consumer charms need to have a URL for downloading promtail.
     """
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
@@ -433,7 +433,6 @@ class TestAppRelationData(unittest.TestCase):
 class TestAlertRuleBlockedStatus(unittest.TestCase):
     """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
 
-    @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
@@ -483,6 +482,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
             hdrs=None,  # type: ignore
         )
         self._add_alerting_relation()
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
             self.harness.charm.unit.status.message,
@@ -491,6 +491,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
 
         # Emit another config changed to make sure we stay blocked
         self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
             self.harness.charm.unit.status.message,
@@ -501,6 +502,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
 
         self.harness.charm._loki_push_api_alert_rules_changed(None)
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 
     @k8s_resource_multipatch
@@ -508,6 +510,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.mock_request.side_effect = URLError(reason="fubar!")
         self._add_alerting_relation()
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
             self.harness.charm.unit.status.message,
@@ -515,7 +518,8 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         )
 
         # Emit another config changed to make sure we unblock
-        self.harness.charm.on.config_changed.emit()
         self.mock_request.side_effect = None
         self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
+        self.harness.charm.on.config_changed.emit()
+        self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)

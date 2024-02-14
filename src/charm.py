@@ -19,7 +19,7 @@ import ssl
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
@@ -39,10 +39,6 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     ResourceRequirements,
     adjust_resource_requirements,
 )
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
@@ -55,12 +51,41 @@ from config_builder import (
     RULES_DIR,
     ConfigBuilder,
 )
+from ops import CollectStatusEvent, StoredState
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from ops.pebble import ChangeError, Error, Layer, PathError, ProtocolError
+from ops.model import (
+    ActiveStatus,
+    BlockedStatus,
+    MaintenanceStatus,
+    Port,
+    StatusBase,
+    WaitingStatus,
+)
+from ops.pebble import Error, Layer, PathError, ProtocolError
 
 logger = logging.getLogger(__name__)
+
+
+class CompositeStatus(TypedDict):
+    """Per-component status holder."""
+
+    # These are going to go into stored state, so we must use marshallable objects.
+    # They are passed to StatusBase.from_name().
+    k8s_patch: Tuple[str, str]
+    config: Tuple[str, str]
+    rules: Tuple[str, str]
+
+
+def to_tuple(status: StatusBase) -> Tuple[str, str]:
+    """Convert a StatusBase to tuple, so it is marshallable into StoredState."""
+    return status.name, status.message
+
+
+def to_status(tpl: Tuple[str, str]) -> StatusBase:
+    """Convert a tuple to a StatusBase, so it could be used natively with ops."""
+    name, message = tpl
+    return StatusBase.from_name(name, message)
 
 
 @trace_charm(
@@ -78,12 +103,24 @@ logger = logging.getLogger(__name__)
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
+    _stored = StoredState()
     _port = HTTP_LISTEN_PORT
     _name = "loki"
     _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
 
     def __init__(self, *args):
         super().__init__(*args)
+
+        # We need stored state for push statuses.
+        # https://discourse.charmhub.io/t/its-probably-ok-for-a-unit-to-go-into-error-state/13022
+        self._stored.set_default(
+            status=CompositeStatus(
+                k8s_patch=to_tuple(ActiveStatus()),
+                config=to_tuple(ActiveStatus()),
+                rules=to_tuple(ActiveStatus()),
+            )
+        )
+
         self._container = self.unit.get_container(self._name)
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
@@ -92,9 +129,7 @@ class LokiOperatorCharm(CharmBase):
         tenant_id = "fake"
         self.rules_dir_tenant = os.path.join(RULES_DIR, tenant_id)
 
-        self.service_patch = KubernetesServicePatch(
-            self, [ServicePort(self._port, name=self.app.name)]
-        )
+        self.unit.set_ports(Port("tcp", self._port))
 
         self.resources_patch = KubernetesComputeResourcesPatch(
             self,
@@ -171,10 +206,20 @@ class LokiOperatorCharm(CharmBase):
             self._loki_push_api_alert_rules_changed,
         )
         self.framework.observe(self.on.logging_relation_changed, self._on_logging_relation_changed)
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
     ##############################################
+
+    def _on_collect_unit_status(self, event: CollectStatusEvent):
+        # "Pull" statuses
+        # TODO refactor _configure to turn the "rules" status into a "pull" status.
+
+        # "Push" statuses
+        for status in self._stored.status.values():
+            event.add_status(to_status(status))
+
     def _on_config_changed(self, _):
         self._configure()
 
@@ -317,20 +362,25 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     def _configure(self):  # noqa: C901
         """Configure Loki charm."""
-        restart = False
+        # "is_ready" is a racy check, so we do it once here (instead of in collect-status)
+        if self.resources_patch.is_ready():
+            self._stored.status["k8s_patch"] = to_tuple(ActiveStatus())
+        else:
+            if isinstance(to_status(self._stored.status["k8s_patch"]), ActiveStatus):
+                self._stored.status["k8s_patch"] = to_tuple(
+                    WaitingStatus("Waiting for resource limit patch to apply")
+                )
 
-        if not self.resources_patch.is_ready():
-            if isinstance(self.unit.status, ActiveStatus) or self.unit.status.message == "":
-                self.unit.status = WaitingStatus("Waiting for resource limit patch to apply")
-            return
-
-        if not self._container.can_connect():
-            self.unit.status = WaitingStatus("Waiting for Pebble ready")
+        # "can_connect" is a racy check, so we do it once here (instead of in collect-status)
+        if self._container.can_connect():
+            self._stored.status["config"] = to_tuple(ActiveStatus())
+        else:
+            self._stored.status["config"] = to_tuple(MaintenanceStatus("Configuring Loki"))
             return
 
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
-        restart = True if current_layer.services != new_layer.services else False
+        restart = current_layer.services != new_layer.services
 
         config = ConfigBuilder(
             instance_addr=self.hostname,
@@ -341,39 +391,23 @@ class LokiOperatorCharm(CharmBase):
             http_tls=(self.server_cert.cert is not None),
         ).build()
 
-        try:
-            self._push_certs()
-            restart = self._update_config(config)
-        except (ProtocolError, PathError) as e:
-            self.unit.status = BlockedStatus(str(e))
-            return
-        except Exception as e:
-            self.unit.status = BlockedStatus(str(e))
-            return
+        # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
+        # to let the charm go into error state than setting blocked.
+        self._push_certs()
+        restart = self._update_config(config) or restart
 
         if restart:
-            try:
-                self._container.add_layer(self._name, new_layer, combine=True)
-                self._container.restart(self._name)
-                logger.info("Loki (re)started")
-            except ChangeError as e:
-                msg = f"Failed to restart loki: {e}"  # or e.err?
-                self.unit.status = BlockedStatus(msg)
-                logger.error(msg)
-                return
+            self._container.add_layer(self._name, new_layer, combine=True)
+            self._container.restart(self._name)
+            logger.info("Loki (re)started")
 
-        # Don't clear alert error states on reconfigure
-        # but let errors connecting clear after a restart
-        if (
-            isinstance(self.unit.status, BlockedStatus)
-            and "Errors in alert rule" in self.unit.status.message
-        ):
+        if isinstance(to_status(self._stored.status["rules"]), BlockedStatus):
             # Wait briefly for Loki to come back up and re-check the alert rules
             # in case an upgrade/refresh caused the check to occur when it wasn't
-            # ready yet
+            # ready yet. TODO: use custom pebble notice for "workload ready" event.
             time.sleep(2)
             self._check_alert_rules()
-            return
+            return  # TODO: why do we have a return here?
 
         self.ingress_per_unit.provide_ingress_requirements(
             scheme="https" if self._tls_ready else "http", port=self._port
@@ -382,8 +416,6 @@ class LokiOperatorCharm(CharmBase):
         self.grafana_source_provider.update_source(source_url=self._external_url)
         self.loki_provider.update_endpoint(url=self._external_url)
         self.catalogue.update_item(item=self._catalogue_item)
-
-        self.unit.status = ActiveStatus()
 
     def _update_config(self, config: dict) -> bool:
         if self._running_config() != config:
@@ -436,7 +468,7 @@ class LokiOperatorCharm(CharmBase):
             self._regenerate_alert_rules()
 
             # Don't try to configure if checking the rules left us in BlockedStatus
-            if isinstance(self.unit.status, ActiveStatus):
+            if isinstance(to_status(self._stored.status["rules"]), ActiveStatus):
                 self._configure()
 
     def _ensure_alert_rules_path(self) -> bool:
@@ -512,27 +544,30 @@ class LokiOperatorCharm(CharmBase):
             if e.code == 404 and "no rule groups found" in msg:
                 log_msg = "Checking alert rules: No rule groups found"
                 logger.debug(log_msg)
-                self.unit.status = BlockedStatus(log_msg)
+                self._stored.status["rules"] = to_tuple(BlockedStatus(log_msg))
                 return
 
             message = "{} - {}".format(e.code, e.msg)  # type: ignore
             logger.error("Checking alert rules: %s", message)
-            self.unit.status = BlockedStatus("Errors in alert rule groups. Check juju debug-log")
+            self._stored.status["rules"] = to_tuple(
+                BlockedStatus("Errors in alert rule groups. Check juju debug-log")
+            )
             return
         except URLError as e:
             logger.error("Checking alert rules: %s", e.reason)
-            self.unit.status = BlockedStatus("Error connecting to Loki. Check juju debug-log")
+            self._stored.status["rules"] = to_tuple(
+                BlockedStatus("Error connecting to Loki. Check juju debug-log")
+            )
             return
         except Exception as e:
             logger.error("Checking alert rules: %s", e)
-            self.unit.status = BlockedStatus("Error connecting to Loki. Check juju debug-log")
+            self._stored.status["rules"] = to_tuple(
+                BlockedStatus("Error connecting to Loki. Check juju debug-log")
+            )
             return
         else:
-            log_msg = "Checking alert rules: Ok"
-            logger.debug(log_msg)
-            if isinstance(self.unit.status, BlockedStatus):
-                self.unit.status = ActiveStatus()
-                logger.info("Clearing blocked status with successful alert rule check")
+            logger.debug("Checking alert rules: Ok")
+            self._stored.status["rules"] = to_tuple(ActiveStatus())
             return
 
     def _resource_reqs_from_config(self) -> ResourceRequirements:
@@ -544,7 +579,7 @@ class LokiOperatorCharm(CharmBase):
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
     def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
-        self.unit.status = BlockedStatus(str(event.message))
+        self._stored.status["k8s_patch"] = to_tuple(BlockedStatus(cast(str, event.message)))
 
     @property
     def _loki_version(self) -> Optional[str]:
