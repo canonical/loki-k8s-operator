@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        arch: [amd64] # [amd64, arm64] # GitHub workflows do not support YAML anchors :-(
+        arch: [amd64, arm64]
     steps:
       - name: Checkout grafana/loki, tag ${{inputs.release}}
         uses: actions/checkout@v2
@@ -58,8 +58,8 @@ jobs:
     # TODO: Also run tests on arm64
     strategy:
       matrix:
-        arch: [amd64] # [amd64, arm64]
-        base: [debian, rh-ubi8, ubuntu]
+        arch: [amd64, arm64]
+        base: [debian, ubuntu]
     steps:
       - name: Checkout ${{github.repository}}
         uses: actions/checkout@v2
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64] # [amd64, arm64] # GitHub workflows do not support YAML anchors :-(
+        arch: [amd64, arm64]
     steps:
       - name: Checkout grafana/loki, tag ${{inputs.release}}
         uses: actions/checkout@v2
@@ -119,10 +119,9 @@ jobs:
     name: Test statically-linked Promtail
     runs-on: ubuntu-latest
     needs: build-static
-    # TODO: Also run tests on arm64
     strategy:
       matrix:
-        arch: [amd64] # [amd64, arm64]
+        arch: [amd64, arm64]
         base: [alpine, debian, rh-ubi8, scratch, ubuntu]
     steps:
       - name: Checkout ${{github.repository}}
