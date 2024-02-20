@@ -14,10 +14,14 @@ jobs:
 
   build-dynamic:
     name: Build dynamically-linked Promtail
-    runs-on: ubuntu-20.04
+    runs-on: ${{ matrix.config.uses }}
     strategy:
       matrix:
-        arch: [amd64, arm64]
+        config:
+          - arch: amd64
+            uses: ubuntu-20.04
+          - arch: arm64
+            uses: Ubuntu_ARM64_4C_16G_01
     steps:
       - name: Checkout grafana/loki, tag ${{inputs.release}}
         uses: actions/checkout@v2
@@ -42,33 +46,37 @@ jobs:
       - name: Build Promtail
         working-directory: loki-upstream
         run: |
-          GOHOSTOS=linux GOARCH=${{matrix.arch}} make promtail
+          GOHOSTOS=linux GOARCH=${{matrix.config.arch}} make promtail
           ldd clients/cmd/promtail/promtail
           file clients/cmd/promtail/promtail
-      - name: Attach promtail-dynamic-${{matrix.arch}} artifact to run
+      - name: Attach promtail-dynamic-${{matrix.config.arch}} artifact to run
         uses: actions/upload-artifact@v3
         with:
-          name: promtail-dynamic-${{matrix.arch}}
+          name: promtail-dynamic-${{matrix.config.arch}}
           path: ./loki-upstream/clients/cmd/promtail/promtail
 
   test-dynamic:
     name: Test dynamically-linked Promtail
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.config.uses }}
     needs: build-dynamic
     # TODO: Also run tests on arm64
     strategy:
       matrix:
-        arch: [amd64, arm64]
+        config:
+          - arch: amd64
+            uses: ubuntu-20.04
+          - arch: arm64
+            uses: Ubuntu_ARM64_4C_16G_01
         base: [debian, ubuntu]
     steps:
       - name: Checkout ${{github.repository}}
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: Download the promtail-dynamic-${{matrix.arch}} artifact
+      - name: Download the promtail-dynamic-${{matrix.config.arch}} artifact
         uses: actions/download-artifact@v3
         with:
-          name: promtail-dynamic-${{matrix.arch}}
+          name: promtail-dynamic-${{matrix.config.arch}}
           path: ./dist/
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
@@ -117,21 +125,25 @@ jobs:
 
   test-static:
     name: Test statically-linked Promtail
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.config.uses }}
     needs: build-static
     strategy:
       matrix:
-        arch: [amd64, arm64]
-        base: [alpine, debian, rh-ubi8, scratch, ubuntu]
+        config:
+          - arch: amd64
+            uses: ubuntu-20.04
+          - arch: arm64
+            uses: Ubuntu_ARM64_4C_16G_01
+        base: [ubuntu]
     steps:
       - name: Checkout ${{github.repository}}
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: Download the promtail-static-${{matrix.arch}} artifact
+      - name: Download the promtail-static-${{matrix.config.arch}} artifact
         uses: actions/download-artifact@v3
         with:
-          name: promtail-static-${{matrix.arch}}
+          name: promtail-static-${{matrix.config.arch}}
           path: ./dist/
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
