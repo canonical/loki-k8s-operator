@@ -2123,7 +2123,9 @@ class LogProxyConsumer(ConsumerBase):
             proxies.update({"https": os.environ["JUJU_CHARM_HTTPS_PROXY"]})
         if isinstance(proxies, dict) and os.environ.get("JUJU_CHARM_NO_PROXY"):
             proxies.update({"no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]})
-        else:
+        # If no Juju proxy variable was set, we set proxies to None to let the ProxyHandler get
+        # the proxy env variables from the environment
+        if isinstance(proxies, dict) and not proxies:
             proxies = None
 
         proxy_handler = request.ProxyHandler(proxies)
