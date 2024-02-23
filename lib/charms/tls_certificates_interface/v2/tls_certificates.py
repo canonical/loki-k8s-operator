@@ -307,7 +307,7 @@ LIBAPI = 2
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 24
+LIBPATCH = 25
 
 PYDEPS = ["cryptography", "jsonschema"]
 
@@ -678,7 +678,7 @@ def generate_ca(
     private_key_object = serialization.load_pem_private_key(
         private_key, password=private_key_password
     )
-    subject = issuer = x509.Name(
+    subject_name = x509.Name(
         [
             x509.NameAttribute(x509.NameOID.COUNTRY_NAME, country),
             x509.NameAttribute(x509.NameOID.COMMON_NAME, subject),
@@ -701,8 +701,8 @@ def generate_ca(
     )
     cert = (
         x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
+        .subject_name(subject_name)
+        .issuer_name(subject_name)
         .public_key(private_key_object.public_key())  # type: ignore[arg-type]
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.utcnow())
