@@ -480,7 +480,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 26
+LIBPATCH = 27
 
 logger = logging.getLogger(__name__)
 
@@ -2117,11 +2117,11 @@ class LogProxyConsumer(ConsumerBase):
         """
         # Check for Juju proxy variables and fall back to standard ones if not set
         proxies: Optional[Dict[str, str]] = {}
-        if proxies and os.environ.get("JUJU_CHARM_HTTP_PROXY"):
+        if isinstance(proxies, dict) and os.environ.get("JUJU_CHARM_HTTP_PROXY"):
             proxies.update({"http": os.environ["JUJU_CHARM_HTTP_PROXY"]})
-        if proxies and os.environ.get("JUJU_CHARM_HTTPS_PROXY"):
+        if isinstance(proxies, dict) and os.environ.get("JUJU_CHARM_HTTPS_PROXY"):
             proxies.update({"https": os.environ["JUJU_CHARM_HTTPS_PROXY"]})
-        if proxies and os.environ.get("JUJU_CHARM_NO_PROXY"):
+        if isinstance(proxies, dict) and os.environ.get("JUJU_CHARM_NO_PROXY"):
             proxies.update({"no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]})
         else:
             proxies = None
