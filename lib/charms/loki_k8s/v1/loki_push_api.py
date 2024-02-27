@@ -799,7 +799,11 @@ class AlertRules:
                         alert_rule["labels"] = {}
 
                     if self.topology:
-                        alert_rule["labels"].update(self.topology.label_matcher_dict)
+                        # only insert labels that do not already exist
+                        for label, val in self.topology.label_matcher_dict.items():
+                            if label not in alert_rule["labels"]:
+                                alert_rule["labels"][label] = val
+
                         # insert juju topology filters into a prometheus alert rule
                         # logql doesn't like empty matchers, so add a job matcher which hits
                         # any string as a "wildcard" which the topology labels will
