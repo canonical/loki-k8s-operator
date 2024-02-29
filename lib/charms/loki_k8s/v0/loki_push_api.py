@@ -2116,17 +2116,15 @@ class LogProxyConsumer(ConsumerBase):
                - "binsha": sha256 sum of unpacked promtail binary
         """
         # Check for Juju proxy variables and fall back to standard ones if not set
-        proxies: Optional[Dict[str, str]] = {}
-        if isinstance(proxies, dict) and os.environ.get("JUJU_CHARM_HTTP_PROXY"):
-            proxies.update({"http": os.environ["JUJU_CHARM_HTTP_PROXY"]})
-        if isinstance(proxies, dict) and os.environ.get("JUJU_CHARM_HTTPS_PROXY"):
-            proxies.update({"https": os.environ["JUJU_CHARM_HTTPS_PROXY"]})
-        if isinstance(proxies, dict) and os.environ.get("JUJU_CHARM_NO_PROXY"):
-            proxies.update({"no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]})
         # If no Juju proxy variable was set, we set proxies to None to let the ProxyHandler get
         # the proxy env variables from the environment
-        if isinstance(proxies, dict) and not proxies:
-            proxies = None
+        proxies: Optional[Dict[str, str]] = {
+            "https_proxy": os.environ.get("JUJU_CHARM_HTTPS_PROXY", ""),
+            "http_proxy": os.environ.get("JUJU_CHARM_HTTP_PROXY", ""),
+            "no_proxy": os.environ.get("JUJU_CHARM_NO_PROXY", ""),
+        }
+        if isinstance(proxies, dict):
+            proxies = {k: v for k, v in proxies.items() if v != ""} or None
 
         proxy_handler = request.ProxyHandler(proxies)
         opener = request.build_opener(proxy_handler)
