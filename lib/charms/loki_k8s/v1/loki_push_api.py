@@ -2096,13 +2096,12 @@ class LogProxyConsumer(ConsumerBase):
         # Check for Juju proxy variables and fall back to standard ones if not set
         # If no Juju proxy variable was set, we set proxies to None to let the ProxyHandler get
         # the proxy env variables from the environment
-        proxies: Optional[Dict[str, str]] = {
+        proxies = {
             "https_proxy": os.environ.get("JUJU_CHARM_HTTPS_PROXY", ""),
             "http_proxy": os.environ.get("JUJU_CHARM_HTTP_PROXY", ""),
             "no_proxy": os.environ.get("JUJU_CHARM_NO_PROXY", ""),
         }
-        if isinstance(proxies, dict):
-            proxies = {k: v for k, v in proxies.items() if v != ""} or None
+        proxies = {k: v for k, v in proxies.items() if v != ""} or None
 
         proxy_handler = request.ProxyHandler(proxies)
         opener = request.build_opener(proxy_handler)
