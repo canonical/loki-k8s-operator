@@ -490,7 +490,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib import request
-from urllib.error import HTTPError
+from urllib.error import URLError
 
 import yaml
 from cosl import JujuTopology
@@ -2326,7 +2326,7 @@ class LogProxyConsumer(ConsumerBase):
 
         try:
             self._obtain_promtail(promtail_binaries[self._arch], container)
-        except HTTPError as e:
+        except URLError as e:
             msg = f"Promtail binary couldn't be downloaded - {str(e)}"
             logger.warning(msg)
             self.on.promtail_digest_error.emit(msg)
