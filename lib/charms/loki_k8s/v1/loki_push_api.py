@@ -518,7 +518,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 5
+LIBPATCH = 6
 
 logger = logging.getLogger(__name__)
 
@@ -2509,6 +2509,16 @@ class LogForwarder(ConsumerBase):
         self.framework.observe(on.relation_changed, self._update_logging)
         self.framework.observe(on.relation_departed, self._update_logging)
         self.framework.observe(on.relation_broken, self._update_logging)
+
+        for container_name in self._charm.meta.containers.keys():
+            snake_case_container_name = container_name.replace("-", "_")
+            self.framework.observe(
+                getattr(self._charm.on, f"{snake_case_container_name}_pebble_ready"),
+                self._pebble_ready,
+            )
+
+    def _pebble_ready(self, _):
+        self._update_logging(_)
 
     def _update_logging(self, _):
         """Update the log forwarding to match the active Loki endpoints."""
