@@ -2514,10 +2514,10 @@ class LogForwarder(ConsumerBase):
             snake_case_container_name = container_name.replace("-", "_")
             self.framework.observe(
                 getattr(self._charm.on, f"{snake_case_container_name}_pebble_ready"),
-                self._pebble_ready,
+                self._on_pebble_ready,
             )
 
-    def _pebble_ready(self, _):
+    def _on_pebble_ready(self, _):
         self._update_logging(_)
 
     def _update_logging(self, _):
