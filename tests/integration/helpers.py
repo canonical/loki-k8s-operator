@@ -359,7 +359,7 @@ async def generate_log_file(
 
 async def get_pebble_plan(
     model_name: str, app_name: str, unit_num: int, container_name: str
-) -> bytes:
+) -> str:
     cmd = [
         "juju",
         "ssh",
@@ -376,7 +376,7 @@ async def get_pebble_plan(
     except subprocess.CalledProcessError as e:
         logger.error(e.stdout.decode())
         raise e
-    return res.stdout
+    return res.stdout.decode("utf-8")
 
 
 async def delete_pod(model_name: str, app_name: str, unit_num: int) -> bool:
