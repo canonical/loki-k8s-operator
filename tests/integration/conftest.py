@@ -6,11 +6,14 @@ import os
 import shutil
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
+
+LOKI_PUSH_API_V1_PATH = Path("lib/charms/loki_k8s/v1/loki_push_api.py")
 
 
 class Store(defaultdict):
@@ -113,4 +116,24 @@ async def log_proxy_tester_charm(ops_test):
     clean_cmd = ["charmcraft", "clean", "-p", charm_path]
     await ops_test.run(*clean_cmd)
     charm = await ops_test.build_charm(charm_path)
+    return charm
+
+
+@pytest.fixture(scope="module")
+@timed_memoizer
+async def log_forwarder_tester_charm(ops_test):
+    """A charm for integration test of LogForwarder."""
+    testingcharm_path = Path("tests") / "integration/log-forwarder-tester"
+
+    dest_charmlib = testingcharm_path / LOKI_PUSH_API_V1_PATH
+    shutil.rmtree(dest_charmlib.parent, ignore_errors=True)
+    dest_charmlib.parent.mkdir(parents=True)
+    dest_charmlib.hardlink_to(LOKI_PUSH_API_V1_PATH)
+
+    charm_path = "tests/integration/log-forwarder-tester"
+    clean_cmd = ["charmcraft", "clean", "-p", charm_path]
+    await ops_test.run(*clean_cmd)
+    charm = await ops_test.build_charm(charm_path)
+
+    shutil.rmtree(dest_charmlib.parent)
     return charm

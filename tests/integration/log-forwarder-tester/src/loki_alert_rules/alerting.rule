@@ -1,0 +1,10 @@
+groups:
+  - name: should_fire_when_rate_increased
+    rules:
+      - alert: HighLogVolume
+        expr: |
+          count_over_time(({%%juju_topology%%})[30s]) > 40
+        labels:
+            severity: high
+        annotations:
+            summary: Log rate is too high!

@@ -355,3 +355,42 @@ async def generate_log_file(
         logger.error(e.stdout.decode())
         raise e
     return res.stdout
+
+
+async def get_pebble_plan(
+    model_name: str, app_name: str, unit_num: int, container_name: str
+) -> bytes:
+    cmd = [
+        "juju",
+        "ssh",
+        "--model",
+        model_name,
+        "--container",
+        container_name,
+        f"{app_name}/{unit_num}",
+        "./charm/bin/pebble",
+        "plan",
+    ]
+    try:
+        res = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as e:
+        logger.error(e.stdout.decode())
+        raise e
+    return res.stdout
+
+
+async def delete_pod(model_name: str, app_name: str, unit_num: int) -> bool:
+    cmd = [
+        "kubectl",
+        "delete",
+        "pod",
+        f"{app_name}-{unit_num}",
+        "-n",
+        model_name,
+    ]
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(e.stdout.decode())
+        raise e
