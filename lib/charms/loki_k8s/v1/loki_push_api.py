@@ -497,6 +497,7 @@ from cosl import JujuTopology
 from ops.charm import (
     CharmBase,
     HookEvent,
+    PebbleReadyEvent,
     RelationBrokenEvent,
     RelationCreatedEvent,
     RelationDepartedEvent,
@@ -2517,30 +2518,40 @@ class LogForwarder(ConsumerBase):
                 self._on_pebble_ready,
             )
 
-    def _on_pebble_ready(self, _):
-        self._update_logging(_)
+    def _on_pebble_ready(self, event: PebbleReadyEvent):
+        if not (loki_endpoints := self._retrieve_endpoints_from_relation()):
+            logger.warning("No Loki endpoints available")
+            return
+
+        self._update_endpoints(event.workload, loki_endpoints)
 
     def _update_logging(self, _):
         """Update the log forwarding to match the active Loki endpoints."""
+        if not (loki_endpoints := self._retrieve_endpoints_from_relation()):
+            logger.warning("No Loki endpoints available")
+            return
+
+        for container in self._charm.unit.containers.values():
+            self._update_endpoints(container, loki_endpoints)
+
+    def _retrieve_endpoints_from_relation(self) -> dict:
         loki_endpoints = {}
 
         # Get the endpoints from relation data
         for relation in self._charm.model.relations[self._relation_name]:
             loki_endpoints.update(self._fetch_endpoints(relation))
 
-        if not loki_endpoints:
-            logger.warning("No Loki endpoints available")
-            return
+        return loki_endpoints
 
-        for container in self._charm.unit.containers.values():
-            _PebbleLogClient.disable_inactive_endpoints(
-                container=container,
-                active_endpoints=loki_endpoints,
-                topology=self.topology,
-            )
-            _PebbleLogClient.enable_endpoints(
-                container=container, active_endpoints=loki_endpoints, topology=self.topology
-            )
+    def _update_endpoints(self, container: Container, loki_endpoints: dict):
+        _PebbleLogClient.disable_inactive_endpoints(
+            container=container,
+            active_endpoints=loki_endpoints,
+            topology=self.topology,
+        )
+        _PebbleLogClient.enable_endpoints(
+            container=container, active_endpoints=loki_endpoints, topology=self.topology
+        )
 
     def is_ready(self, relation: Optional[Relation] = None):
         """Check if the relation is active and healthy."""
