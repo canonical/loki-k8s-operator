@@ -20,7 +20,7 @@ tester_resources = {
 
 
 @pytest.mark.abort_on_fail
-async def test_containers_forward_log_after_pod_kill(
+async def test_containers_forward_logs_after_pod_kill(
     ops_test, loki_charm, log_forwarder_tester_charm
 ):
     loki_app_name = "loki"
