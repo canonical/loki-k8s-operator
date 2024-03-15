@@ -2487,7 +2487,10 @@ class _PebbleLogClient:
 
 
 class LogForwarder(ConsumerBase):
-    """Forward the standard outputs of all workloads operated by a charm to one or multiple Loki endpoints."""
+    """Forward the standard outputs of all workloads operated by a charm to one or multiple Loki endpoints.
+
+    This class implements Pebble log forwarding. Juju >= 3.4 is needed.
+    """
 
     def __init__(
         self,
