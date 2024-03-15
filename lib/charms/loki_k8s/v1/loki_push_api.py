@@ -2483,10 +2483,6 @@ class _PebbleLogClient:
                 )
             }
         )
-        # These two lines were added to debug this bug in juju 3.3
-        # https://github.com/canonical/loki-k8s-operator/actions/runs/8257914266/job/22610047691#step:6:1365
-        logger.info("The following layer will be added:")
-        logger.info(layer)
         container.add_layer(f"{container.name}-log-forwarding", layer, combine=True)
 
 
