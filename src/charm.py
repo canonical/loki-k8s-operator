@@ -16,6 +16,7 @@ import os
 import re
 import socket
 import ssl
+import subprocess
 import time
 import urllib.request
 from pathlib import Path
@@ -147,6 +148,8 @@ class LokiOperatorCharm(CharmBase):
             peer_relation_name="replicas",
             extra_sans_dns=[self.hostname],
         )
+        # Update certs here in init to avoid code ordering issues
+        self._update_cert()
         self.framework.observe(
             self.server_cert.on.cert_changed,  # pyright: ignore
             self._on_server_cert_changed,
@@ -163,7 +166,7 @@ class LokiOperatorCharm(CharmBase):
             self,
             relation_name="ingress",
             port=self._port,
-            scheme=lambda: "https" if self._tls_ready else "http",
+            scheme=lambda: "https" if self._certs_on_disk else "http",
             strip_prefix=True,
         )
         self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
@@ -171,7 +174,10 @@ class LokiOperatorCharm(CharmBase):
 
         self.grafana_source_provider = GrafanaSourceProvider(
             charm=self,
-            refresh_event=self.on.loki_pebble_ready,
+            refresh_event=[
+                self.on.loki_pebble_ready,
+                self.server_cert.on.cert_changed,
+            ],
             source_type="loki",
             source_url=self._external_url,
         )
@@ -184,6 +190,7 @@ class LokiOperatorCharm(CharmBase):
                 self.ingress_per_unit.on.ready_for_unit,
                 self.ingress_per_unit.on.revoked_for_unit,
                 self.on.ingress_relation_departed,
+                self.server_cert.on.cert_changed,
             ],
         )
 
@@ -191,7 +198,7 @@ class LokiOperatorCharm(CharmBase):
         self.loki_provider = LokiPushApiProvider(
             self,
             address=external_url.hostname or self.hostname,
-            port=external_url.port or 443 if self._tls_ready else 80,
+            port=external_url.port or 443 if self._certs_on_disk else 80,
             scheme=external_url.scheme,
             path=f"{external_url.path}/loki/api/v1/push",
         )
@@ -230,17 +237,8 @@ class LokiOperatorCharm(CharmBase):
     def _on_upgrade_charm(self, _):
         self._configure()
 
-    def _update_ca_certs(self):
-        # Charm container
-        ca_cert_path = Path(self._ca_cert_path)
-        if self.server_cert.ca:
-            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-            ca_cert_path.write_text(self.server_cert.ca)  # pyright: ignore
-        else:
-            ca_cert_path.unlink(missing_ok=True)
-
     def _on_server_cert_changed(self, _):
-        self._update_ca_certs()  # Will go into error state if not can_connect, and that's ok
+        self._update_cert()
         self._configure()
 
     def _on_loki_pebble_ready(self, _):
@@ -348,17 +346,28 @@ class LokiOperatorCharm(CharmBase):
         """
         job: Dict[str, Any] = {"static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]}
 
-        if self._tls_ready:
+        if self._certs_on_disk:
             job["scheme"] = "https"
 
         return [job]
 
     @property
-    def _tls_ready(self) -> bool:
+    def _certs_on_disk(self) -> bool:
+        """Check if the TLS setup is ready on disk."""
         return (
             self._container.can_connect()
             and self._container.exists(CERT_FILE)
             and self._container.exists(KEY_FILE)
+        )
+
+    @property
+    def _certs_in_reldata(self) -> bool:
+        """Check if the certificate is available in relation data."""
+        return (
+            self.server_cert.enabled
+            and (self.server_cert.cert is not None)
+            and (self.server_cert.key is not None)
+            and (self.server_cert.ca is not None)
         )
 
     ##############################################
@@ -397,7 +406,8 @@ class LokiOperatorCharm(CharmBase):
 
         # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
         # to let the charm go into error state than setting blocked.
-        self._push_certs()
+        if self._certs_in_reldata and not self._certs_on_disk:
+            self._update_cert()
         restart = self._update_config(config) or restart
 
         if restart:
@@ -414,7 +424,7 @@ class LokiOperatorCharm(CharmBase):
             return  # TODO: why do we have a return here?
 
         self.ingress_per_unit.provide_ingress_requirements(
-            scheme="https" if self._tls_ready else "http", port=self._port
+            scheme="https" if self._certs_on_disk else "http", port=self._port
         )
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
         self.grafana_source_provider.update_source(source_url=self._external_url)
@@ -430,15 +440,44 @@ class LokiOperatorCharm(CharmBase):
 
         return False
 
-    def _push_certs(self):
-        self._container.remove_path(CERT_FILE, recursive=True)
-        self._container.remove_path(KEY_FILE, recursive=True)
+    def _update_cert(self):
+        if not self._container.can_connect():
+            return
 
-        if self.server_cert.cert:
-            self._container.push(CERT_FILE, self.server_cert.cert, make_dirs=True)
+        ca_cert_path = Path(self._ca_cert_path)
 
-        if self.server_cert.key:
-            self._container.push(KEY_FILE, self.server_cert.key, make_dirs=True)
+        if self._certs_in_reldata:
+            # Save the workload certificates
+            self._container.push(
+                CERT_FILE,
+                self.server_cert.cert,  # pyright: ignore
+                make_dirs=True,
+            )
+            self._container.push(
+                KEY_FILE,
+                self.server_cert.key,  # pyright: ignore
+                make_dirs=True,
+            )
+            # Save the CA among the trusted CAs and trust it
+            self._container.push(
+                ca_cert_path,
+                self.server_cert.ca,  # pyright: ignore
+                make_dirs=True,
+            )
+
+            # Repeat for the charm container. We need it there for loki client requests.
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.server_cert.ca)  # pyright: ignore
+        else:
+            self._container.remove_path(CERT_FILE, recursive=True)
+            self._container.remove_path(KEY_FILE, recursive=True)
+            self._container.remove_path(ca_cert_path, recursive=True)
+
+            # Repeat for the charm container.
+            ca_cert_path.unlink(missing_ok=True)
+
+        self._container.exec(["update-ca-certificates", "--fresh"]).wait()
+        subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _alerting_config(self) -> str:
         """Construct Loki altering configuration.
@@ -530,7 +569,7 @@ class LokiOperatorCharm(CharmBase):
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the loki api server."""
-        scheme = "https" if self._tls_ready else "http"
+        scheme = "https" if self._certs_on_disk else "http"
         return f"{scheme}://{socket.getfqdn()}:{self._port}"
 
     def _check_alert_rules(self):
