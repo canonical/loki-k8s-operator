@@ -166,7 +166,7 @@ class LokiOperatorCharm(CharmBase):
             self,
             relation_name="ingress",
             port=self._port,
-            scheme=lambda: "https" if self._tls_ready_on_disk else "http",
+            scheme=lambda: "https" if self._certs_on_disk else "http",
             strip_prefix=True,
         )
         self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
@@ -198,7 +198,7 @@ class LokiOperatorCharm(CharmBase):
         self.loki_provider = LokiPushApiProvider(
             self,
             address=external_url.hostname or self.hostname,
-            port=external_url.port or 443 if self._tls_ready_on_disk else 80,
+            port=external_url.port or 443 if self._certs_on_disk else 80,
             scheme=external_url.scheme,
             path=f"{external_url.path}/loki/api/v1/push",
         )
@@ -346,13 +346,13 @@ class LokiOperatorCharm(CharmBase):
         """
         job: Dict[str, Any] = {"static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]}
 
-        if self._tls_ready_on_disk:
+        if self._certs_on_disk:
             job["scheme"] = "https"
 
         return [job]
 
     @property
-    def _tls_ready_on_disk(self) -> bool:
+    def _certs_on_disk(self) -> bool:
         """Check if the TLS setup is ready on disk."""
         return (
             self._container.can_connect()
@@ -361,7 +361,7 @@ class LokiOperatorCharm(CharmBase):
         )
 
     @property
-    def _cert_available_in_reldata(self) -> bool:
+    def _certs_in_reldata(self) -> bool:
         """Check if the certificate is available in relation data."""
         return (
             self.server_cert.enabled
@@ -406,7 +406,7 @@ class LokiOperatorCharm(CharmBase):
 
         # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
         # to let the charm go into error state than setting blocked.
-        if self._cert_available_in_reldata and not self._tls_ready_on_disk:
+        if self._certs_in_reldata and not self._certs_on_disk:
             self._update_cert()
         restart = self._update_config(config) or restart
 
@@ -424,7 +424,7 @@ class LokiOperatorCharm(CharmBase):
             return  # TODO: why do we have a return here?
 
         self.ingress_per_unit.provide_ingress_requirements(
-            scheme="https" if self._tls_ready_on_disk else "http", port=self._port
+            scheme="https" if self._certs_on_disk else "http", port=self._port
         )
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
         self.grafana_source_provider.update_source(source_url=self._external_url)
@@ -446,7 +446,7 @@ class LokiOperatorCharm(CharmBase):
 
         ca_cert_path = Path(self._ca_cert_path)
 
-        if self._cert_available_in_reldata:
+        if self._certs_in_reldata:
             # Save the workload certificates
             self._container.push(
                 CERT_FILE,
@@ -569,7 +569,7 @@ class LokiOperatorCharm(CharmBase):
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the loki api server."""
-        scheme = "https" if self._tls_ready_on_disk else "http"
+        scheme = "https" if self._certs_on_disk else "http"
         return f"{scheme}://{socket.getfqdn()}:{self._port}"
 
     def _check_alert_rules(self):
