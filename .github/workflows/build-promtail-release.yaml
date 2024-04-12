@@ -83,7 +83,6 @@ jobs:
           name: promtail-dynamic-${{matrix.config.arch}}
           path: ./dist/
       - name: Set up Docker
-        if: ${{matrix.config.arch}} == "arm64"
         run: |
           sudo apt-get update
           sudo apt-get install ca-certificates curl
@@ -96,13 +95,12 @@ jobs:
           sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
           sudo apt-get update
           sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
       - name: Build and test ${{matrix.base}} image
         # If promtail is borked on this base, the `docker run` invocation will fail
         run: |
-          DOCKER_BUILDKIT=1 docker build . -f promtail-build/dynamic/test/Dockerfile.${{matrix.base}} -t promtail-dynamic-${{matrix.base}}
-          sudo docker run promtail-dynamic-${{matrix.base}}
+          export DOCKER_BUILDKIT=1 
+          sudo -E docker build . -f promtail-build/dynamic/test/Dockerfile.${{matrix.base}} -t promtail-dynamic-${{matrix.base}}
+          sudo -E docker run promtail-dynamic-${{matrix.base}}
 
   build-static:
     name: Build statically-linked Promtail
@@ -164,7 +162,6 @@ jobs:
           name: promtail-static-${{matrix.config.arch}}
           path: ./dist/
       - name: Set up Docker
-        if: ${{matrix.config.arch}} == "arm64"
         run: |
           sudo apt-get update
           sudo apt-get install ca-certificates curl
@@ -177,13 +174,13 @@ jobs:
           sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
           sudo apt-get update
           sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+
       - name: Build and test ${{matrix.base}} image
         # If promtail is borked on this base, the `docker run` invocation will fail
         run: |
-          DOCKER_BUILDKIT=1 docker build . -f promtail-build/static/test/Dockerfile.${{matrix.base}} -t promtail-static-${{matrix.base}}
-          docker run promtail-static-${{matrix.base}}
+          export DOCKER_BUILDKIT=1 
+          sudo -E docker build . -f promtail-build/static/test/Dockerfile.${{matrix.base}} -t promtail-static-${{matrix.base}}
+          sudo -E docker run promtail-static-${{matrix.base}}
 
   tag:
     name: Publish Promtail release to ${{github.repository}}
