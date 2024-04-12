@@ -43,6 +43,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install libsystemd-dev
+      - name: Install build-essential
+        run: |
+          sudo apt-get install build-essential
       - name: Build Promtail
         working-directory: loki-upstream
         run: |
