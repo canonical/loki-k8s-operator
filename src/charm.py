@@ -126,7 +126,8 @@ class LokiOperatorCharm(CharmBase):
             )
         )
 
-        self._container = self.unit.get_container(self._name)
+        self._loki_container = self.unit.get_container(self._name)
+        self._node_exporter_container = self.unit.get_container("node-exporter")
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
@@ -138,7 +139,7 @@ class LokiOperatorCharm(CharmBase):
 
         self.resources_patch = KubernetesComputeResourcesPatch(
             self,
-            self._container.name,
+            self._loki_container.name,
             resource_reqs_func=self._resource_reqs_from_config,
         )
 
@@ -211,6 +212,9 @@ class LokiOperatorCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
+        self.framework.observe(
+            self.on.node_exporter_pebble_ready, self._on_node_exporter_pebble_ready
+        )
 
         self.framework.observe(
             self.loki_provider.on.loki_push_api_alert_rules_changed,
@@ -250,6 +254,16 @@ class LokiOperatorCharm(CharmBase):
             self.unit.set_workload_version(version)
         else:
             logger.debug("Cannot set workload version at this time: could not get Loki version.")
+
+    def _on_node_exporter_pebble_ready(self, _):
+        current_layer = self._node_exporter_container.get_plan()
+        new_layer = self._node_exporter_pebble_layer
+        restart = current_layer.services != new_layer.services
+
+        if restart:
+            self._node_exporter_container.add_layer("node-exporter", new_layer, combine=True)
+            self._node_exporter_container.restart("node-exporter")
+            logger.info("Node Exporter (re)started")
 
     def _on_alertmanager_change(self, _):
         self._configure()
@@ -316,6 +330,30 @@ class LokiOperatorCharm(CharmBase):
         return pebble_layer
 
     @property
+    def _node_exporter_pebble_layer(self) -> Layer:
+        """Construct the pebble layer.
+
+        Returns:
+            a Pebble layer specification for the Loki workload container.
+        """
+        pebble_layer = Layer(
+            {
+                "summary": "Node Exporter layer",
+                "description": "pebble config layer for Node Exporter",
+                "services": {
+                    "node-exporter": {
+                        "override": "replace",
+                        "summary": "node exporter",
+                        "command": "/bin/node_exporter",
+                        "startup": "enabled",
+                    },
+                },
+            }
+        )
+
+        return pebble_layer
+
+    @property
     def hostname(self) -> str:
         """Unit's hostname."""
         return socket.getfqdn()
@@ -338,6 +376,11 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def scrape_jobs(self) -> List[Dict[str, Any]]:
+        """Loki and node exporter scrape jobs."""
+        return self.loki_scrape_jobs + self.node_exporter_scrape_jobs
+
+    @property
+    def loki_scrape_jobs(self) -> List[Dict[str, Any]]:
         """Generate scrape jobs.
 
         Note: We're generating a scrape job for the leader only because loki is not intended to
@@ -352,12 +395,18 @@ class LokiOperatorCharm(CharmBase):
         return [job]
 
     @property
+    def node_exporter_scrape_jobs(self) -> List[Dict[str, Any]]:
+        """Generate scrape jobs for the node exporter."""
+        job: Dict[str, Any] = {"static_configs": [{"targets": [f"{self.hostname}:9100"]}]}
+        return [job]
+
+    @property
     def _certs_on_disk(self) -> bool:
         """Check if the TLS setup is ready on disk."""
         return (
-            self._container.can_connect()
-            and self._container.exists(CERT_FILE)
-            and self._container.exists(KEY_FILE)
+            self._loki_container.can_connect()
+            and self._loki_container.exists(CERT_FILE)
+            and self._loki_container.exists(KEY_FILE)
         )
 
     @property
@@ -385,13 +434,13 @@ class LokiOperatorCharm(CharmBase):
                 )
 
         # "can_connect" is a racy check, so we do it once here (instead of in collect-status)
-        if self._container.can_connect():
+        if self._loki_container.can_connect():
             self._stored.status["config"] = to_tuple(ActiveStatus())
         else:
             self._stored.status["config"] = to_tuple(MaintenanceStatus("Configuring Loki"))
             return
 
-        current_layer = self._container.get_plan()
+        current_layer = self._loki_container.get_plan()
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
 
@@ -411,8 +460,8 @@ class LokiOperatorCharm(CharmBase):
         restart = self._update_config(config) or restart
 
         if restart:
-            self._container.add_layer(self._name, new_layer, combine=True)
-            self._container.restart(self._name)
+            self._loki_container.add_layer(self._name, new_layer, combine=True)
+            self._loki_container.restart(self._name)
             logger.info("Loki (re)started")
 
         if isinstance(to_status(self._stored.status["rules"]), BlockedStatus):
@@ -434,32 +483,32 @@ class LokiOperatorCharm(CharmBase):
     def _update_config(self, config: dict) -> bool:
         if self._running_config() != config:
             config_as_yaml = yaml.safe_dump(config)
-            self._container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
+            self._loki_container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
             logger.info("Pushed new configuration")
             return True
 
         return False
 
     def _update_cert(self):
-        if not self._container.can_connect():
+        if not self._loki_container.can_connect():
             return
 
         ca_cert_path = Path(self._ca_cert_path)
 
         if self._certs_in_reldata:
             # Save the workload certificates
-            self._container.push(
+            self._loki_container.push(
                 CERT_FILE,
                 self.server_cert.cert,  # pyright: ignore
                 make_dirs=True,
             )
-            self._container.push(
+            self._loki_container.push(
                 KEY_FILE,
                 self.server_cert.key,  # pyright: ignore
                 make_dirs=True,
             )
             # Save the CA among the trusted CAs and trust it
-            self._container.push(
+            self._loki_container.push(
                 ca_cert_path,
                 self.server_cert.ca,  # pyright: ignore
                 make_dirs=True,
@@ -469,14 +518,14 @@ class LokiOperatorCharm(CharmBase):
             ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
             ca_cert_path.write_text(self.server_cert.ca)  # pyright: ignore
         else:
-            self._container.remove_path(CERT_FILE, recursive=True)
-            self._container.remove_path(KEY_FILE, recursive=True)
-            self._container.remove_path(ca_cert_path, recursive=True)
+            self._loki_container.remove_path(CERT_FILE, recursive=True)
+            self._loki_container.remove_path(KEY_FILE, recursive=True)
+            self._loki_container.remove_path(ca_cert_path, recursive=True)
 
             # Repeat for the charm container.
             ca_cert_path.unlink(missing_ok=True)
 
-        self._container.exec(["update-ca-certificates", "--fresh"]).wait()
+        self._loki_container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _alerting_config(self) -> str:
@@ -497,11 +546,11 @@ class LokiOperatorCharm(CharmBase):
 
     def _running_config(self) -> Dict[str, Any]:
         """Get the on-disk Loki config."""
-        if not self._container.can_connect():
+        if not self._loki_container.can_connect():
             return {}
 
         try:
-            return yaml.safe_load(self._container.pull(LOKI_CONFIG, encoding="utf-8").read())
+            return yaml.safe_load(self._loki_container.pull(LOKI_CONFIG, encoding="utf-8").read())
         except (FileNotFoundError, Error):
             return {}
 
@@ -518,9 +567,9 @@ class LokiOperatorCharm(CharmBase):
         """Ensure that the workload container has the appropriate directory structure."""
         # create tenant dir so that the /loki/api/v1/rules endpoint returns "no rule groups found"
         # instead of "unable to read rule dir /loki/rules/fake: no such file or directory"
-        if self._container.can_connect():
+        if self._loki_container.can_connect():
             try:
-                self._container.make_dir(self.rules_dir_tenant, make_parents=True)
+                self._loki_container.make_dir(self.rules_dir_tenant, make_parents=True)
                 return True
             except (FileNotFoundError, ProtocolError, PathError):
                 logger.debug("Could not create loki directory.")
@@ -550,21 +599,21 @@ class LokiOperatorCharm(CharmBase):
             rules = yaml.dump({"groups": alert_rules["groups"]})
             file_mappings["{}_alert.rules".format(identifier)] = rules
 
-        if self._container.can_connect():
+        if self._loki_container.can_connect():
             for filename, content in file_mappings.items():
                 path = os.path.join(self.rules_dir_tenant, filename)
-                self._container.push(path, content, make_dirs=True)
+                self._loki_container.push(path, content, make_dirs=True)
         logger.debug("Saved alert rules to disk")
 
     def _remove_alert_rules_files(self) -> None:
         """Remove alert rules files from workload container."""
-        if not self._container.can_connect():
+        if not self._loki_container.can_connect():
             logger.debug("Cannot connect to container to remove alert rule files!")
             return
 
-        files = self._container.list_files(self.rules_dir_tenant)
+        files = self._loki_container.list_files(self.rules_dir_tenant)
         for f in files:
-            self._container.remove_path(f.path)
+            self._loki_container.remove_path(f.path)
 
     @property
     def _internal_url(self) -> str:
@@ -631,9 +680,9 @@ class LokiOperatorCharm(CharmBase):
         Returns:
             A string equal to the Loki version
         """
-        if not self._container.can_connect():
+        if not self._loki_container.can_connect():
             return None
-        version_output, _ = self._container.exec(["/usr/bin/loki", "-version"]).wait_output()
+        version_output, _ = self._loki_container.exec(["/usr/bin/loki", "-version"]).wait_output()
         # Output looks like this:
         # loki, version 2.4.1 (branch: HEAD, ...
         result = re.search(r"version (\d*\.\d*\.\d*)", version_output)
