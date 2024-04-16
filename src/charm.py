@@ -33,13 +33,13 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiAlertRulesChanged,
     LokiPushApiProvider,
 )
-from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
     ResourceRequirements,
     adjust_resource_requirements,
 )
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
@@ -128,6 +128,8 @@ class LokiOperatorCharm(CharmBase):
 
         self._loki_container = self.unit.get_container(self._name)
         self._node_exporter_container = self.unit.get_container("node-exporter")
+        self.unit.open_port(protocol="tcp", port=self._port)
+
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
@@ -146,8 +148,7 @@ class LokiOperatorCharm(CharmBase):
         self.server_cert = CertHandler(
             self,
             key="loki-server-cert",
-            peer_relation_name="replicas",
-            extra_sans_dns=[self.hostname],
+            sans=[self.hostname],
         )
         # Update certs here in init to avoid code ordering issues
         self._update_cert()
@@ -371,7 +372,7 @@ class LokiOperatorCharm(CharmBase):
         # are routable virtually exclusively inside the cluster (as they rely)
         # on the cluster's DNS service, while the ip address is _sometimes_
         # routable from the outside, e.g., when deploying on MicroK8s on Linux.
-        scheme = "https" if self.server_cert.cert else "http"
+        scheme = "https" if self.server_cert.server_cert else "http"
         return f"{scheme}://{self.hostname}:{self._port}"
 
     @property
@@ -414,9 +415,9 @@ class LokiOperatorCharm(CharmBase):
         """Check if the certificate is available in relation data."""
         return (
             self.server_cert.enabled
-            and (self.server_cert.cert is not None)
-            and (self.server_cert.key is not None)
-            and (self.server_cert.ca is not None)
+            and (self.server_cert.server_cert is not None)
+            and (self.server_cert.private_key is not None)
+            and (self.server_cert.ca_cert is not None)
         )
 
     ##############################################
@@ -450,7 +451,7 @@ class LokiOperatorCharm(CharmBase):
             external_url=self._external_url,
             ingestion_rate_mb=int(self.config["ingestion-rate-mb"]),
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
-            http_tls=(self.server_cert.cert is not None),
+            http_tls=(self.server_cert.server_cert is not None),
         ).build()
 
         # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
@@ -499,24 +500,24 @@ class LokiOperatorCharm(CharmBase):
             # Save the workload certificates
             self._loki_container.push(
                 CERT_FILE,
-                self.server_cert.cert,  # pyright: ignore
+                self.server_cert.server_cert,  # pyright: ignore
                 make_dirs=True,
             )
             self._loki_container.push(
                 KEY_FILE,
-                self.server_cert.key,  # pyright: ignore
+                self.server_cert.private_key,  # pyright: ignore
                 make_dirs=True,
             )
             # Save the CA among the trusted CAs and trust it
             self._loki_container.push(
                 ca_cert_path,
-                self.server_cert.ca,  # pyright: ignore
+                self.server_cert.ca_cert,  # pyright: ignore
                 make_dirs=True,
             )
 
             # Repeat for the charm container. We need it there for loki client requests.
             ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-            ca_cert_path.write_text(self.server_cert.ca)  # pyright: ignore
+            ca_cert_path.write_text(self.server_cert.ca_cert)  # pyright: ignore
         else:
             self._loki_container.remove_path(CERT_FILE, recursive=True)
             self._loki_container.remove_path(KEY_FILE, recursive=True)
