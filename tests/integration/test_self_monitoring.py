@@ -4,10 +4,12 @@
 
 import asyncio
 import logging
+from pathlib import Path
 
 import pytest
 import requests
-from helpers import get_unit_address, loki_endpoint_request, oci_image
+import yaml
+from helpers import get_unit_address, loki_endpoint_request
 from requests.auth import HTTPBasicAuth
 
 logger = logging.getLogger(__name__)
@@ -15,6 +17,11 @@ logger = logging.getLogger(__name__)
 LOKI = "loki"
 GRAFANA = "grafana"
 PROMETHEUS = "prometheus"
+METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 
 
 class AddressNotFoundError(Exception):
@@ -28,7 +35,7 @@ async def test_deploy_and_relate_charms(ops_test, loki_charm):
     await asyncio.gather(
         ops_test.model.deploy(
             loki_charm,
-            resources={"loki-image": oci_image("./metadata.yaml", "loki-image")},
+            resources=resources,
             application_name=LOKI,
             trust=True,
         ),
