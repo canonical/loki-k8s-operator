@@ -78,6 +78,7 @@ async def test_query_metrics_from_prometheus(ops_test):
     except requests.exceptions.RequestException:
         assert False
 
+
 @pytest.mark.xfail
 async def test_dashboard_exists(ops_test):
     address = await get_unit_address(ops_test, GRAFANA, 0)
