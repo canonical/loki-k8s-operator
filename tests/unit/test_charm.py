@@ -4,6 +4,7 @@
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import json
+import os
 import unittest
 from io import BytesIO
 from unittest.mock import Mock, PropertyMock, patch
@@ -114,6 +115,7 @@ class TestCharm(unittest.TestCase):
             new_callable=PropertyMock,
             return_value="3.14159",
         )
+        os.environ["JUJU_VERSION"] = "3.0.3"
         self.mock_version = version_patcher.start()
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
@@ -173,6 +175,7 @@ class TestConfigFile(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self, *_):
+        os.environ["JUJU_VERSION"] = "3.0.3"
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
             "charm.LokiOperatorCharm._check_alert_rules",
@@ -266,6 +269,7 @@ class TestPebblePlan(unittest.TestCase):
         """Scenario: A loki cluster is deployed without any relations."""
         is_leader = True
         num_consumer_apps = 3
+        os.environ["JUJU_VERSION"] = "3.0.3"
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
 
@@ -302,6 +306,7 @@ class TestDelayedPebbleReady(unittest.TestCase):
     @k8s_resource_multipatch
     @patch("lightkube.core.client.GenericSyncClient")
     def setUp(self, *_):
+        os.environ["JUJU_VERSION"] = "3.0.3"
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.check_alert_rules_patcher = patch(
             "charm.LokiOperatorCharm._check_alert_rules",
@@ -395,6 +400,7 @@ class TestAppRelationData(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self, *_) -> None:
+        os.environ["JUJU_VERSION"] = "3.0.3"
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
@@ -437,6 +443,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
     @patch("lightkube.core.client.GenericSyncClient")
     @patch.object(Container, "exec", new=FakeProcessVersionCheck)
     def setUp(self, *_):
+        os.environ["JUJU_VERSION"] = "3.0.3"
         # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
         self.patcher = patch("urllib.request.urlopen", new=Mock())
         self.mock_request = self.patcher.start()
