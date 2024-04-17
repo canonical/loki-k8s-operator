@@ -40,6 +40,7 @@ class ConfigBuilder:
         external_url: str,
         ingestion_rate_mb: int,
         ingestion_burst_size_mb: int,
+        retention_period: int,
         http_tls: bool = False,
     ):
         """Init method."""
@@ -49,6 +50,7 @@ class ConfigBuilder:
         self.ingestion_rate_mb = ingestion_rate_mb
         self.ingestion_burst_size_mb = ingestion_burst_size_mb
         self.http_tls = http_tls
+        self.retention_period = retention_period
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -66,6 +68,7 @@ class ConfigBuilder:
             "chunk_store_config": self._chunk_store_config,
             "frontend": self._frontend,
             "querier": self._querier,
+            "compactor": self._compactor,
         }
 
     @property
@@ -109,7 +112,7 @@ class ConfigBuilder:
                     "index": {"period": "24h", "prefix": "index_"},
                     "object_store": "filesystem",
                     "schema": "v11",
-                    "store": "boltdb",
+                    "store": "boltdb-shipper",
                 }
             ]
         }
@@ -139,6 +142,10 @@ class ConfigBuilder:
     @property
     def _limits_config(self) -> dict:
         # Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
+        if self.retention_period != 0:
+            retention_period = f"{self.retention_period}h"
+        else:
+            retention_period = self.retention_period
         return {
             # For convenience, we use an integer but Loki takes a float
             "ingestion_rate_mb": float(self.ingestion_rate_mb),
@@ -150,6 +157,7 @@ class ConfigBuilder:
             # This charmed operator is intended for running a single loki instances, so we don't need to split queries
             # https://community.grafana.com/t/too-many-outstanding-requests-on-loki-2-7-1/78249/9
             "split_queries_by_interval": "0",
+            "retention_period": retention_period,
         }
 
     @property
@@ -196,4 +204,13 @@ class ConfigBuilder:
         return {
             # The maximum number of concurrent queries allowed. Default is 10.
             "max_concurrent": 20,
+        }
+
+    @property
+    def _compactor(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#compactor
+        retention_enabled = self.retention_period != 0
+        return {
+            # Activate custom retention. Default is False.
+            "retention_enabled": retention_enabled,
         }

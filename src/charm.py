@@ -391,6 +391,11 @@ class LokiOperatorCharm(CharmBase):
             self._stored.status["config"] = to_tuple(MaintenanceStatus("Configuring Loki"))
             return
 
+        if 0 < int(self.config["retention-period"]) < 24:
+            self._stored.status["config"] = to_tuple(
+                BlockedStatus("The minimum retention period is 24 hours.")
+            )
+
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
@@ -401,6 +406,7 @@ class LokiOperatorCharm(CharmBase):
             external_url=self._external_url,
             ingestion_rate_mb=int(self.config["ingestion-rate-mb"]),
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
+            retention_period=int(self.config["retention-period"]),
             http_tls=(self.server_cert.server_cert is not None),
         ).build()
 
