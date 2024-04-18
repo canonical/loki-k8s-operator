@@ -127,7 +127,7 @@ class LokiOperatorCharm(CharmBase):
         )
 
         self._container = self.unit.get_container(self._name)
-        self.unit.open_port(protocol="tcp", port=self._port)
+        self.unit.set_ports(self._port)
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
