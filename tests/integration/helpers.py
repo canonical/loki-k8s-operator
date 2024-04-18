@@ -62,6 +62,36 @@ async def loki_rules(ops_test, app_name) -> dict:
         return {}
 
 
+async def loki_services(ops_test, app_name: str) -> dict:
+    address = await get_unit_address(ops_test, app_name, 0)
+    url = f"http://{address}:3100/services"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            services = {}
+            for line in response.text.split("\n"):
+                if line.strip():
+                    key, value = line.strip().split(" => ")
+                    services[key.strip()] = value.strip()
+            return services
+        return {}
+    except requests.exceptions.RequestException:
+        return {}
+
+
+async def loki_config(ops_test, app_name: str) -> dict:
+    address = await get_unit_address(ops_test, app_name, 0)
+    url = f"http://{address}:3100/config"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            yaml_dict = yaml.safe_load(response.text)
+            return yaml_dict
+        return {}
+    except requests.exceptions.RequestException:
+        return {}
+
+
 async def loki_endpoint_request(ops_test, app_name: str, endpoint: str, unit_num: int = 0):
     address = await get_unit_address(ops_test, app_name, unit_num)
     url = urljoin(f"http://{address}:3100/", endpoint)
