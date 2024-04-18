@@ -16,7 +16,9 @@ KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
 
 LOKI_DIR = "/loki"
 CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
+COMPACTOR_DIR = os.path.join(LOKI_DIR, "compactor")
 BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
+BOLTDB_CACHE_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-cache")
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
 
@@ -135,7 +137,11 @@ class ConfigBuilder:
     @property
     def _storage_config(self) -> dict:
         return {
-            "boltdb": {"directory": BOLTDB_DIR},
+            "boltdb_shipper": {
+                "active_index_directory": BOLTDB_DIR,
+                "shared_store": "filesystem",
+                "cache_location": BOLTDB_CACHE_DIR,
+            },
             "filesystem": {"directory": CHUNKS_DIR},
         }
 
@@ -213,4 +219,6 @@ class ConfigBuilder:
         return {
             # Activate custom retention. Default is False.
             "retention_enabled": retention_enabled,
+            "working_directory": COMPACTOR_DIR,
+            "shared_store": "filesystem",
         }
