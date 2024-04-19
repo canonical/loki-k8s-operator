@@ -136,6 +136,7 @@ class ConfigBuilder:
 
     @property
     def _storage_config(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#storage_config
         return {
             "boltdb_shipper": {
                 "active_index_directory": BOLTDB_DIR,
