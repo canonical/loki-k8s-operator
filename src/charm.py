@@ -391,11 +391,6 @@ class LokiOperatorCharm(CharmBase):
             self._stored.status["config"] = to_tuple(MaintenanceStatus("Configuring Loki"))
             return
 
-        if 0 < int(self.config["retention-period"]) < 24:
-            self._stored.status["config"] = to_tuple(
-                BlockedStatus("The minimum retention period is 24 hours.")
-            )
-
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services

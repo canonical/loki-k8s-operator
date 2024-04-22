@@ -150,7 +150,7 @@ class ConfigBuilder:
     def _limits_config(self) -> dict:
         # Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
         if self.retention_period != 0:
-            retention_period = f"{self.retention_period}h"
+            retention_period = f"{self.retention_period}d"
         else:
             retention_period = self.retention_period
         return {

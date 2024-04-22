@@ -42,16 +42,13 @@ async def test_retention_configs(ops_test: OpsTest):
         ]
     )
 
-    await ops_test.model.applications[app_name].set_config({"retention-period": "24"})
+    await ops_test.model.applications[app_name].set_config({"retention-period": "3"})
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     configs_with_retention = await loki_config(ops_test, app_name)
     assert all(
         [
-            configs_with_retention["limits_config"]["retention_period"] == "1d",
+            configs_with_retention["limits_config"]["retention_period"] == "3d",
             configs_with_retention["compactor"]["retention_enabled"],
         ]
     )
-
-    await ops_test.model.applications[app_name].set_config({"retention-period": "8"})
-    await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=60)
