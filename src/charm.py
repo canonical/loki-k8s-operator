@@ -80,6 +80,7 @@ class CompositeStatus(TypedDict):
     k8s_patch: Tuple[str, str]
     config: Tuple[str, str]
     rules: Tuple[str, str]
+    retention: Tuple[str, str]
 
 
 def to_tuple(status: StatusBase) -> Tuple[str, str]:
@@ -123,6 +124,7 @@ class LokiOperatorCharm(CharmBase):
                 k8s_patch=to_tuple(ActiveStatus()),
                 config=to_tuple(ActiveStatus()),
                 rules=to_tuple(ActiveStatus()),
+                retention=to_tuple(ActiveStatus()),
             )
         )
 
@@ -387,8 +389,18 @@ class LokiOperatorCharm(CharmBase):
         # "can_connect" is a racy check, so we do it once here (instead of in collect-status)
         if self._container.can_connect():
             self._stored.status["config"] = to_tuple(ActiveStatus())
+
+        # The config validity check does not return on error because if a lifecycle event
+        # comes in after a config change, we still want Loki to continue to function even
+        # with the invalid config.
         else:
             self._stored.status["config"] = to_tuple(MaintenanceStatus("Configuring Loki"))
+            return
+
+        if 0 > self.config["retention-period"]:
+            self._stored.status["retention"] = to_tuple(
+                BlockedStatus("Please provide a non-negative retention duration")
+            )
             return
 
         current_layer = self._container.get_plan()

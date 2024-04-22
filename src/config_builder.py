@@ -149,10 +149,6 @@ class ConfigBuilder:
     @property
     def _limits_config(self) -> dict:
         # Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
-        if self.retention_period != 0:
-            retention_period = f"{self.retention_period}d"
-        else:
-            retention_period = self.retention_period
         return {
             # For convenience, we use an integer but Loki takes a float
             "ingestion_rate_mb": float(self.ingestion_rate_mb),
@@ -164,7 +160,7 @@ class ConfigBuilder:
             # This charmed operator is intended for running a single loki instances, so we don't need to split queries
             # https://community.grafana.com/t/too-many-outstanding-requests-on-loki-2-7-1/78249/9
             "split_queries_by_interval": "0",
-            "retention_period": retention_period,
+            "retention_period": f"{self.retention_period}d",
         }
 
     @property
