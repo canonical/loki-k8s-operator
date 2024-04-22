@@ -80,6 +80,7 @@ class CompositeStatus(TypedDict):
     k8s_patch: Tuple[str, str]
     config: Tuple[str, str]
     rules: Tuple[str, str]
+    retention: Tuple[str, str]
 
 
 def to_tuple(status: StatusBase) -> Tuple[str, str]:
@@ -123,12 +124,13 @@ class LokiOperatorCharm(CharmBase):
                 k8s_patch=to_tuple(ActiveStatus()),
                 config=to_tuple(ActiveStatus()),
                 rules=to_tuple(ActiveStatus()),
+                retention=to_tuple(ActiveStatus()),
             )
         )
 
         self._loki_container = self.unit.get_container(self._name)
         self._node_exporter_container = self.unit.get_container("node-exporter")
-        self.unit.open_port(protocol="tcp", port=self._port)
+        self.unit.set_ports(self._port)
 
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
@@ -436,8 +438,18 @@ class LokiOperatorCharm(CharmBase):
         # "can_connect" is a racy check, so we do it once here (instead of in collect-status)
         if self._loki_container.can_connect():
             self._stored.status["config"] = to_tuple(ActiveStatus())
+
+        # The config validity check does not return on error because if a lifecycle event
+        # comes in after a config change, we still want Loki to continue to function even
+        # with the invalid config.
         else:
             self._stored.status["config"] = to_tuple(MaintenanceStatus("Configuring Loki"))
+            return
+
+        if 0 > int(self.config["retention-period"]):
+            self._stored.status["retention"] = to_tuple(
+                BlockedStatus("Please provide a non-negative retention duration")
+            )
             return
 
         current_layer = self._loki_container.get_plan()
@@ -450,6 +462,7 @@ class LokiOperatorCharm(CharmBase):
             external_url=self._external_url,
             ingestion_rate_mb=int(self.config["ingestion-rate-mb"]),
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
+            retention_period=int(self.config["retention-period"]),
             http_tls=(self.server_cert.server_cert is not None),
         ).build()
 
