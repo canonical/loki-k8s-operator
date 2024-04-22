@@ -37,3 +37,11 @@ options:
       Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
     type: int
     default: 15
+  retention-period:
+    description: |
+      Sets a global retention period for log streams in Loki. A value of 0 disables retention (default).
+      Minimum retention period is 1d.
+      Specify the period in days. For example, to set a 48-day retention period, use `48`.
+      Specifying retention periods for individual streams is not currently supported.
+    type: int
+    default: 0
