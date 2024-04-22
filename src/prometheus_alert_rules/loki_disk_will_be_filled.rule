@@ -1,8 +1,0 @@
-alert: LokiDiskIsFilling
-expr: ((sum(node_filesystem_free_bytes{mountpoint="/loki/chunks"}) / sum(rate(loki_ingester_chunk_stored_bytes_total[5m]))) / 360) < 24
-for: 5m
-labels:
-  severity: critical
-annotations:
-  summary: Loki disk is filling (instance {{ $labels.instance }})
-  description: "The {{ $labels.job }} is experiencing {{ printf \"%.2f\" $value }}% increase of panics\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
