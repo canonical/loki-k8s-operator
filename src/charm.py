@@ -397,7 +397,7 @@ class LokiOperatorCharm(CharmBase):
             self._stored.status["config"] = to_tuple(MaintenanceStatus("Configuring Loki"))
             return
 
-        if 0 > self.config["retention-period"]:
+        if 0 > int(self.config["retention-period"]):
             self._stored.status["retention"] = to_tuple(
                 BlockedStatus("Please provide a non-negative retention duration")
             )
