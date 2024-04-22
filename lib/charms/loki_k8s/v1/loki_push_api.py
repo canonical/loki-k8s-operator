@@ -519,7 +519,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 8
+LIBPATCH = 9
 
 PYDEPS = ["cosl"]
 
@@ -534,12 +534,17 @@ PROMTAIL_BASE_URL = "https://github.com/canonical/loki-k8s-operator/releases/dow
 # To update Promtail version you only need to change the PROMTAIL_VERSION and
 # update all sha256 sums in PROMTAIL_BINARIES. To support a new architecture
 # you only need to add a new key value pair for the architecture in PROMTAIL_BINARIES.
-PROMTAIL_VERSION = "v2.5.0"
+PROMTAIL_VERSION = "v2.9.7"
 PROMTAIL_BINARIES = {
     "amd64": {
         "filename": "promtail-static-amd64",
-        "zipsha": "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d",
-        "binsha": "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9",
+        "zipsha": "6873cbdabf23062aeefed6de5f00ff382710332af3ab90a48c253ea17e08f465",
+        "binsha": "28da9b99f81296fe297831f3bc9d92aea43b4a92826b8ff04ba433b8cb92fb50",
+    },
+    "arm64": {
+        "filename": "promtail-static-arm64",
+        "zipsha": "c083fdb45e5c794103f974eeb426489b4142438d9e10d0ae272b2aff886e249b",
+        "binsha": "4cd055c477a301c0bdfdbcea514e6e93f6df5d57425ce10ffc77f3e16fec1ddf",
     },
 }
 
@@ -1831,7 +1836,12 @@ class LogProxyConsumer(ConsumerBase):
 
         # architecture used for promtail binary
         arch = platform.processor()
-        self._arch = "amd64" if arch == "x86_64" else arch
+        if arch in ["x86_64", "amd64"]:
+            self._arch = "amd64"
+        elif arch in ["aarch64", "arm64", "armv8b", "armv8l"]:
+            self._arch = "arm64"
+        else:
+            self._arch = arch
 
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_created, self._on_relation_created)
