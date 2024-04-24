@@ -16,9 +16,12 @@ KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
 
 LOKI_DIR = "/loki"
 CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
+WAL_DIR = os.path.join(LOKI_DIR, "wal")
 COMPACTOR_DIR = os.path.join(LOKI_DIR, "compactor")
 BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
 BOLTDB_CACHE_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-cache")
+TSDB_DIR = os.path.join(LOKI_DIR, "tsdb-index")
+TSDB_CACHE_DIR = os.path.join(LOKI_DIR, "tsdb-cache")
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
 
@@ -91,7 +94,7 @@ class ConfigBuilder:
     def _ingester(self) -> dict:
         return {
             "wal": {
-                "dir": os.path.join(CHUNKS_DIR, "wal"),
+                "dir": WAL_DIR,
                 "enabled": True,
                 "flush_on_shutdown": True,
             }
@@ -115,7 +118,14 @@ class ConfigBuilder:
                     "object_store": "filesystem",
                     "schema": "v11",
                     "store": "boltdb-shipper",
-                }
+                },
+                {
+                    "from": "2024-04-24",
+                    "index": {"period": "24h", "prefix": "index_"},
+                    "object_store": "filesystem",
+                    "schema": "v12",
+                    "store": "tsdb",
+                },
             ]
         }
 
@@ -142,6 +152,11 @@ class ConfigBuilder:
                 "active_index_directory": BOLTDB_DIR,
                 "shared_store": "filesystem",
                 "cache_location": BOLTDB_CACHE_DIR,
+            },
+            "boltdb_shipper": {
+                "active_index_directory": TSDB_DIR,
+                "shared_store": "filesystem",
+                "cache_location": TSDB_CACHE_DIR,
             },
             "filesystem": {"directory": CHUNKS_DIR},
         }
