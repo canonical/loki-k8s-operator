@@ -14,7 +14,10 @@ logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = METADATA["name"]
-resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
+resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 
 
 @pytest.mark.abort_on_fail
