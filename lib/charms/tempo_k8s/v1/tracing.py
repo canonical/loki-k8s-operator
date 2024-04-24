@@ -106,7 +106,7 @@ IngesterProtocol = Literal[
     "otlp_grpc", "otlp_http", "zipkin", "tempo", "jaeger_http_thrift", "jaeger_grpc"
 ]
 
-RawIngester = Tuple[IngesterProtocol, int]
+RawIngester = Tuple[IngesterProtocol, int, str]
 BUILTIN_JUJU_KEYS = {"ingress-address", "private-address", "egress-subnets"}
 
 
@@ -190,6 +190,7 @@ class Ingester(BaseModel):  # noqa: D101
 
     protocol: IngesterProtocol
     port: int
+    path: Optional[str] = None
 
 
 class TracingProviderAppData(DatabagModel):  # noqa: D101
@@ -396,8 +397,8 @@ class TracingEndpointProvider(Object):
                     TracingProviderAppData(
                         host=self._host,
                         ingesters=[
-                            Ingester(port=port, protocol=protocol)
-                            for protocol, port in self._ingesters
+                            Ingester(port=port, protocol=protocol, path=path)
+                            for protocol, port, path in self._ingesters
                         ],
                     ).dump(relation.data[self._charm.app])
 
