@@ -34,6 +34,13 @@ containers:
         location: /loki/boltdb-shipper-active
       - storage: loki-chunks
         location: /loki/chunks
+  node-exporter:
+    resource: node-exporter-image
+    mounts:
+      - storage: active-index-directory
+        location: /loki/boltdb-shipper-active
+      - storage: loki-chunks
+        location: /loki/chunks
 
 storage:
   active-index-directory:
@@ -81,3 +88,7 @@ resources:
     description: Loki OCI image
     #upstream-source: ghcr.io/canonical/loki:2.7.4
     upstream-source: docker.io/ubuntu/loki:2-22.04
+  node-exporter-image:
+    type: oci-image
+    description: Node-exporter OCI image
+    upstream-source: docker.io/prom/node-exporter:v1.7.0

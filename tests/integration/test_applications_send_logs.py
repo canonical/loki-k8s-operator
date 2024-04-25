@@ -13,7 +13,10 @@ from helpers import is_loki_up, loki_api_query, oci_image
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
+resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 tester_resources = {
     "workload-image": oci_image(
         "./tests/integration/log-proxy-tester/metadata.yaml", "workload-image"

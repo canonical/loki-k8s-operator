@@ -15,7 +15,10 @@ logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 app_name = METADATA["name"]
-resources = {"loki-image": METADATA["resources"]["loki-image"]["upstream-source"]}
+resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 rules_app = "loki-tester"
 rules_app2 = "loki-tester2"
 rules_app3 = "loki-tester3"
