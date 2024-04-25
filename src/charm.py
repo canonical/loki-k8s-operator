@@ -346,7 +346,7 @@ class LokiOperatorCharm(CharmBase):
                     "node-exporter": {
                         "override": "replace",
                         "summary": "node exporter",
-                        "command": "/bin/node_exporter",
+                        "command": f"/bin/node_exporter {self._node_exporter_args}",
                         "startup": "enabled",
                     },
                 },
@@ -354,6 +354,15 @@ class LokiOperatorCharm(CharmBase):
         )
 
         return pebble_layer
+
+    @property
+    def _node_exporter_args(self) -> str:
+        args = [
+            "--collector.disable-defaults",
+            "--collector.filesystem",
+        ]
+
+        return " ".join(args)
 
     @property
     def hostname(self) -> str:
