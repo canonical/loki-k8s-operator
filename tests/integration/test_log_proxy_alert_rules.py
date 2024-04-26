@@ -4,13 +4,19 @@
 
 import asyncio
 import logging
+from pathlib import Path
 
 import pytest
+import yaml
 from helpers import loki_alerts, oci_image
 
 logger = logging.getLogger(__name__)
 
-resources = {"loki-image": oci_image("./metadata.yaml", "loki-image")}
+METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 tester_resources = {
     "workload-image": oci_image(
         "./tests/integration/log-proxy-tester/metadata.yaml", "workload-image"
