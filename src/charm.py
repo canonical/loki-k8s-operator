@@ -11,6 +11,7 @@ develop a new k8s charm using the Operator Framework:
 
     https://discourse.charmhub.io/t/4208
 """
+import datetime
 import logging
 import os
 import re
@@ -406,6 +407,9 @@ class LokiOperatorCharm(CharmBase):
         current_layer = self._container.get_plan()
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
+        v12_migration = self._get_v12_from_date() or (
+            datetime.date.today() + datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%d")
 
         config = ConfigBuilder(
             instance_addr=self.hostname,
@@ -415,6 +419,7 @@ class LokiOperatorCharm(CharmBase):
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
             retention_period=int(self.config["retention-period"]),
             http_tls=(self.server_cert.server_cert is not None),
+            v12_from=v12_migration,
         ).build()
 
         # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
@@ -507,6 +512,15 @@ class LokiOperatorCharm(CharmBase):
             return alerting_config
 
         return ",".join(alertmanagers)
+
+    def _get_v12_from_date(self) -> str:
+        """Get the 'from' date from the v12 schema in Loki config."""
+        running_config = self._running_config()
+        if running_config:
+            for config in running_config.get("schema_config", {}).get("configs", []):
+                if config.get("schema") == "v12":
+                    return config.get("from", "")
+        return ""
 
     def _running_config(self) -> Dict[str, Any]:
         """Get the on-disk Loki config."""

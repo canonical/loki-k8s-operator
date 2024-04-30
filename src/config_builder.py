@@ -16,11 +16,10 @@ KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
 
 LOKI_DIR = "/loki"
 CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
-WAL_DIR = os.path.join(LOKI_DIR, "wal")
 COMPACTOR_DIR = os.path.join(LOKI_DIR, "compactor")
 BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
 BOLTDB_CACHE_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-cache")
-TSDB_DIR = os.path.join(LOKI_DIR, "tsdb-index")
+TSDB_DIR = os.path.join(BOLTDB_DIR, "tsdb-index")
 TSDB_CACHE_DIR = os.path.join(LOKI_DIR, "tsdb-cache")
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
@@ -43,6 +42,7 @@ class ConfigBuilder:
         instance_addr: str,
         alertmanager_url: str,
         external_url: str,
+        v12_from: str,
         ingestion_rate_mb: int,
         ingestion_burst_size_mb: int,
         retention_period: int,
@@ -56,6 +56,7 @@ class ConfigBuilder:
         self.ingestion_burst_size_mb = ingestion_burst_size_mb
         self.http_tls = http_tls
         self.retention_period = retention_period
+        self.v12_from = v12_from
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -94,7 +95,7 @@ class ConfigBuilder:
     def _ingester(self) -> dict:
         return {
             "wal": {
-                "dir": WAL_DIR,
+                "dir": os.path.join(CHUNKS_DIR, "wal"),
                 "enabled": True,
                 "flush_on_shutdown": True,
             }
@@ -120,7 +121,7 @@ class ConfigBuilder:
                     "store": "boltdb-shipper",
                 },
                 {
-                    "from": "2024-04-24",
+                    "from": self.v12_from,
                     "index": {"period": "24h", "prefix": "index_"},
                     "object_store": "filesystem",
                     "schema": "v12",
@@ -153,7 +154,7 @@ class ConfigBuilder:
                 "shared_store": "filesystem",
                 "cache_location": BOLTDB_CACHE_DIR,
             },
-            "boltdb_shipper": {
+            "tsdb_shipper": {
                 "active_index_directory": TSDB_DIR,
                 "shared_store": "filesystem",
                 "cache_location": TSDB_CACHE_DIR,

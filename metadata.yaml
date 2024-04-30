@@ -34,23 +34,13 @@ containers:
         location: /loki/boltdb-shipper-active
       - storage: loki-chunks
         location: /loki/chunks
-      - storage: loki-wal
-        location: /loki/wal
-      - storage: tsdb-index
-        location: /loki/tsdb-index
 storage:
   active-index-directory:
     type: filesystem
     description: Mount point in which Loki will store index
-  tsdb-index:
-    type: filesystem
-    description: Mount point in which Loki will store TSDB indices
   loki-chunks:
     type: filesystem
     description: Mount point in which Loki will store chunks (objects)
-  loki-wal:
-    type: filesystem
-    description: Mount point in which Loki will store write ahead logs
 
 
 provides:
