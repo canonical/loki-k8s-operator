@@ -42,7 +42,7 @@ class ConfigBuilder:
         instance_addr: str,
         alertmanager_url: str,
         external_url: str,
-        v12_from: str,
+        v12_migration_date: str,
         ingestion_rate_mb: int,
         ingestion_burst_size_mb: int,
         retention_period: int,
@@ -56,7 +56,7 @@ class ConfigBuilder:
         self.ingestion_burst_size_mb = ingestion_burst_size_mb
         self.http_tls = http_tls
         self.retention_period = retention_period
-        self.v12_from = v12_from
+        self.v12_migration_date = v12_migration_date
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -121,7 +121,7 @@ class ConfigBuilder:
                     "store": "boltdb-shipper",
                 },
                 {
-                    "from": self.v12_from,
+                    "from": self.v12_migration_date,
                     "index": {"period": "24h", "prefix": "index_"},
                     "object_store": "filesystem",
                     "schema": "v12",
