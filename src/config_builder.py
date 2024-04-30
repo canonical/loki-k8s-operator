@@ -16,6 +16,7 @@ KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
 
 LOKI_DIR = "/loki"
 CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
+LOKI_CONFIG_PERSISTED = os.path.join(CHUNKS_DIR, "loki-local-config.yaml")
 COMPACTOR_DIR = os.path.join(LOKI_DIR, "compactor")
 BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
 BOLTDB_CACHE_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-cache")

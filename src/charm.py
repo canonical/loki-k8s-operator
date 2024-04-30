@@ -50,6 +50,7 @@ from config_builder import (
     HTTP_LISTEN_PORT,
     KEY_FILE,
     LOKI_CONFIG,
+    LOKI_CONFIG_PERSISTED,
     RULES_DIR,
     ConfigBuilder,
 )
@@ -207,6 +208,8 @@ class LokiOperatorCharm(CharmBase):
             path=f"{external_url.path}/loki/api/v1/push",
         )
 
+        self.v12_migration_date = self._get_v12_migration_date()
+
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
@@ -239,9 +242,15 @@ class LokiOperatorCharm(CharmBase):
             event.add_status(to_status(status))
 
     def _on_config_changed(self, _):
+        if not self.v12_migration_date:
+            self.v12_migration_date = (datetime.date.today()).strftime("%Y-%m-%d")
         self._configure()
 
     def _on_upgrade_charm(self, _):
+        if not self.v12_migration_date:
+            self.v12_migration_date = (
+                datetime.date.today() + datetime.timedelta(days=1)
+            ).strftime("%Y-%m-%d")
         self._configure()
 
     def _on_server_cert_changed(self, _):
@@ -465,9 +474,6 @@ class LokiOperatorCharm(CharmBase):
         current_layer = self._loki_container.get_plan()
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
-        v12_migration_date = self._get_v12_migration_date() or (
-            datetime.date.today() + datetime.timedelta(days=1)
-        ).strftime("%Y-%m-%d")
 
         config = ConfigBuilder(
             instance_addr=self.hostname,
@@ -477,7 +483,7 @@ class LokiOperatorCharm(CharmBase):
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
             retention_period=int(self.config["retention-period"]),
             http_tls=(self.server_cert.server_cert is not None),
-            v12_migration_date=v12_migration_date,
+            v12_migration_date=self.v12_migration_date,
         ).build()
 
         # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
@@ -511,6 +517,7 @@ class LokiOperatorCharm(CharmBase):
         if self._running_config() != config:
             config_as_yaml = yaml.safe_dump(config)
             self._loki_container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
+            self._loki_container.push(LOKI_CONFIG_PERSISTED, config_as_yaml, make_dirs=True)
             logger.info("Pushed new configuration")
             return True
 
@@ -573,11 +580,18 @@ class LokiOperatorCharm(CharmBase):
 
     def _get_v12_migration_date(self) -> str:
         """Get the 'from' date from the v12 schema in Loki config."""
-        running_config = self._running_config()
-        if running_config:
-            for config in running_config.get("schema_config", {}).get("configs", []):
-                if config.get("schema") == "v12":
-                    return config.get("from", "")
+        if not self._loki_container.can_connect():
+            return ""
+        try:
+            running_config = yaml.safe_load(
+                self._loki_container.pull(LOKI_CONFIG_PERSISTED, encoding="utf-8").read()
+            )
+        except PathError:
+            return ""
+
+        for config in running_config.get("schema_config", {}).get("configs", []):
+            if config.get("schema") == "v12":
+                return config.get("from", "")
         return ""
 
     def _running_config(self) -> Dict[str, Any]:
