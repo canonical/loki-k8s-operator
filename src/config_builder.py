@@ -16,7 +16,13 @@ KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
 
 LOKI_DIR = "/loki"
 CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
-LOKI_CONFIG_PERSISTED = os.path.join(CHUNKS_DIR, "loki-local-config.yaml")
+
+# Path to a persisted config backup, for reference purposes.
+# Currently needed to migrate users between BoltDB-shipper and TSDB without needing a manual pre-upgrade action
+# Probably isn't the best place to store such config, but it's left here as the chunks dir is persisted
+# TODO: change this when persisted volumes are unified
+LOKI_CONFIG_BACKUP = os.path.join(CHUNKS_DIR, "loki-local-config.yaml.bak")
+
 COMPACTOR_DIR = os.path.join(LOKI_DIR, "compactor")
 BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
 BOLTDB_CACHE_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-cache")
@@ -112,24 +118,28 @@ class ConfigBuilder:
 
     @property
     def _schema_config(self) -> dict:
-        return {
-            "configs": [
-                {
-                    "from": "2020-10-24",
-                    "index": {"period": "24h", "prefix": "index_"},
-                    "object_store": "filesystem",
-                    "schema": "v11",
-                    "store": "boltdb-shipper",
-                },
+        configs = [
+            {
+                "from": "2020-10-24",
+                "index": {"period": "24h", "prefix": "index_"},
+                "object_store": "filesystem",
+                "schema": "v11",
+                "store": "boltdb-shipper",
+            }
+        ]
+
+        if self.v12_migration_date:
+            configs.append(
                 {
                     "from": self.v12_migration_date,
                     "index": {"period": "24h", "prefix": "index_"},
                     "object_store": "filesystem",
                     "schema": "v12",
                     "store": "tsdb",
-                },
-            ]
-        }
+                }
+            )
+
+        return {"configs": configs}
 
     @property
     def _server(self) -> dict:
@@ -148,20 +158,23 @@ class ConfigBuilder:
 
     @property
     def _storage_config(self) -> dict:
-        # Ref: https://grafana.com/docs/loki/latest/configure/#storage_config
-        return {
+        storage_config = {
             "boltdb_shipper": {
                 "active_index_directory": BOLTDB_DIR,
                 "shared_store": "filesystem",
                 "cache_location": BOLTDB_CACHE_DIR,
             },
-            "tsdb_shipper": {
+            "filesystem": {"directory": CHUNKS_DIR},
+        }
+
+        if self.v12_migration_date:
+            storage_config["tsdb_shipper"] = {
                 "active_index_directory": TSDB_DIR,
                 "shared_store": "filesystem",
                 "cache_location": TSDB_CACHE_DIR,
-            },
-            "filesystem": {"directory": CHUNKS_DIR},
-        }
+            }
+
+        return storage_config
 
     @property
     def _limits_config(self) -> dict:
