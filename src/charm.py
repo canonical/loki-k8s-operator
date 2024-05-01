@@ -24,11 +24,13 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
+import ops
 import yaml
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
+from charms.loki_k8s.v0.charm_logging import log_charm
 from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiAlertRulesChanged,
     LokiPushApiProvider,
@@ -106,6 +108,7 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
         MetricsEndpointProvider,
     ],
 )
+@log_charm(logging_endpoints="logging_endpoints", server_cert="server_cert_path")
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
@@ -716,6 +719,13 @@ class LokiOperatorCharm(CharmBase):
     def tracing_endpoint(self) -> Optional[str]:
         """Tempo endpoint for charm tracing."""
         return self.tracing.otlp_http_endpoint()
+
+    @property
+    def logging_endpoints(self) -> Optional[List[str]]:
+        """Loki endpoint for charm logging."""
+        if self._loki_container.get_service(self._name).current is ops.pebble.ServiceStatus.ACTIVE:
+            return [self.loki_provider._endpoint(self.loki_provider._url)["url"]]
+        return []
 
     @property
     def server_cert_path(self) -> Optional[str]:

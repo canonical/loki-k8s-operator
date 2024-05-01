@@ -33,27 +33,21 @@ the certificate file.
 """
 
 import functools
-import inspect
 import logging
 import os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import (
-    Any,
     Callable,
-    Generator,
     Optional,
-    Sequence,
     Type,
     TypeVar,
     Union,
-    cast, List,
 )
 
 import logging_loki
 from ops.charm import CharmBase
 from ops.framework import Framework
-
 
 # The unique Charmhub library identifier, never change it
 LIBID = "52ee6051f4e54aedaa60aa04134d1a6d"
@@ -99,7 +93,6 @@ def charm_logging_disabled():
     os.environ[CHARM_LOGGING_ENABLED] = previous
 
 
-
 _C = TypeVar("_C", bound=Type[CharmBase])
 _T = TypeVar("_T", bound=type)
 _F = TypeVar("_F", bound=Type[Callable])
@@ -116,7 +109,7 @@ def _get_logging_endpoints(logging_endpoints_getter, self, charm):
             f"{charm}.{logging_endpoints_getter} returned None; quietly disabling "
             f"charm_logging for the run."
         )
-        return
+        return None
 
     errors = []
     logging_endpoints = tuple(logging_endpoints)
@@ -129,7 +122,9 @@ def _get_logging_endpoints(logging_endpoints_getter, self, charm):
 
     if errors:
         if sanitized_logging_endponts:
-            logger.error(f"{charm}.{logging_endpoints_getter} returned some invalid endpoint strings: {errors}")
+            logger.error(
+                f"{charm}.{logging_endpoints_getter} returned some invalid endpoint strings: {errors}"
+            )
         else:
             logger.error(
                 f"{charm}.{logging_endpoints_getter} should return an iterable of Loki push-api (compatible) endpoints (strings); "
@@ -149,8 +144,8 @@ def _get_server_cert(server_cert_getter, self, charm):
         logger.warning(
             f"{charm}.{server_cert_getter} returned None; sending logs over INSECURE connection."
         )
-        return
-    elif not Path(server_cert).is_absolute():
+        return None
+    if not Path(server_cert).is_absolute():
         raise ValueError(
             f"{charm}.{server_cert_getter} should return a valid tls cert absolute path (string | Path)); "
             f"got {server_cert} instead."
@@ -195,8 +190,8 @@ def _setup_root_logger_initializer(
             "juju_application": self.app.name,
             "juju_model": self.model.name,
             "juju_model_uuid": self.model.uuid,
-            "service_name" : service_name or self.app.name,
-            "charm_type_name" : type(self).__name__,
+            "service_name": service_name or self.app.name,
+            "charm_type_name": type(self).__name__,
             "dispatch_path": os.getenv("JUJU_DISPATCH_PATH", ""),
         }
         server_cert: Optional[Union[str, Path]] = (
