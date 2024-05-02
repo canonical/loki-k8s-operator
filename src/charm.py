@@ -725,7 +725,7 @@ class LokiOperatorCharm(CharmBase):
     def logging_endpoints(self) -> Optional[List[str]]:
         """Loki endpoint for charm logging."""
         if self._loki_container.get_service(self._name).current is ops.pebble.ServiceStatus.ACTIVE:
-            return [self._internal_url]
+            return [self._internal_url + "/loki/api/v1/push"]
         return []
 
     @property

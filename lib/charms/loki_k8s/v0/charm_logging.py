@@ -135,10 +135,12 @@ class LokiEmitter:
 
     @property
     def session(self) -> requests.Session:
-        """Create HTTP session."""
+        """Create HTTP(s) session."""
         if self._session is None:
             self._session = requests.Session()
-            self._session.cert = self.cert or None
+            # very unclear why we don't need to use 'Session.cert' for this, but...
+            # See: https://requests.readthedocs.io/en/latest/user/advanced/#ssl-cert-verification
+            self._session.verify = self.cert or None
         return self._session
 
     def close(self):
@@ -184,7 +186,7 @@ class LokiHandler(logging.Handler):
     `Loki API <https://github.com/grafana/loki/blob/master/docs/api.md>`_
     """
 
-    def __init__(
+    def  __init__(
         self,
         url: str,
         tags: Optional[dict] = None,
