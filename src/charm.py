@@ -540,6 +540,7 @@ class LokiOperatorCharm(CharmBase):
             )
 
             # Repeat for the charm container. We need it there for loki client requests.
+            # (and charm tracing and logging TLS)
             ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
             ca_cert_path.write_text(self.server_cert.ca_cert)  # pyright: ignore
         else:
@@ -724,13 +725,13 @@ class LokiOperatorCharm(CharmBase):
     def logging_endpoints(self) -> Optional[List[str]]:
         """Loki endpoint for charm logging."""
         if self._loki_container.get_service(self._name).current is ops.pebble.ServiceStatus.ACTIVE:
-            return [self.loki_provider._endpoint(self.loki_provider._url)["url"]]
+            return [self._internal_url]
         return []
 
     @property
     def server_cert_path(self) -> Optional[str]:
         """Server certificate path for TLS tracing."""
-        return CERT_FILE
+        return self._ca_cert_path
 
 
 if __name__ == "__main__":
