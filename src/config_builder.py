@@ -127,7 +127,7 @@ class ConfigBuilder:
                 "store": "boltdb-shipper",
             }
         ]
-
+        # Only render the v12/tsdb section when we can reliably obtain a "from" date.
         if self.v12_migration_date:
             configs.append(
                 {

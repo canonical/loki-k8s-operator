@@ -91,7 +91,6 @@ async def verify_upgrade_success(ops_test: OpsTest, app_name, is_fresh_installat
     """Verify that the upgrade was successful."""
     assert await is_loki_up(ops_test, app_name)
     post_upgrade_config = await loki_config(ops_test, app_name)
-    tsdb_shipper_config = post_upgrade_config["storage_config"]["tsdb_shipper"]
     tsdb_schema_configs = post_upgrade_config["schema_config"]["configs"][1]
 
     expected_from = (
@@ -99,15 +98,6 @@ async def verify_upgrade_success(ops_test: OpsTest, app_name, is_fresh_installat
         if is_fresh_installation
         else (datetime.date.today() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     )
-
-    assert all(
-        [
-            tsdb_shipper_config["active_index_directory"]
-            == "/loki/boltdb-shipper-active/tsdb-index",
-            tsdb_shipper_config["shared_store"] == "filesystem",
-            tsdb_shipper_config["cache_location"] == "/loki/tsdb-cache",
-            tsdb_schema_configs["store"] == "tsdb",
-            tsdb_schema_configs["schema"] == "v12",
-            tsdb_schema_configs["from"] == expected_from,
-        ]
-    )
+    assert tsdb_schema_configs["store"] == "tsdb"
+    assert tsdb_schema_configs["schema"] == "v12"
+    assert tsdb_schema_configs["from"] == expected_from

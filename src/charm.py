@@ -587,8 +587,7 @@ class LokiOperatorCharm(CharmBase):
         In 2024-05 we changed the storage backend the charm configures from v11/boltdb to v12/tsdb.
 
         Returns:
-        str: If v12 schema is found, returns the 'from' date of the v12 schema
-                        in ISO 8601 format (YYYY-MM-DD), otherwise returns empty string.
+            The 'from' date of the v12 schema, in YYYY-MM-DD format (ISO 8601), if it is found; otherwise empty string.
         """
         if not self._loki_container.can_connect():
             return ""
@@ -598,7 +597,8 @@ class LokiOperatorCharm(CharmBase):
             )
         except PathError:
             return ""
-
+        except yaml.YAMLError as e:
+            raise RuntimeError(f"Error parsing Loki backup config: {e}")
         for config in running_config.get("schema_config", {}).get("configs", []):
             if config.get("schema") == "v12":
                 return config.get("from", "")
