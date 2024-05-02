@@ -41,11 +41,14 @@ from contextlib import contextmanager
 from logging.config import ConvertingDict
 from pathlib import Path
 from typing import (
+    Any,
     Callable,
+    Dict,
     Optional,
+    Tuple,
     Type,
     TypeVar,
-    Union, Tuple, Dict, Any,
+    Union,
 )
 
 import requests
@@ -54,7 +57,7 @@ from ops.framework import Framework
 
 # prevent infinite recursion because on failure urllib3 will push more logs
 # https://github.com/GreyZmeem/python-logging-loki/issues/18
-logging.getLogger('urllib3').setLevel(logging.INFO)
+logging.getLogger("urllib3").setLevel(logging.INFO)
 
 # The unique Charmhub library identifier, never change it
 LIBID = "52ee6051f4e54aedaa60aa04134d1a6d"
@@ -97,13 +100,12 @@ class LokiEmitter:
     )
 
     def __init__(self, url: str, tags: Optional[dict] = None, cert: Optional[str] = None):
-        """
-        Create new Loki emitter.
+        """Create new Loki emitter.
 
         Arguments:
             url: Endpoint used to send log entries to Loki (e.g. `https://my-loki-instance/loki/api/v1/push`).
             tags: Default tags added to every log record.
-            auth: Optional tuple with username and password for basic HTTP authentication.
+            cert: Absolute path to a ca cert for TLS authentication.
 
         """
         #: Tags that will be added to all records handled by this handler.
@@ -120,7 +122,9 @@ class LokiEmitter:
         payload = self.build_payload(record, line)
         resp = self.session.post(self.url, json=payload, timeout=5)
         if resp.status_code != self.success_response_code:
-            raise ValueError("Unexpected Loki API response status code: {0}".format(resp.status_code))
+            raise ValueError(
+                "Unexpected Loki API response status code: {0}".format(resp.status_code)
+            )
 
     def build_payload(self, record: logging.LogRecord, line) -> dict:
         """Build JSON payload with a log entry."""
@@ -151,8 +155,7 @@ class LokiEmitter:
 
     @functools.lru_cache(256)
     def format_label(self, label: str) -> str:
-        """
-        Build label to match prometheus format.
+        """Build label to match prometheus format.
 
         `Label format <https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels>`_
         """
@@ -180,21 +183,19 @@ class LokiEmitter:
 
 
 class LokiHandler(logging.Handler):
-    """
-    Log handler that sends log records to Loki.
+    """Log handler that sends log records to Loki.
 
     `Loki API <https://github.com/grafana/loki/blob/master/docs/api.md>`_
     """
 
-    def  __init__(
+    def __init__(
         self,
         url: str,
         tags: Optional[dict] = None,
         # username, password tuple
         cert: Optional[str] = None,
     ):
-        """
-        Create new Loki logging handler.
+        """Create new Loki logging handler.
 
         Arguments:
             url: Endpoint used to send log entries to Loki (e.g. `https://my-loki-instance/loki/api/v1/push`).
@@ -357,7 +358,7 @@ def _setup_root_logger_initializer(
             handler = LokiHandler(
                 url=url,
                 tags=juju_topology,
-                cert=server_cert
+                cert=server_cert,
                 # auth=("username", "password"),
             )
 

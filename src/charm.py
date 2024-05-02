@@ -374,6 +374,7 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def internal_url(self):
+        """Fqdn plus appropriate scheme and server port."""
         scheme = "https" if self.server_cert.server_cert else "http"
         return f"{scheme}://{self.hostname}:{self._port}"
 
