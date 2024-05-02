@@ -62,13 +62,20 @@ async def test_check_both_containers_send_logs(ops_test, loki_charm, log_proxy_t
 
     series = await loki_endpoint_request(ops_test, loki_app_name, "loki/api/v1/series", 0)
     data_series = json.loads(series)["data"]
-    assert len(data_series) == 3
 
+    found = 0
     for data in data_series:
-        assert data["container"] in ["workload-a", "workload-b"]
-        assert data["juju_application"] == tester_app_name
-        assert data["filename"] in [
-            "/tmp/worload-a-1.log",
-            "/tmp/worload-a-2.log",
-            "/tmp/worload-b.log",
-        ]
+        if (
+            data["container"] in ["workload-a", "workload-b"]
+            and data["juju_application"] == tester_app_name
+            and data["filename"]
+            in [
+                "/tmp/worload-a-1.log",
+                "/tmp/worload-a-2.log",
+                "/tmp/worload-b.log",
+            ]
+        ):
+            found += 1
+
+    # there might be more data series (charm logging).
+    assert found == 3
