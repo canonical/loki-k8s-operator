@@ -128,6 +128,7 @@ class ConfigBuilder:
             }
         ]
         # Only render the v12/tsdb section when we can reliably obtain a "from" date.
+        # This is needed to avoid code ordering issues during upgrade, related to "can_connect".
         if self.v12_migration_date:
             configs.append(
                 {
