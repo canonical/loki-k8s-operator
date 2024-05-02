@@ -185,7 +185,7 @@ class LokiOperatorCharm(CharmBase):
                 self.server_cert.on.cert_changed,
             ],
             source_type="loki",
-            source_url=self.internal_url,
+            source_url=self._external_url,
         )
 
         self.metrics_provider = MetricsEndpointProvider(
