@@ -185,7 +185,7 @@ class LokiOperatorCharm(CharmBase):
                 self.server_cert.on.cert_changed,
             ],
             source_type="loki",
-            source_url=self._external_url,
+            source_url=self.internal_url,
         )
 
         self.metrics_provider = MetricsEndpointProvider(
@@ -373,6 +373,11 @@ class LokiOperatorCharm(CharmBase):
         return socket.getfqdn()
 
     @property
+    def internal_url(self):
+        scheme = "https" if self.server_cert.server_cert else "http"
+        return f"{scheme}://{self.hostname}:{self._port}"
+
+    @property
     def _external_url(self) -> str:
         """Return the external hostname to be passed to ingress via the relation."""
         if ingress_url := self.ingress_per_unit.url:
@@ -385,8 +390,7 @@ class LokiOperatorCharm(CharmBase):
         # are routable virtually exclusively inside the cluster (as they rely)
         # on the cluster's DNS service, while the ip address is _sometimes_
         # routable from the outside, e.g., when deploying on MicroK8s on Linux.
-        scheme = "https" if self.server_cert.server_cert else "http"
-        return f"{scheme}://{self.hostname}:{self._port}"
+        return self.internal_url
 
     @property
     def scrape_jobs(self) -> List[Dict[str, Any]]:
@@ -501,7 +505,8 @@ class LokiOperatorCharm(CharmBase):
             scheme="https" if self._certs_on_disk else "http", port=self._port
         )
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
-        self.grafana_source_provider.update_source(source_url=self._external_url)
+        # self.grafana_source_provider.update_source(source_url=self._external_url)
+        # self.grafana_source_provider.update_source(source_url=self.hostname)
         self.loki_provider.update_endpoint(url=self._external_url)
         self.catalogue.update_item(item=self._catalogue_item)
 
