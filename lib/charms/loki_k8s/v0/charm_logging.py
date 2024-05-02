@@ -48,7 +48,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    Union,
+    Union, cast,
 )
 
 import requests
@@ -166,7 +166,7 @@ class LokiEmitter:
     def build_tags(self, record: logging.LogRecord) -> Dict[str, Any]:
         """Return tags that must be send to Loki with a log record."""
         tags = dict(self.tags) if isinstance(self.tags, ConvertingDict) else self.tags
-        tags = copy.deepcopy(tags)
+        tags = cast(Dict[str, Any], copy.deepcopy(tags))
         tags[self.level_tag] = record.levelname.lower()
         tags[self.logger_tag] = record.name
 
@@ -185,7 +185,7 @@ class LokiEmitter:
 class LokiHandler(logging.Handler):
     """Log handler that sends log records to Loki.
 
-    `Loki API <https://github.com/grafana/loki/blob/master/docs/api.md>`_
+    `Loki API <https://github.com/grafana/loki/blob/mas<#NOWOKE>ter/docs/api.md>`
     """
 
     def __init__(
@@ -358,7 +358,7 @@ def _setup_root_logger_initializer(
             handler = LokiHandler(
                 url=url,
                 tags=juju_topology,
-                cert=server_cert,
+                cert=str(server_cert) if server_cert else None,
                 # auth=("username", "password"),
             )
 
