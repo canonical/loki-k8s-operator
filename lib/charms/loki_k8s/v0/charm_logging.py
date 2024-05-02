@@ -48,7 +48,8 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    Union, cast,
+    Union,
+    cast,
 )
 
 import requests
