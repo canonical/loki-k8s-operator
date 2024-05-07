@@ -536,10 +536,10 @@ PROMTAIL_BASE_URL = "https://github.com/canonical/loki-k8s-operator/releases/dow
 # you only need to add a new key value pair for the architecture in PROMTAIL_BINARIES.
 PROMTAIL_VERSION = "v2.9.7"
 PROMTAIL_ARM_BINARY = {
-        "filename": "promtail-static-arm64",
-        "zipsha": "c083fdb45e5c794103f974eeb426489b4142438d9e10d0ae272b2aff886e249b",
-        "binsha": "4cd055c477a301c0bdfdbcea514e6e93f6df5d57425ce10ffc77f3e16fec1ddf",
-    }
+    "filename": "promtail-static-arm64",
+    "zipsha": "c083fdb45e5c794103f974eeb426489b4142438d9e10d0ae272b2aff886e249b",
+    "binsha": "4cd055c477a301c0bdfdbcea514e6e93f6df5d57425ce10ffc77f3e16fec1ddf",
+}
 
 PROMTAIL_BINARIES = {
     "amd64": {
