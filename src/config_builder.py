@@ -103,6 +103,7 @@ class ConfigBuilder:
         return {
             "alertmanager_url": self.alertmanager_url,
             "external_url": self.external_url,
+            "enable_alertmanager_v2": True,
         }
 
     @property
