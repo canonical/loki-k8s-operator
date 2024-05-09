@@ -481,12 +481,9 @@ class LokiOperatorCharm(CharmBase):
         # By default, we assume it's a fresh installation unless explicitly set to False
         # by the upgrade hook, indicating an upgrade
         if not v12_migration_date:
+            v12_migration_date = (datetime.date.today() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
             if is_fresh_installation:
-                v12_migration_date = v12_migration_date = datetime.date.today().strftime(
-                    "%Y-%m-%d"
-                )
-            else:
-                v12_migration_date = (datetime.date.today() + datetime.timedelta(days=1)).strftime(
+                v12_migration_date = datetime.date.today().strftime(
                     "%Y-%m-%d"
                 )
 
