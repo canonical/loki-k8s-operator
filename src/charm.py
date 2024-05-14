@@ -716,7 +716,8 @@ class LokiOperatorCharm(CharmBase):
     def tracing_endpoint(self) -> Optional[str]:
         """Tempo endpoint for charm tracing."""
         if self.tracing.is_ready():
-            return self.tracing.get_endpoint('otlp_http')
+            return self.tracing.get_endpoint("otlp_http")
+        return None
 
     @property
     def server_ca_cert_path(self) -> Optional[str]:
@@ -724,6 +725,7 @@ class LokiOperatorCharm(CharmBase):
         if self._certs_in_reldata:
             return self._ca_cert_path
         return None
+
 
 if __name__ == "__main__":
     # We need use_juju_for_storage=True because ingress_per_unit
