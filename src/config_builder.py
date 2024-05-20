@@ -119,29 +119,24 @@ class ConfigBuilder:
 
     @property
     def _schema_config(self) -> dict:
-        configs = [
-            {
-                "from": "2020-10-24",
-                "index": {"period": "24h", "prefix": "index_"},
-                "object_store": "filesystem",
-                "schema": "v11",
-                "store": "boltdb-shipper",
-            }
-        ]
-        # Only render the v12/tsdb section when we can reliably obtain a "from" date.
-        # This is needed to avoid code ordering issues during upgrade, related to "can_connect".
-        if self.v12_migration_date:
-            configs.append(
+        return {
+            "configs": [
+                {
+                    "from": "2020-10-24",
+                    "index": {"period": "24h", "prefix": "index_"},
+                    "object_store": "filesystem",
+                    "schema": "v11",
+                    "store": "boltdb-shipper",
+                },
                 {
                     "from": self.v12_migration_date,
                     "index": {"period": "24h", "prefix": "index_"},
                     "object_store": "filesystem",
                     "schema": "v12",
                     "store": "tsdb",
-                }
-            )
-
-        return {"configs": configs}
+                },
+            ]
+        }
 
     @property
     def _server(self) -> dict:
@@ -160,23 +155,20 @@ class ConfigBuilder:
 
     @property
     def _storage_config(self) -> dict:
-        storage_config = {
+        # Ref: https://grafana.com/docs/loki/latest/configure/#storage_config
+        return {
             "boltdb_shipper": {
                 "active_index_directory": BOLTDB_DIR,
                 "shared_store": "filesystem",
                 "cache_location": BOLTDB_CACHE_DIR,
             },
-            "filesystem": {"directory": CHUNKS_DIR},
-        }
-
-        if self.v12_migration_date:
-            storage_config["tsdb_shipper"] = {
+            "tsdb_shipper": {
                 "active_index_directory": TSDB_DIR,
                 "shared_store": "filesystem",
                 "cache_location": TSDB_CACHE_DIR,
-            }
-
-        return storage_config
+            },
+            "filesystem": {"directory": CHUNKS_DIR},
+        }
 
     @property
     def _limits_config(self) -> dict:

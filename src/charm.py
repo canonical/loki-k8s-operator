@@ -129,6 +129,7 @@ class LokiOperatorCharm(CharmBase):
                 retention=to_tuple(ActiveStatus()),
             )
         )
+        self._stored.set_default(is_upgrade=False)
 
         self._loki_container = self.unit.get_container(self._name)
         self._node_exporter_container = self.unit.get_container("node-exporter")
@@ -243,7 +244,8 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_upgrade_charm(self, _):
-        self._configure(False)
+        self._stored.is_upgrade = True
+        self._configure()
 
     def _on_server_cert_changed(self, _):
         self._update_cert()
@@ -435,7 +437,7 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #             UTILITY METHODS                #
     ##############################################
-    def _configure(self, is_fresh_installation: bool = True):  # noqa: C901
+    def _configure(self):  # noqa: C901
         """Configure Loki charm."""
         # "is_ready" is a racy check, so we do it once here (instead of in collect-status)
         if self.resources_patch.is_ready():
@@ -467,25 +469,24 @@ class LokiOperatorCharm(CharmBase):
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
 
-        v12_migration_date = self._v12_migration_date
-
         # If v12_migration_date isn't set (due to missing or failed retrieval),
         # we determine the migration date for v12 schema. This occurs once
-        # during initial setup, as subsequent hooks persist the info.
+        # during initial setup, as subsequent hooks will get the value from the persisted backup config.
 
         # If it's a fresh Loki installation, it's safe to set the v12 schema date to today.
         # This ensures that logs are correctly managed in v12 from the beginning of Loki's operation.
         # If it's an upgrade scenario, we set the date to tomorrow to accommodate today's logs
         # that might have been written in the previous v11 schema format.
 
-        # By default, we assume it's a fresh installation unless explicitly set to False
+        # By default, we assume it's a fresh installation unless state explicitly set to True
         # by the upgrade hook, indicating an upgrade
-        if not v12_migration_date:
-            v12_migration_date = (datetime.date.today() + datetime.timedelta(days=1)).strftime(
+
+        if not (v12_migration_date := self.get_v12_migration_date_from_backup()):
+            today = datetime.date.today()
+            tomorrow = today + datetime.timedelta(days=1)
+            v12_migration_date = (tomorrow if self._stored.is_upgrade else today).strftime(
                 "%Y-%m-%d"
             )
-            if is_fresh_installation:
-                v12_migration_date = datetime.date.today().strftime("%Y-%m-%d")
 
         config = ConfigBuilder(
             instance_addr=self.hostname,
@@ -590,8 +591,7 @@ class LokiOperatorCharm(CharmBase):
 
         return ",".join(alertmanagers)
 
-    @property
-    def _v12_migration_date(self) -> str:
+    def get_v12_migration_date_from_backup(self) -> str:
         """Get the 'from' date from the v12 schema in Loki config.
 
         In 2024-05 we changed the storage backend the charm configures from v11/boltdb to v12/tsdb.
@@ -606,7 +606,7 @@ class LokiOperatorCharm(CharmBase):
         except PathError:
             return ""
         except yaml.YAMLError as e:
-            raise RuntimeError(f"Error parsing Loki backup config: {e}")
+            raise ValueError("Error parsing Loki backup config.") from e
         for config in running_config.get("schema_config", {}).get("configs", []):
             if config.get("schema") == "v12":
                 return config.get("from", "")
