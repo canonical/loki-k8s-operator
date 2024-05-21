@@ -43,7 +43,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from config_builder import (
     CERT_FILE,
@@ -98,7 +98,7 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
 
 @trace_charm(
     tracing_endpoint="tracing_endpoint",
-    server_cert="server_cert_path",
+    server_cert="server_ca_cert_path",
     extra_types=[
         GrafanaDashboardProvider,
         GrafanaSourceProvider,
@@ -212,7 +212,7 @@ class LokiOperatorCharm(CharmBase):
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
-        self.tracing = TracingEndpointRequirer(self)
+        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -761,12 +761,16 @@ class LokiOperatorCharm(CharmBase):
     @property
     def tracing_endpoint(self) -> Optional[str]:
         """Tempo endpoint for charm tracing."""
-        return self.tracing.otlp_http_endpoint()
+        if self.tracing.is_ready():
+            return self.tracing.get_endpoint("otlp_http")
+        return None
 
     @property
-    def server_cert_path(self) -> Optional[str]:
-        """Server certificate path for TLS tracing."""
-        return CERT_FILE
+    def server_ca_cert_path(self) -> Optional[str]:
+        """Server CA certificate path for TLS tracing."""
+        if self._certs_in_reldata:
+            return self._ca_cert_path
+        return None
 
 
 if __name__ == "__main__":
