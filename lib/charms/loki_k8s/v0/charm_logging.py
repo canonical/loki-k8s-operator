@@ -28,8 +28,22 @@ that returns an http/https endpoint url. If you are using the `LogProxyConsumer`
 The ``log_charm`` decorator will take these endpoints and set up the root logger (as in python's
 logging module root logger) to forward all logs to these loki endpoints.
 
-3) If you were passing a certificate using `server_cert`, you need to change it to provide an *absolute* path to
-the certificate file.
+## TLS support
+If your charm integrates with a tls provider which is also trusted by Loki, you can configure TLS by
+passing to charm logging a `server_cert` parameter.
+
+```
+@log_charm(loki_push_api_endpoint="my_logging_endpoint", server_cert="my_server_cert")
+class MyCharm(...):
+    ...
+
+    @property
+    def my_server_cert(self) -> Optional[str]:
+        '''Absolute path to a server crt if TLS is enabled.'''
+        if self.tls_is_enabled():
+            return "/path/to/my/server_cert.crt"
+```
+
 """
 import copy
 import functools
@@ -53,6 +67,7 @@ from typing import (
 )
 
 import requests
+from cosl import JujuTopology
 from ops.charm import CharmBase
 from ops.framework import Framework
 
@@ -70,7 +85,7 @@ LIBAPI = 0
 # to 0 if you are raising the major API version
 LIBPATCH = 1
 
-PYDEPS = []
+PYDEPS = ["cosl"]
 
 logger = logging.getLogger("charm_logging")
 _GetterType = Union[Callable[[CharmBase], Optional[str]], property]
@@ -273,18 +288,14 @@ def _get_logging_endpoints(logging_endpoints_getter, self, charm):
         if isinstance(endpoint, str):
             sanitized_logging_endponts.append(endpoint)
         else:
-            errors.append(endpoint)
+            errors.append(f"invalid endpoint: expected string, got {endpoint!r}")
 
     if errors:
-        if sanitized_logging_endponts:
-            logger.error(
-                f"{charm}.{logging_endpoints_getter} returned some invalid endpoint strings: {errors}"
-            )
-        else:
-            logger.error(
-                f"{charm}.{logging_endpoints_getter} should return an iterable of Loki push-api (compatible) endpoints (strings); "
-                f"got {errors} instead."
-            )
+        logger.error(
+            f"{charm}.{logging_endpoints_getter} should return an iterable of Loki push-api "
+            "(-compatible) endpoints (strings); "
+            f"ERRORS: {errors}"
+        )
 
     return sanitized_logging_endponts
 
@@ -340,11 +351,9 @@ def _setup_root_logger_initializer(
         if not logging_endpoints:
             return
 
-        juju_topology = {
-            "juju_unit": self.unit.name,
-            "juju_application": self.app.name,
-            "juju_model": self.model.name,
-            "juju_model_uuid": self.model.uuid,
+        juju_topology = JujuTopology.from_charm(self)
+        tags = {
+            **juju_topology.as_dict(),
             "service_name": service_name or self.app.name,
             "charm_type_name": type(self).__name__,
             "dispatch_path": os.getenv("JUJU_DISPATCH_PATH", ""),
@@ -358,7 +367,7 @@ def _setup_root_logger_initializer(
         for url in logging_endpoints:
             handler = LokiHandler(
                 url=url,
-                tags=juju_topology,
+                tags=tags,
                 cert=str(server_cert) if server_cert else None,
                 # auth=("username", "password"),
             )

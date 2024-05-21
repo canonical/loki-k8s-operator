@@ -115,6 +115,7 @@ class LokiOperatorCharm(CharmBase):
     _stored = StoredState()
     _port = HTTP_LISTEN_PORT
     _name = "loki"
+    _loki_push_api_endpoint = "/loki/api/v1/push"
     _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
 
     def __init__(self, *args):
@@ -206,7 +207,7 @@ class LokiOperatorCharm(CharmBase):
             address=external_url.hostname or self.hostname,
             port=external_url.port or 443 if self._certs_on_disk else 80,
             scheme=external_url.scheme,
-            path=f"{external_url.path}/loki/api/v1/push",
+            path=f"{external_url.path}{self._loki_push_api_endpoint}",
         )
 
         self.dashboard_provider = GrafanaDashboardProvider(self)
@@ -731,7 +732,7 @@ class LokiOperatorCharm(CharmBase):
     def logging_endpoints(self) -> Optional[List[str]]:
         """Loki endpoint for charm logging."""
         if self._loki_container.get_service(self._name).current is ops.pebble.ServiceStatus.ACTIVE:
-            return [self._internal_url + "/loki/api/v1/push"]
+            return [self._internal_url + self._loki_push_api_endpoint]
         return []
 
     @property
