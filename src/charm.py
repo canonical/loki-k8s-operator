@@ -129,7 +129,7 @@ class LokiOperatorCharm(CharmBase):
                 retention=to_tuple(ActiveStatus()),
             )
         )
-        self._stored.set_default(is_upgrade=False)
+        self._stored.set_default(fresh_install=True)  # Relies on controller-backed storage
 
         self._loki_container = self.unit.get_container(self._name)
         self._node_exporter_container = self.unit.get_container("node-exporter")
@@ -244,7 +244,13 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_upgrade_charm(self, _):
-        self._stored.is_upgrade = True
+        # Note: If the pod is rescheduled during startup (e.g., by manual kubectl delete
+        # or resource limit patch), the `upgrade-charm` event might trigger prematurely,
+        # This could incorrectly set the TSDB date to the upgrade day, instead of the following day,
+        # potentially corrupting logs received on that day. Subsequent logs should be healthy.
+        # Documenting for troubleshooting; automatic handling may not be necessary due to the complexity
+        # of guarding against this rare edge case.
+        self._stored.fresh_install = False
         self._configure()
 
     def _on_server_cert_changed(self, _):
@@ -478,13 +484,13 @@ class LokiOperatorCharm(CharmBase):
         # If it's an upgrade scenario, we set the date to tomorrow to accommodate today's logs
         # that might have been written in the previous v11 schema format.
 
-        # By default, we assume it's a fresh installation unless state explicitly set to True
+        # By default, we assume it's a fresh installation unless state explicitly set to False
         # by the upgrade hook, indicating an upgrade
 
         if not (v12_migration_date := self.get_v12_migration_date_from_backup()):
             today = datetime.date.today()
             tomorrow = today + datetime.timedelta(days=1)
-            v12_migration_date = (tomorrow if self._stored.is_upgrade else today).strftime(
+            v12_migration_date = (today if self._stored.fresh_install else tomorrow).strftime(
                 "%Y-%m-%d"
             )
 
