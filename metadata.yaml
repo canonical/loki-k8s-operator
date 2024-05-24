@@ -42,6 +42,8 @@ containers:
       - storage: loki-chunks
         location: /loki/chunks
 
+# We do not need separate storages. TODO: In the next breaking change for Loki,
+# switch to having just one persisted storage, e.g. `/loki/persisted`.
 storage:
   active-index-directory:
     type: filesystem

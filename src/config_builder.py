@@ -16,9 +16,18 @@ KEY_FILE = os.path.join(LOKI_CERTS_DIR, "loki.key.pem")
 
 LOKI_DIR = "/loki"
 CHUNKS_DIR = os.path.join(LOKI_DIR, "chunks")
+
+# Path to a persisted config backup, for reference purposes.
+# Currently needed to migrate users between BoltDB-shipper and TSDB without needing a manual pre-upgrade action
+# Probably isn't the best place to store such config, but it's left here as the chunks dir is persisted
+# TODO: change this when persisted volumes are unified
+LOKI_CONFIG_BACKUP = os.path.join(CHUNKS_DIR, "loki-local-config.yaml.bak")
+
 COMPACTOR_DIR = os.path.join(LOKI_DIR, "compactor")
 BOLTDB_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-active")
 BOLTDB_CACHE_DIR = os.path.join(LOKI_DIR, "boltdb-shipper-cache")
+TSDB_DIR = os.path.join(BOLTDB_DIR, "tsdb-index")
+TSDB_CACHE_DIR = os.path.join(LOKI_DIR, "tsdb-cache")
 RULES_DIR = os.path.join(LOKI_DIR, "rules")
 
 
@@ -40,6 +49,7 @@ class ConfigBuilder:
         instance_addr: str,
         alertmanager_url: str,
         external_url: str,
+        v12_migration_date: str,
         ingestion_rate_mb: int,
         ingestion_burst_size_mb: int,
         retention_period: int,
@@ -53,6 +63,7 @@ class ConfigBuilder:
         self.ingestion_burst_size_mb = ingestion_burst_size_mb
         self.http_tls = http_tls
         self.retention_period = retention_period
+        self.v12_migration_date = v12_migration_date
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -116,7 +127,14 @@ class ConfigBuilder:
                     "object_store": "filesystem",
                     "schema": "v11",
                     "store": "boltdb-shipper",
-                }
+                },
+                {
+                    "from": self.v12_migration_date,
+                    "index": {"period": "24h", "prefix": "index_"},
+                    "object_store": "filesystem",
+                    "schema": "v12",
+                    "store": "tsdb",
+                },
             ]
         }
 
@@ -143,6 +161,11 @@ class ConfigBuilder:
                 "active_index_directory": BOLTDB_DIR,
                 "shared_store": "filesystem",
                 "cache_location": BOLTDB_CACHE_DIR,
+            },
+            "tsdb_shipper": {
+                "active_index_directory": TSDB_DIR,
+                "shared_store": "filesystem",
+                "cache_location": TSDB_CACHE_DIR,
             },
             "filesystem": {"directory": CHUNKS_DIR},
         }
