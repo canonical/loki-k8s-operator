@@ -110,7 +110,7 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
         MetricsEndpointProvider,
     ],
 )
-@log_charm(logging_endpoints="logging_endpoints", server_cert="server_cert_path")
+@log_charm(logging_endpoints="logging_endpoints", server_cert="server_ca_cert_path")
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
