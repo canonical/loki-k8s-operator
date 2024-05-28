@@ -11,6 +11,7 @@ develop a new k8s charm using the Operator Framework:
 
     https://discourse.charmhub.io/t/4208
 """
+import datetime
 import logging
 import os
 import re
@@ -44,13 +45,14 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from config_builder import (
     CERT_FILE,
     HTTP_LISTEN_PORT,
     KEY_FILE,
     LOKI_CONFIG,
+    LOKI_CONFIG_BACKUP,
     RULES_DIR,
     ConfigBuilder,
 )
@@ -98,7 +100,7 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
 
 @trace_charm(
     tracing_endpoint="tracing_endpoint",
-    server_cert="server_cert_path",
+    server_cert="server_ca_cert_path",
     extra_types=[
         GrafanaDashboardProvider,
         GrafanaSourceProvider,
@@ -132,6 +134,7 @@ class LokiOperatorCharm(CharmBase):
                 retention=to_tuple(ActiveStatus()),
             )
         )
+        self._stored.set_default(fresh_install=True)  # Relies on controller-backed storage
 
         self._loki_container = self.unit.get_container(self._name)
         self._node_exporter_container = self.unit.get_container("node-exporter")
@@ -214,7 +217,7 @@ class LokiOperatorCharm(CharmBase):
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
-        self.tracing = TracingEndpointRequirer(self)
+        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -246,6 +249,13 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_upgrade_charm(self, _):
+        # Note: If the pod is rescheduled during startup (e.g., by manual kubectl delete
+        # or resource limit patch), the `upgrade-charm` event might trigger prematurely,
+        # This could incorrectly set the TSDB date to the upgrade day, instead of the following day,
+        # potentially corrupting logs received on that day. Subsequent logs should be healthy.
+        # Documenting for troubleshooting; automatic handling may not be necessary due to the complexity
+        # of guarding against this rare edge case.
+        self._stored.fresh_install = False
         self._configure()
 
     def _on_server_cert_changed(self, _):
@@ -475,6 +485,25 @@ class LokiOperatorCharm(CharmBase):
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
 
+        # If v12_migration_date isn't set (due to missing or failed retrieval),
+        # we determine the migration date for v12 schema. This occurs once
+        # during initial setup, as subsequent hooks will get the value from the persisted backup config.
+
+        # If it's a fresh Loki installation, it's safe to set the v12 schema date to today.
+        # This ensures that logs are correctly managed in v12 from the beginning of Loki's operation.
+        # If it's an upgrade scenario, we set the date to tomorrow to accommodate today's logs
+        # that might have been written in the previous v11 schema format.
+
+        # By default, we assume it's a fresh installation unless state explicitly set to False
+        # by the upgrade hook, indicating an upgrade
+
+        if not (v12_migration_date := self.get_v12_migration_date_from_backup()):
+            today = datetime.date.today()
+            tomorrow = today + datetime.timedelta(days=1)
+            v12_migration_date = (today if self._stored.fresh_install else tomorrow).strftime(
+                "%Y-%m-%d"
+            )
+
         config = ConfigBuilder(
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
@@ -483,6 +512,7 @@ class LokiOperatorCharm(CharmBase):
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
             retention_period=int(self.config["retention-period"]),
             http_tls=(self.server_cert.server_cert is not None),
+            v12_migration_date=v12_migration_date,
         ).build()
 
         # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
@@ -517,6 +547,7 @@ class LokiOperatorCharm(CharmBase):
         if self._running_config() != config:
             config_as_yaml = yaml.safe_dump(config)
             self._loki_container.push(LOKI_CONFIG, config_as_yaml, make_dirs=True)
+            self._loki_container.push(LOKI_CONFIG_BACKUP, config_as_yaml, make_dirs=True)
             logger.info("Pushed new configuration")
             return True
 
@@ -577,6 +608,27 @@ class LokiOperatorCharm(CharmBase):
             return alerting_config
 
         return ",".join(alertmanagers)
+
+    def get_v12_migration_date_from_backup(self) -> str:
+        """Get the 'from' date from the v12 schema in Loki config.
+
+        In 2024-05 we changed the storage backend the charm configures from v11/boltdb to v12/tsdb.
+
+        Returns:
+            The 'from' date of the v12 schema, in YYYY-MM-DD format (ISO 8601), if it is found; otherwise empty string.
+        """
+        try:
+            running_config = yaml.safe_load(
+                self._loki_container.pull(LOKI_CONFIG_BACKUP, encoding="utf-8").read()
+            )
+        except PathError:
+            return ""
+        except yaml.YAMLError as e:
+            raise ValueError("Error parsing Loki backup config.") from e
+        for config in running_config.get("schema_config", {}).get("configs", []):
+            if config.get("schema") == "v12":
+                return config.get("from", "")
+        return ""
 
     def _running_config(self) -> Dict[str, Any]:
         """Get the on-disk Loki config."""
@@ -727,7 +779,9 @@ class LokiOperatorCharm(CharmBase):
     @property
     def tracing_endpoint(self) -> Optional[str]:
         """Tempo endpoint for charm tracing."""
-        return self.tracing.otlp_http_endpoint()
+        if self.tracing.is_ready():
+            return self.tracing.get_endpoint("otlp_http")
+        return None
 
     @property
     def logging_endpoints(self) -> Optional[List[str]]:
@@ -737,9 +791,11 @@ class LokiOperatorCharm(CharmBase):
         return []
 
     @property
-    def server_cert_path(self) -> Optional[str]:
-        """Server certificate path for TLS tracing."""
-        return self._ca_cert_path if Path(self._ca_cert_path).exists() else None
+    def server_ca_cert_path(self) -> Optional[str]:
+        """Server CA certificate path for TLS tracing."""
+        if self._certs_in_reldata:
+            return self._ca_cert_path if Path(self._ca_cert_path).exists() else None
+        return None
 
 
 if __name__ == "__main__":
