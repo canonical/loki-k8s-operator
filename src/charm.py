@@ -116,6 +116,7 @@ class LokiOperatorCharm(CharmBase):
     _port = HTTP_LISTEN_PORT
     _name = "loki"
     _loki_push_api_endpoint = "/loki/api/v1/push"
+    _loki_rules_endpoint = "/loki/api/v1/rules"
     _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
 
     def __init__(self, *args):
@@ -659,7 +660,7 @@ class LokiOperatorCharm(CharmBase):
         ssl_context = ssl.create_default_context(
             cafile=self._ca_cert_path if Path(self._ca_cert_path).exists() else None,
         )
-        url = f"{self._internal_url}/loki/api/v1/rules"
+        url = f"{self._internal_url}{self._loki_rules_endpoint}"
         try:
             logger.debug(f"Checking loki alert rules via {url}.")
             urllib.request.urlopen(url, timeout=2.0, context=ssl_context)
@@ -732,13 +733,13 @@ class LokiOperatorCharm(CharmBase):
     def logging_endpoints(self) -> Optional[List[str]]:
         """Loki endpoint for charm logging."""
         if self._loki_container.get_service(self._name).current is ops.pebble.ServiceStatus.ACTIVE:
-            return [self._internal_url + self._loki_push_api_endpoint]
+            return ["http://localhost:3100" + self._loki_push_api_endpoint]
         return []
 
     @property
     def server_cert_path(self) -> Optional[str]:
         """Server certificate path for TLS tracing."""
-        return self._ca_cert_path
+        return self._ca_cert_path if Path(self._ca_cert_path).exists() else None
 
 
 if __name__ == "__main__":

@@ -16,6 +16,3 @@ cryptography
 # deps: tracing, charm_tracing
 pydantic
 opentelemetry-exporter-otlp-proto-http==1.21.0
-
-# deps: charm_logging
-requests

@@ -519,7 +519,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 9
+LIBPATCH = 10
 
 PYDEPS = ["cosl"]
 
@@ -535,17 +535,20 @@ PROMTAIL_BASE_URL = "https://github.com/canonical/loki-k8s-operator/releases/dow
 # update all sha256 sums in PROMTAIL_BINARIES. To support a new architecture
 # you only need to add a new key value pair for the architecture in PROMTAIL_BINARIES.
 PROMTAIL_VERSION = "v2.9.7"
+PROMTAIL_ARM_BINARY = {
+    "filename": "promtail-static-arm64",
+    "zipsha": "c083fdb45e5c794103f974eeb426489b4142438d9e10d0ae272b2aff886e249b",
+    "binsha": "4cd055c477a301c0bdfdbcea514e6e93f6df5d57425ce10ffc77f3e16fec1ddf",
+}
+
 PROMTAIL_BINARIES = {
     "amd64": {
         "filename": "promtail-static-amd64",
         "zipsha": "6873cbdabf23062aeefed6de5f00ff382710332af3ab90a48c253ea17e08f465",
         "binsha": "28da9b99f81296fe297831f3bc9d92aea43b4a92826b8ff04ba433b8cb92fb50",
     },
-    "arm64": {
-        "filename": "promtail-static-arm64",
-        "zipsha": "c083fdb45e5c794103f974eeb426489b4142438d9e10d0ae272b2aff886e249b",
-        "binsha": "4cd055c477a301c0bdfdbcea514e6e93f6df5d57425ce10ffc77f3e16fec1ddf",
-    },
+    "arm64": PROMTAIL_ARM_BINARY,
+    "aarch64": PROMTAIL_ARM_BINARY,
 }
 
 # Paths in `charm` container

@@ -47,10 +47,12 @@ class MyCharm(...):
 """
 import copy
 import functools
+import json
 import logging
 import os
 import string
 import time
+import urllib.error
 from contextlib import contextmanager
 from logging.config import ConvertingDict
 from pathlib import Path
@@ -65,8 +67,8 @@ from typing import (
     Union,
     cast,
 )
+from urllib import request, parse
 
-import requests
 from cosl import JujuTopology
 from ops.charm import CharmBase
 from ops.framework import Framework
@@ -131,13 +133,24 @@ class LokiEmitter:
         #: Optional cert for TLS auth
         self.cert = cert
 
-        self._session: Optional[requests.Session] = None
-
     def __call__(self, record: logging.LogRecord, line: str):
         """Send log record to Loki."""
         payload = self.build_payload(record, line)
-        resp = self.session.post(self.url, json=payload, timeout=5)
-        if resp.status_code != self.success_response_code:
+        req = request.Request(self.url, method='POST')
+        req.add_header('Content-Type', 'application/json; charset=utf-8')
+        jsondata_encoded = json.dumps(payload).encode("utf-8")
+
+        try:
+            resp = request.urlopen(
+                req,
+                jsondata_encoded,
+                capath=self.cert
+            )
+        except urllib.error.HTTPError as e:
+            logger.error(f"error pushing logs to {self.url}: {e.status, e.reason}")
+            return
+
+        if resp.getcode() != self.success_response_code:
             raise ValueError(
                 "Unexpected Loki API response status code: {0}".format(resp.status_code)
             )
@@ -152,22 +165,6 @@ class LokiEmitter:
             "values": [[ts, line]],
         }
         return {"streams": [stream]}
-
-    @property
-    def session(self) -> requests.Session:
-        """Create HTTP(s) session."""
-        if self._session is None:
-            self._session = requests.Session()
-            # very unclear why we don't need to use 'Session.cert' for this, but...
-            # See: https://requests.readthedocs.io/en/latest/user/advanced/#ssl-cert-verification
-            self._session.verify = self.cert or None
-        return self._session
-
-    def close(self):
-        """Close HTTP session."""
-        if self._session is not None:
-            self._session.close()
-            self._session = None
 
     @functools.lru_cache(256)
     def format_label(self, label: str) -> str:
@@ -205,11 +202,11 @@ class LokiHandler(logging.Handler):
     """
 
     def __init__(
-        self,
-        url: str,
-        tags: Optional[dict] = None,
-        # username, password tuple
-        cert: Optional[str] = None,
+            self,
+            url: str,
+            tags: Optional[dict] = None,
+            # username, password tuple
+            cert: Optional[str] = None,
     ):
         """Create new Loki logging handler.
 
@@ -223,11 +220,6 @@ class LokiHandler(logging.Handler):
         """
         super().__init__()
         self.emitter = LokiEmitter(url, tags, cert)
-
-    def handleError(self, record):  # noqa: N802
-        """Close emitter and let default handler take actions on error."""
-        self.emitter.close()
-        super().handleError(record)
 
     def emit(self, record: logging.LogRecord):
         """Send log record to Loki."""
@@ -311,21 +303,27 @@ def _get_server_cert(server_cert_getter, self, charm):
             f"{charm}.{server_cert_getter} returned None; sending logs over INSECURE connection."
         )
         return None
+
     if not Path(server_cert).is_absolute():
         raise ValueError(
             f"{charm}.{server_cert_getter} should return a valid tls cert absolute path (string | Path)); "
             f"got {server_cert} instead."
         )
+
+    if not Path(server_cert).exists():
+        logger.warning(f"cert not found at {server_cert}: sending logs over INSECURE connection")
+        return None
+
     return server_cert
 
 
 def _setup_root_logger_initializer(
-    charm: Type[CharmBase],
-    logging_endpoints_getter: _GetterType,
-    server_cert_getter: Optional[_GetterType],
-    service_name: Optional[str] = None,
+        charm: Type[CharmBase],
+        logging_endpoints_getter: _GetterType,
+        server_cert_getter: Optional[_GetterType],
+        service_name: Optional[str] = None,
 ):
-    """Patch the charm's initializer."""
+    """Patch the charm's initializer and inject a call to set up root logging."""
     original_init = charm.__init__
 
     @functools.wraps(original_init)
@@ -383,9 +381,9 @@ def _setup_root_logger_initializer(
 
 
 def log_charm(
-    logging_endpoints: str,
-    server_cert: Optional[str] = None,
-    service_name: Optional[str] = None,
+        logging_endpoints: str,
+        server_cert: Optional[str] = None,
+        service_name: Optional[str] = None,
 ):
     """Set up the root logger to forward any charm logs to one or more Loki push API endpoints.
 
@@ -431,15 +429,15 @@ def log_charm(
 
 
 def _autoinstrument(
-    charm_type: Type[CharmBase],
-    logging_endpoints_getter: _GetterType,
-    server_cert_getter: Optional[_GetterType] = None,
-    service_name: Optional[str] = None,
+        charm_type: Type[CharmBase],
+        logging_endpoints_getter: _GetterType,
+        server_cert_getter: Optional[_GetterType] = None,
+        service_name: Optional[str] = None,
 ) -> Type[CharmBase]:
     """Set up logging on this charm class.
 
-    Use this function to get out-of-the-box traces for all events emitted on this charm and all
-    method calls on instances of this class.
+    Use this function to setup automatic log forwarding for all logs emitted throughout executions of
+    this charm.
 
     Usage:
 
