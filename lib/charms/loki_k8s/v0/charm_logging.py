@@ -67,7 +67,7 @@ from typing import (
     Union,
     cast,
 )
-from urllib import request, parse
+from urllib import request
 
 from cosl import JujuTopology
 from ops.charm import CharmBase
@@ -136,16 +136,12 @@ class LokiEmitter:
     def __call__(self, record: logging.LogRecord, line: str):
         """Send log record to Loki."""
         payload = self.build_payload(record, line)
-        req = request.Request(self.url, method='POST')
-        req.add_header('Content-Type', 'application/json; charset=utf-8')
+        req = request.Request(self.url, method="POST")
+        req.add_header("Content-Type", "application/json; charset=utf-8")
         jsondata_encoded = json.dumps(payload).encode("utf-8")
 
         try:
-            resp = request.urlopen(
-                req,
-                jsondata_encoded,
-                capath=self.cert
-            )
+            resp = request.urlopen(req, jsondata_encoded, capath=self.cert)
         except urllib.error.HTTPError as e:
             logger.error(f"error pushing logs to {self.url}: {e.status, e.reason}")
             return
@@ -202,11 +198,11 @@ class LokiHandler(logging.Handler):
     """
 
     def __init__(
-            self,
-            url: str,
-            tags: Optional[dict] = None,
-            # username, password tuple
-            cert: Optional[str] = None,
+        self,
+        url: str,
+        tags: Optional[dict] = None,
+        # username, password tuple
+        cert: Optional[str] = None,
     ):
         """Create new Loki logging handler.
 
@@ -318,10 +314,10 @@ def _get_server_cert(server_cert_getter, self, charm):
 
 
 def _setup_root_logger_initializer(
-        charm: Type[CharmBase],
-        logging_endpoints_getter: _GetterType,
-        server_cert_getter: Optional[_GetterType],
-        service_name: Optional[str] = None,
+    charm: Type[CharmBase],
+    logging_endpoints_getter: _GetterType,
+    server_cert_getter: Optional[_GetterType],
+    service_name: Optional[str] = None,
 ):
     """Patch the charm's initializer and inject a call to set up root logging."""
     original_init = charm.__init__
@@ -381,9 +377,9 @@ def _setup_root_logger_initializer(
 
 
 def log_charm(
-        logging_endpoints: str,
-        server_cert: Optional[str] = None,
-        service_name: Optional[str] = None,
+    logging_endpoints: str,
+    server_cert: Optional[str] = None,
+    service_name: Optional[str] = None,
 ):
     """Set up the root logger to forward any charm logs to one or more Loki push API endpoints.
 
@@ -429,10 +425,10 @@ def log_charm(
 
 
 def _autoinstrument(
-        charm_type: Type[CharmBase],
-        logging_endpoints_getter: _GetterType,
-        server_cert_getter: Optional[_GetterType] = None,
-        service_name: Optional[str] = None,
+    charm_type: Type[CharmBase],
+    logging_endpoints_getter: _GetterType,
+    server_cert_getter: Optional[_GetterType] = None,
+    service_name: Optional[str] = None,
 ) -> Type[CharmBase]:
     """Set up logging on this charm class.
 
