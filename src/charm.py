@@ -98,6 +98,8 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
     return StatusBase.from_name(name, message)
 
 
+# call log_charm second, so that trace_charm has a chance to set up the root span
+@log_charm(logging_endpoints="logging_endpoints", server_cert="server_ca_cert_path")
 @trace_charm(
     tracing_endpoint="tracing_endpoint",
     server_cert="server_ca_cert_path",
@@ -110,7 +112,6 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
         MetricsEndpointProvider,
     ],
 )
-@log_charm(logging_endpoints="logging_endpoints", server_cert="server_cert_path")
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
@@ -191,6 +192,7 @@ class LokiOperatorCharm(CharmBase):
             ],
             source_type="loki",
             source_url=self._external_url,
+            extra_fields=self._extra_ds_fields
         )
 
         self.metrics_provider = MetricsEndpointProvider(
@@ -390,6 +392,25 @@ class LokiOperatorCharm(CharmBase):
         scheme = "https" if self.server_cert.server_cert else "http"
         return f"{scheme}://{self.hostname}:{self._port}"
 
+    @property
+    def _extra_ds_fields(self) -> Dict:
+        try:
+            # super duper ugly, but we have no way to exchange datasource IDs atm.
+            tempo_datasource_uid = f"juju_{self.model.name}_{self.model.uuid}_{self.tracing.relations[0].app.name}_0"
+        except Exception:
+            logger.error("failed to construct extra ds fields")
+            return {}
+
+        return {
+            "derivedFields": [
+                {
+                    "datasourceUid": tempo_datasource_uid,
+                    "matcherRegex": r"traceId=(\w+)",
+                    "url": "$${__value.raw}",
+                    "name": "trace_id"
+                }
+            ]
+            }
     @property
     def _external_url(self) -> str:
         """Return the external hostname to be passed to ingress via the relation."""

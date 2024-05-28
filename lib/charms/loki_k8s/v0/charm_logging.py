@@ -117,17 +117,21 @@ class LokiEmitter:
         ("-", "_"),
     )
 
-    def __init__(self, url: str, tags: Optional[dict] = None, cert: Optional[str] = None):
+    def __init__(self, url: str, tags: Optional[dict] = None, fields: Optional[dict] = None, cert: Optional[str] = None):
         """Create new Loki emitter.
 
         Arguments:
             url: Endpoint used to send log entries to Loki (e.g. `https://my-loki-instance/loki/api/v1/push`).
             tags: Default tags added to every log record.
+            fields: Default fields added to every log record.
             cert: Absolute path to a ca cert for TLS authentication.
 
         """
         #: Tags that will be added to all records handled by this handler.
         self.tags = tags or {}
+        # fields will be prepended to all records handled by this handler
+        self.prefix = " ".join(f"{field}={value}" for field, value in fields.items()) + " " if fields else  ""
+
         #: Loki JSON push endpoint (e.g `http://127.0.0.1/loki/api/v1/push`)
         self.url = url
         #: Optional cert for TLS auth
@@ -135,7 +139,7 @@ class LokiEmitter:
 
     def __call__(self, record: logging.LogRecord, line: str):
         """Send log record to Loki."""
-        payload = self.build_payload(record, line)
+        payload = self.build_payload(record, self.prefix + line)
         req = request.Request(self.url, method='POST')
         req.add_header('Content-Type', 'application/json; charset=utf-8')
         jsondata_encoded = json.dumps(payload).encode("utf-8")
@@ -164,6 +168,7 @@ class LokiEmitter:
             "stream": labels,
             "values": [[ts, line]],
         }
+        print(stream)
         return {"streams": [stream]}
 
     @functools.lru_cache(256)
@@ -205,6 +210,7 @@ class LokiHandler(logging.Handler):
             self,
             url: str,
             tags: Optional[dict] = None,
+            fields: Optional[dict] = None,
             # username, password tuple
             cert: Optional[str] = None,
     ):
@@ -219,7 +225,7 @@ class LokiHandler(logging.Handler):
 
         """
         super().__init__()
-        self.emitter = LokiEmitter(url, tags, cert)
+        self.emitter = LokiEmitter(url, tags, fields, cert)
 
     def emit(self, record: logging.LogRecord):
         """Send log record to Loki."""
@@ -356,6 +362,19 @@ def _setup_root_logger_initializer(
             "charm_type_name": type(self).__name__,
             "dispatch_path": os.getenv("JUJU_DISPATCH_PATH", ""),
         }
+        fields = {}
+        try:
+            from charms.tempo_k8s.v1.charm_tracing import get_current_span
+            span = get_current_span()
+            if span:
+                logger.debug('root span found')
+
+                fields['trace_id'] = str(hex(span.get_span_context().trace_id)[2:])  # strip 0x prefix
+                fields['span_id'] = str(hex(span.get_span_context().span_id)[2:])  # strip 0x prefix
+
+        except ModuleNotFoundError:
+            logger.debug("no tracing library found: will not attach trace ids to logs")
+
         server_cert: Optional[Union[str, Path]] = (
             _get_server_cert(server_cert_getter, self, charm) if server_cert_getter else None
         )
@@ -366,6 +385,7 @@ def _setup_root_logger_initializer(
             handler = LokiHandler(
                 url=url,
                 tags=tags,
+                fields=fields,
                 cert=str(server_cert) if server_cert else None,
                 # auth=("username", "password"),
             )
