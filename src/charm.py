@@ -786,7 +786,9 @@ class LokiOperatorCharm(CharmBase):
     @property
     def logging_endpoints(self) -> Optional[List[str]]:
         """Loki endpoint for charm logging."""
-        if self._loki_container.get_service(self._name).current is ops.pebble.ServiceStatus.ACTIVE:
+        container = self._loki_container
+        if (container.can_connect() and
+                container.get_service(self._name).current is ops.pebble.ServiceStatus.ACTIVE):
             scheme = "https" if self.server_ca_cert_path else "http"
             return [f"{scheme}://localhost:3100" + self._loki_push_api_endpoint]
         return []
