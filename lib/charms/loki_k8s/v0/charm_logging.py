@@ -6,7 +6,16 @@
 
 (yes! charm code, not workload code!)
 
-This means that, if your charm is related to, for example, COS' Loki charm (or a Grafana Agent),
+If your charm isn't already related to Loki using any of the
+consumers/forwarders from the ``loki_push_api`` library, you need to:
+
+    charmcraft fetch-lib charms.loki_k8s.v1.loki_push_api
+
+and add the logging consumer that matches your use case.
+See https://charmhub.io/loki-k8s/libraries/loki_push_apihttps://charmhub.io/loki-k8s/libraries/loki_push_api
+for more information.
+
+Once your charm is related to, for example, COS' Loki charm (or a Grafana Agent),
 you will be able to inspect in real time from the Grafana dashboard the logs emitted by your charm.
 
 To start using this library, you need to do two things:
@@ -21,8 +30,9 @@ that returns an http/https endpoint url. If you are using the `LogProxyConsumer`
 ```
     @property
     def my_logging_endpoint(self) -> List[str]:
-        '''Loki push API endpoints for charm logging'''
-        return self.logging.loki_endpoints:
+        '''Loki push API endpoints for charm logging.'''
+        # this will return an empty list if there is no relation or there is no data yet in the relation
+        return self.logging.loki_endpoints
 ```
 
 The ``log_charm`` decorator will take these endpoints and set up the root logger (as in python's
@@ -132,6 +142,8 @@ class LokiEmitter:
         self.url = url
         #: Optional cert for TLS auth
         self.cert = cert
+        #: only notify once on push failure, to avoid spamming error logs
+        self._error_notified_once = False
 
     def __call__(self, record: logging.LogRecord, line: str):
         """Send log record to Loki."""
@@ -143,7 +155,9 @@ class LokiEmitter:
         try:
             resp = request.urlopen(req, jsondata_encoded, capath=self.cert)
         except urllib.error.HTTPError as e:
-            logger.error(f"error pushing logs to {self.url}: {e.status, e.reason}")
+            if not self._error_notified_once:
+                logger.error(f"error pushing logs to {self.url}: {e.status, e.reason}")
+                self._error_notified_once = True
             return
 
         if resp.getcode() != self.success_response_code:
@@ -209,8 +223,6 @@ class LokiHandler(logging.Handler):
         Arguments:
             url: Endpoint used to send log entries to Loki (e.g. `https://my-loki-instance/loki/api/v1/push`).
             tags: Default tags added to every log record.
-
-            # FIXME: Session expects a .pem file it says
             cert: Optional absolute path to cert file for TLS auth.
 
         """
