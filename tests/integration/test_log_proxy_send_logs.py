@@ -24,11 +24,13 @@ tester_resources = {
     )
 }
 
+loki_app_name = "loki"
+tester_app_name = "log-proxy-tester"
 
+
+@pytest.mark.setup
 @pytest.mark.abort_on_fail
-async def test_check_both_containers_send_logs(ops_test, loki_charm, log_proxy_tester_charm):
-    loki_app_name = "loki"
-    tester_app_name = "log-proxy-tester"
+async def test_setup(ops_test, loki_charm, log_proxy_tester_charm):
     app_names = [loki_app_name, tester_app_name]
 
     await asyncio.gather(
@@ -60,13 +62,17 @@ async def test_check_both_containers_send_logs(ops_test, loki_charm, log_proxy_t
     await ops_test.model.add_relation(loki_app_name, tester_app_name)
     await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
 
+
+@pytest.mark.work
+async def test_series_found(ops_test):
     series = await loki_endpoint_request(ops_test, loki_app_name, "loki/api/v1/series", 0)
     data_series = json.loads(series)["data"]
 
     found = 0
     for data in data_series:
+        # filter out the series we generated from those written by charm logging
         if (
-            data["container"] in ["workload-a", "workload-b"]
+            data.get("container") in ["workload-a", "workload-b"]
             and data["juju_application"] == tester_app_name
             and data["filename"]
             in [
@@ -77,5 +83,4 @@ async def test_check_both_containers_send_logs(ops_test, loki_charm, log_proxy_t
         ):
             found += 1
 
-    # there might be more data series (charm logging).
     assert found == 3
