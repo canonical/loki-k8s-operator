@@ -723,16 +723,12 @@ class LokiOperatorCharm(CharmBase):
         except URLError as e:
             msg = f"Failed to verify alert rules via {url}"
             logger.error(f"{msg}: %s", e.reason)
-            self._stored.status["rules"] = to_tuple(
-                BlockedStatus(f"{msg}. Check juju debug-log")
-            )
+            self._stored.status["rules"] = to_tuple(BlockedStatus(f"{msg}. Check juju debug-log"))
             return
         except Exception as e:
             msg = f"Failed to verify alert rules via {url}"
             logger.error(f"{msg}: %s", e)
-            self._stored.status["rules"] = to_tuple(
-                BlockedStatus(f"{msg}. Check juju debug-log")
-            )
+            self._stored.status["rules"] = to_tuple(BlockedStatus(f"{msg}. Check juju debug-log"))
             return
         else:
             logger.debug("Verifying alert rules: Ok")
