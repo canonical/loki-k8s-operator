@@ -493,7 +493,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
             self.harness.charm.unit.status.message,
-            "Errors in alert rule groups. Check juju debug-log",
+            "Failed to verify alert rules. Check juju debug-log",
         )
 
         # Emit another config changed to make sure we stay blocked
@@ -502,7 +502,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
         self.assertEqual(
             self.harness.charm.unit.status.message,
-            "Errors in alert rule groups. Check juju debug-log",
+            "Failed to verify alert rules. Check juju debug-log",
         )
 
         self.mock_request.side_effect = None
@@ -519,9 +519,9 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self._add_alerting_relation()
         self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-        self.assertEqual(
+        self.assertIn(
+            "Failed to verify alert rules via",
             self.harness.charm.unit.status.message,
-            "Error connecting to Loki. Check juju debug-log",
         )
 
         # Emit another config changed to make sure we unblock

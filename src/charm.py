@@ -702,37 +702,36 @@ class LokiOperatorCharm(CharmBase):
         )
         url = f"{self._internal_url}/loki/api/v1/rules"
         try:
-            logger.debug(f"Checking loki alert rules via {url}.")
+            logger.debug(f"Verifying alert rules via {url}.")
             urllib.request.urlopen(url, timeout=2.0, context=ssl_context)
         except HTTPError as e:
             msg = e.read().decode("utf-8")
 
             if e.code == 404 and "no rule groups found" in msg:
-                log_msg = "Checking alert rules: No rule groups found"
+                log_msg = "Failed to verify alert rules: No rule groups found"
                 logger.debug(log_msg)
                 self._stored.status["rules"] = to_tuple(BlockedStatus(log_msg))
                 return
 
             message = "{} - {}".format(e.code, e.msg)  # type: ignore
-            logger.error("Checking alert rules: %s", message)
+            log_msg = "Failed to verify alert rules"
+            logger.error(f"{log_msg}: %s", message)
             self._stored.status["rules"] = to_tuple(
-                BlockedStatus("Errors in alert rule groups. Check juju debug-log")
+                BlockedStatus(f"{log_msg}. Check juju debug-log")
             )
             return
         except URLError as e:
-            logger.error("Checking alert rules: %s", e.reason)
-            self._stored.status["rules"] = to_tuple(
-                BlockedStatus("Error connecting to Loki. Check juju debug-log")
-            )
+            msg = f"Failed to verify alert rules via {url}"
+            logger.error(f"{msg}: %s", e.reason)
+            self._stored.status["rules"] = to_tuple(BlockedStatus(f"{msg}. Check juju debug-log"))
             return
         except Exception as e:
-            logger.error("Checking alert rules: %s", e)
-            self._stored.status["rules"] = to_tuple(
-                BlockedStatus("Error connecting to Loki. Check juju debug-log")
-            )
+            msg = f"Failed to verify alert rules via {url}"
+            logger.error(f"{msg}: %s", e)
+            self._stored.status["rules"] = to_tuple(BlockedStatus(f"{msg}. Check juju debug-log"))
             return
         else:
-            logger.debug("Checking alert rules: Ok")
+            logger.debug("Verifying alert rules: Ok")
             self._stored.status["rules"] = to_tuple(ActiveStatus())
             return
 
