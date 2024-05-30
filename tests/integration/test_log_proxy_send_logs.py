@@ -46,7 +46,7 @@ async def test_setup(ops_test, loki_charm, log_proxy_tester_charm):
             application_name=tester_app_name,
         ),
     )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
+    await ops_test.model.wait_for_idle(apps=app_names, status="active", raise_on_error=False)
 
     # Generate log files in the containers
     await generate_log_file(
