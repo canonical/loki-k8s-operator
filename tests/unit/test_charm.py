@@ -491,11 +491,19 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self._add_alerting_relation()
         self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status.message,
+            "Failed to verify alert rules. Check juju debug-log",
+        )
 
         # Emit another config changed to make sure we stay blocked
         self.harness.charm.on.config_changed.emit()
         self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertEqual(
+            self.harness.charm.unit.status.message,
+            "Failed to verify alert rules. Check juju debug-log",
+        )
 
         self.mock_request.side_effect = None
         self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
@@ -511,6 +519,10 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self._add_alerting_relation()
         self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
+        self.assertIn(
+            "Failed to verify alert rules via",
+            self.harness.charm.unit.status.message,
+        )
 
         # Emit another config changed to make sure we unblock
         self.mock_request.side_effect = None
