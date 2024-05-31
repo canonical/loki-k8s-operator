@@ -176,10 +176,10 @@ def _get_server_cert(server_cert_getter, self, charm):
 
 
 def _setup_root_logger_initializer(
-        charm: Type[CharmBase],
-        logging_endpoints_getter: _GetterType,
-        server_cert_getter: Optional[_GetterType],
-        service_name: Optional[str] = None,
+    charm: Type[CharmBase],
+    logging_endpoints_getter: _GetterType,
+    server_cert_getter: Optional[_GetterType],
+    service_name: Optional[str] = None,
 ):
     """Patch the charm's initializer and inject a call to set up root logging."""
     original_init = charm.__init__
@@ -238,9 +238,9 @@ def _setup_root_logger_initializer(
 
 
 def log_charm(
-        logging_endpoints: str,
-        server_cert: Optional[str] = None,
-        service_name: Optional[str] = None,
+    logging_endpoints: str,
+    server_cert: Optional[str] = None,
+    service_name: Optional[str] = None,
 ):
     """Set up the root logger to forward any charm logs to one or more Loki push API endpoints.
 
@@ -286,10 +286,10 @@ def log_charm(
 
 
 def _autoinstrument(
-        charm_type: Type[CharmBase],
-        logging_endpoints_getter: _GetterType,
-        server_cert_getter: Optional[_GetterType] = None,
-        service_name: Optional[str] = None,
+    charm_type: Type[CharmBase],
+    logging_endpoints_getter: _GetterType,
+    server_cert_getter: Optional[_GetterType] = None,
+    service_name: Optional[str] = None,
 ) -> Type[CharmBase]:
     """Set up logging on this charm class.
 
