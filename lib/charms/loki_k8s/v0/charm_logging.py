@@ -225,7 +225,6 @@ def _setup_root_logger_initializer(
                 url=url,
                 tags=tags,
                 cert=str(server_cert) if server_cert else None,
-                # auth=("username", "password"),
             )
 
             root_logger.addHandler(handler)
