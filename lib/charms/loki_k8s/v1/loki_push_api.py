@@ -17,15 +17,14 @@ This library
 send log to Loki by implementing the consumer side of the `loki_push_api` relation interface.
 For instance, a Promtail or Grafana agent charm which needs to send logs to Loki.
 
-- `LogProxyConsumer`: SCHEDULED FOR DEPRECATION.
+- `LogProxyConsumer`: DEPRECATED.
 This object can be used by any Charmed Operator which needs to send telemetry, such as logs, to
 Loki through a Log Proxy by implementing the consumer side of the `loki_push_api` relation
 interface.
 In order to be able to control the labels on the logs pushed this object adds a Pebble layer
 that runs Promtail in the workload container, injecting Juju topology labels into the
 logs on the fly.
-This object is scheduled for deprecation with the release and adoption of Juju 3.6 LTS.
-Consider migrating to LogForwarder.
+This object is deprecated. Consider migrating to LogForwarder with the release of Juju 3.6 LTS.
 
 - `LogForwarder`: This object can be used by any Charmed Operator which needs to send the workload
 standard output (stdout) through Pebble's log forwarding mechanism, to Loki endpoints through the
@@ -49,13 +48,13 @@ and three optional arguments.
 
 - `relation_name`: The name of the relation that the charm uses to interact
   with its clients, which implement `LokiPushApiConsumer` `LogForwarder`, or `LogProxyConsumer`
-  (note that LogProxyConsumer is scheduled for deprecation).
+  (note that LogProxyConsumer is deprecated).
 
   If provided, this relation name must match a provided relation in metadata.yaml with the
   `loki_push_api` interface.
 
   The default relation name is "logging" for `LokiPushApiConsumer` and `LogForwarder`, and
-  "log-proxy" for `LogProxyConsumer` (note that LogProxyConsumer is scheduled for deprecation).
+  "log-proxy" for `LogProxyConsumer` (note that LogProxyConsumer is deprecated).
 
   For example, a provider's `metadata.yaml` file may look as follows:
 
@@ -230,8 +229,8 @@ to do this with promtail.
 
 ## LogProxyConsumer Library Usage
 
-> Note: This object is scheduled for deprecation with the release and adoption of Juju 3.6 LTS.
-> Consider migrating to LogForwarder.
+> Note: This object is deprecated. Consider migrating to LogForwarder with the release of Juju 3.6
+> LTS.
 
 Let's say that we have a workload charm that produces logs, and we need to send those logs to a
 workload implementing the `loki_push_api` interface, such as `Loki` or `Grafana Agent`.
@@ -1779,8 +1778,8 @@ class LogProxyEvents(ObjectEvents):
 class LogProxyConsumer(ConsumerBase):
     """LogProxyConsumer class.
 
-    > Note: This object is scheduled for deprecation with the release and adoption of Juju 3.6 LTS.
-    > Consider migrating to LogForwarder.
+    > Note: This object is deprecated. Consider migrating to LogForwarder with the release of Juju
+    > 3.6 LTS.
 
     The `LogProxyConsumer` object provides a method for attaching `promtail` to
     a workload in order to generate structured logging data from applications
