@@ -496,7 +496,7 @@ class LokiOperatorCharm(CharmBase):
             ingestion_rate_mb=int(self.config["ingestion-rate-mb"]),
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
             retention_period=int(self.config["retention-period"]),
-            http_tls=(self.server_cert.server_cert is not None),
+            http_tls=self._tls_ready,
             v12_migration_date=v12_migration_date,
         ).build()
 
