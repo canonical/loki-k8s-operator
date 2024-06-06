@@ -172,7 +172,7 @@ class LokiOperatorCharm(CharmBase):
             self,
             relation_name="ingress",
             port=self._port,
-            scheme=lambda: "https" if self._certs_on_disk else "http",
+            scheme=lambda: "https" if self._tls_ready else "http",
             strip_prefix=True,
         )
         self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
@@ -204,7 +204,7 @@ class LokiOperatorCharm(CharmBase):
         self.loki_provider = LokiPushApiProvider(
             self,
             address=external_url.hostname or self.hostname,
-            port=external_url.port or 443 if self._certs_on_disk else 80,
+            port=external_url.port or 443 if self._tls_ready else 80,
             scheme=external_url.scheme,
             path=f"{external_url.path}/loki/api/v1/push",
         )
@@ -410,7 +410,7 @@ class LokiOperatorCharm(CharmBase):
         """
         job: Dict[str, Any] = {"static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]}
 
-        if self._certs_on_disk:
+        if self._tls_ready:
             job["scheme"] = "https"
 
         return [job]
@@ -431,14 +431,9 @@ class LokiOperatorCharm(CharmBase):
         )
 
     @property
-    def _certs_in_reldata(self) -> bool:
-        """Check if the certificate is available in relation data."""
-        return (
-            self.server_cert.enabled
-            and (self.server_cert.server_cert is not None)
-            and (self.server_cert.private_key is not None)
-            and (self.server_cert.ca_cert is not None)
-        )
+    def _tls_ready(self) -> bool:
+        """Return True if all TLS related certs are available from relation data and on disk."""
+        return self.server_cert.available and self._certs_on_disk
 
     ##############################################
     #             UTILITY METHODS                #
@@ -505,9 +500,9 @@ class LokiOperatorCharm(CharmBase):
             v12_migration_date=v12_migration_date,
         ).build()
 
-        # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
-        # to let the charm go into error state than setting blocked.
-        if self._certs_in_reldata and not self._certs_on_disk:
+        # At this point we're already after the can_connect guard, so if the following pebble
+        # operations fail, better to let the charm go into error state than setting blocked.
+        if self.server_cert.available and not self._certs_on_disk:
             self._update_cert()
         restart = self._update_config(config) or restart
 
@@ -525,7 +520,7 @@ class LokiOperatorCharm(CharmBase):
             return  # TODO: why do we have a return here?
 
         self.ingress_per_unit.provide_ingress_requirements(
-            scheme="https" if self._certs_on_disk else "http", port=self._port
+            scheme="https" if self._tls_ready else "http", port=self._port
         )
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
         self.grafana_source_provider.update_source(source_url=self._external_url)
@@ -548,7 +543,7 @@ class LokiOperatorCharm(CharmBase):
 
         ca_cert_path = Path(self._ca_cert_path)
 
-        if self._certs_in_reldata:
+        if self.server_cert.available:
             # Save the workload certificates
             self._loki_container.push(
                 CERT_FILE,
@@ -692,7 +687,7 @@ class LokiOperatorCharm(CharmBase):
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the loki api server."""
-        scheme = "https" if self._certs_on_disk else "http"
+        scheme = "https" if self._tls_ready else "http"
         return f"{scheme}://{socket.getfqdn()}:{self._port}"
 
     def _check_alert_rules(self):
@@ -773,7 +768,7 @@ class LokiOperatorCharm(CharmBase):
     @property
     def server_ca_cert_path(self) -> Optional[str]:
         """Server CA certificate path for TLS tracing."""
-        if self._certs_in_reldata:
+        if self._tls_ready:
             return self._ca_cert_path
         return None
 
