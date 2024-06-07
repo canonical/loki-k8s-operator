@@ -123,10 +123,15 @@ def charm_logging_disabled():
 
     For usage in tests.
     """
-    previous = os.getenv(CHARM_LOGGING_ENABLED, "1")
+    previous = os.getenv(CHARM_LOGGING_ENABLED)
     os.environ[CHARM_LOGGING_ENABLED] = "0"
+
     yield
-    os.environ[CHARM_LOGGING_ENABLED] = previous
+
+    if previous is None:
+        os.environ.pop(CHARM_LOGGING_ENABLED)
+    else:
+        os.environ[CHARM_LOGGING_ENABLED] = previous
 
 
 _C = TypeVar("_C", bound=Type[CharmBase])
