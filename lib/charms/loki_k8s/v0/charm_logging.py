@@ -105,7 +105,11 @@ CHARM_LOGGING_ENABLED = "CHARM_LOGGING_ENABLED"
 
 
 def is_enabled() -> bool:
-    """Whether charm logging is enabled."""
+    """Whether charm logging is enabled.
+
+    We assume it is enabled, unless the envvar CHARM_LOGGING_ENABLED is set to `0`
+    (or anything except `1`).
+    """
     return os.getenv(CHARM_LOGGING_ENABLED, "1") == "1"
 
 
