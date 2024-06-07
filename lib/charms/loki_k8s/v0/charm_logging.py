@@ -76,9 +76,10 @@ from pathlib import Path
 from typing import (
     Callable,
     Optional,
+    Sequence,
     Type,
     TypeVar,
-    Union, Sequence,
+    Union,
 )
 
 from cosl import JujuTopology
@@ -143,7 +144,9 @@ _T = TypeVar("_T", bound=type)
 _F = TypeVar("_F", bound=Type[Callable])
 
 
-def _get_logging_endpoints(logging_endpoints_getter: _EndpointGetterType, self: CharmBase, charm: Type[CharmBase]):
+def _get_logging_endpoints(
+    logging_endpoints_getter: _EndpointGetterType, self: CharmBase, charm: Type[CharmBase]
+):
     logging_endpoints: Optional[Sequence[str]]
 
     if isinstance(logging_endpoints_getter, property):
@@ -175,7 +178,9 @@ def _get_logging_endpoints(logging_endpoints_getter: _EndpointGetterType, self: 
     return sanitized_logging_endponts
 
 
-def _get_server_cert(server_cert_getter: _CertGetterType, self: CharmBase, charm: Type[CharmBase]) -> Optional[str]:
+def _get_server_cert(
+    server_cert_getter: _CertGetterType, self: CharmBase, charm: Type[CharmBase]
+) -> Optional[str]:
     if isinstance(server_cert_getter, property):
         server_cert = server_cert_getter.__get__(self)
     else:  # method or callable
@@ -195,17 +200,18 @@ def _get_server_cert(server_cert_getter: _CertGetterType, self: CharmBase, charm
 
     sc_path = Path(server_cert).absolute()
     if not sc_path.exists():
-        raise RuntimeError(f"{charm}.{server_cert_getter} returned bad path {server_cert!r}: "
-                           f"file not found.")
+        raise RuntimeError(
+            f"{charm}.{server_cert_getter} returned bad path {server_cert!r}: " f"file not found."
+        )
 
     return str(sc_path)
 
 
 def _setup_root_logger_initializer(
-        charm: Type[CharmBase],
-        logging_endpoints_getter: _EndpointGetterType,
-        server_cert_getter: Optional[_CertGetterType],
-        service_name: Optional[str] = None,
+    charm: Type[CharmBase],
+    logging_endpoints_getter: _EndpointGetterType,
+    server_cert_getter: Optional[_CertGetterType],
+    service_name: Optional[str] = None,
 ):
     """Patch the charm's initializer and inject a call to set up root logging."""
     original_init = charm.__init__
@@ -264,9 +270,9 @@ def _setup_root_logger_initializer(
 
 
 def log_charm(
-        logging_endpoints: str,
-        server_cert: Optional[str] = None,
-        service_name: Optional[str] = None,
+    logging_endpoints: str,
+    server_cert: Optional[str] = None,
+    service_name: Optional[str] = None,
 ):
     """Set up the root logger to forward any charm logs to one or more Loki push API endpoints.
 
@@ -312,10 +318,10 @@ def log_charm(
 
 
 def _autoinstrument(
-        charm_type: Type[CharmBase],
-        logging_endpoints_getter: _EndpointGetterType,
-        server_cert_getter: Optional[_CertGetterType] = None,
-        service_name: Optional[str] = None,
+    charm_type: Type[CharmBase],
+    logging_endpoints_getter: _EndpointGetterType,
+    server_cert_getter: Optional[_CertGetterType] = None,
+    service_name: Optional[str] = None,
 ) -> Type[CharmBase]:
     """Set up logging on this charm class.
 

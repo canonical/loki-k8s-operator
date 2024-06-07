@@ -25,7 +25,6 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
-import ops
 import yaml
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
@@ -785,10 +784,7 @@ class LokiOperatorCharm(CharmBase):
     def logging_endpoints(self) -> Optional[List[str]]:
         """Loki endpoint for charm logging."""
         container = self._loki_container
-        if (
-            container.can_connect()
-            and container.get_service(self._name).is_running()
-        ):
+        if container.can_connect() and container.get_service(self._name).is_running():
             scheme = "https" if self.server_ca_cert_path else "http"
             return [f"{scheme}://localhost:3100" + self._loki_push_api_endpoint]
         return []
