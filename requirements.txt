@@ -1,4 +1,4 @@
-cosl
+cosl>=0.0.12
 ops
 kubernetes
 requests

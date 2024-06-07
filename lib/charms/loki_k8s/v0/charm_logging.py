@@ -18,14 +18,28 @@ for more information.
 Once your charm is related to, for example, COS' Loki charm (or a Grafana Agent),
 you will be able to inspect in real time from the Grafana dashboard the logs emitted by your charm.
 
+## Labels
+
+The library will inject the following labels into the records sent to grafana:
+- ``model``: name of the juju model this charm is deployed to
+- ``model_uuid``: uuid of the model
+- ``application``: juju application name (such as 'mycharm')
+- ``unit``: unit name (such as 'mycharm/0')
+- ``charm_name``: name of the charm (whatever is in metadata.yaml) under 'name'.
+- ``juju_hook_name``: name of the juju event being processed
+` ``service_name``: name of the service this charm represents.
+    Defaults to app name, but can be configured by the user.
+
+## Usage
+
 To start using this library, you need to do two things:
 1) decorate your charm class with
 
 `@log_charm(loki_push_api_endpoint="my_logging_endpoint")`
 
 2) add to your charm a "my_logging_endpoint" (you can name this attribute whatever you like) **property**
-that returns an http/https endpoint url. If you are using the `LogProxyConsumer` as
-`self.logging = LogProxyConsumer(self, ...)`, the implementation could be:
+that returns an http/https endpoint url. If you are using the `LokiPushApiConsumer` as
+`self.logging = LokiPushApiConsumer(self, ...)`, the implementation could be:
 
 ```
     @property
@@ -64,10 +78,11 @@ from typing import (
     Optional,
     Type,
     TypeVar,
-    Union,
+    Union, Sequence,
 )
 
-from cosl import JujuTopology, LokiHandler
+from cosl import JujuTopology
+from cosl.loki_logger import LokiHandler  # pyright:ignore[reportMissingImports]
 from ops.charm import CharmBase
 from ops.framework import Framework
 
@@ -84,7 +99,8 @@ LIBPATCH = 1
 PYDEPS = ["cosl"]
 
 logger = logging.getLogger("charm_logging")
-_GetterType = Union[Callable[[CharmBase], Optional[str]], property]
+_EndpointGetterType = Union[Callable[[CharmBase], Optional[Sequence[str]]], property]
+_CertGetterType = Union[Callable[[CharmBase], Optional[str]], property]
 CHARM_LOGGING_ENABLED = "CHARM_LOGGING_ENABLED"
 
 
@@ -118,7 +134,9 @@ _T = TypeVar("_T", bound=type)
 _F = TypeVar("_F", bound=Type[Callable])
 
 
-def _get_logging_endpoints(logging_endpoints_getter, self, charm):
+def _get_logging_endpoints(logging_endpoints_getter: _EndpointGetterType, self: CharmBase, charm: Type[CharmBase]):
+    logging_endpoints: Optional[Sequence[str]]
+
     if isinstance(logging_endpoints_getter, property):
         logging_endpoints = logging_endpoints_getter.__get__(self)
     else:  # method or callable
@@ -126,13 +144,11 @@ def _get_logging_endpoints(logging_endpoints_getter, self, charm):
 
     if logging_endpoints is None:
         logger.debug(
-            f"{charm}.{logging_endpoints_getter} returned None; quietly disabling "
-            f"charm_logging for the run."
+            f"Charm logging disabled. {charm.__name__}.{logging_endpoints_getter} returned None."
         )
         return None
 
     errors = []
-    logging_endpoints = tuple(logging_endpoints)
     sanitized_logging_endponts = []
     for endpoint in logging_endpoints:
         if isinstance(endpoint, str):
@@ -150,7 +166,7 @@ def _get_logging_endpoints(logging_endpoints_getter, self, charm):
     return sanitized_logging_endponts
 
 
-def _get_server_cert(server_cert_getter, self, charm):
+def _get_server_cert(server_cert_getter: _CertGetterType, self: CharmBase, charm: Type[CharmBase]) -> Optional[str]:
     if isinstance(server_cert_getter, property):
         server_cert = server_cert_getter.__get__(self)
     else:  # method or callable
@@ -162,24 +178,25 @@ def _get_server_cert(server_cert_getter, self, charm):
         )
         return None
 
-    if not Path(server_cert).is_absolute():
+    if not isinstance(server_cert, str) and not isinstance(server_cert, Path):
         raise ValueError(
-            f"{charm}.{server_cert_getter} should return a valid tls cert absolute path (string | Path)); "
-            f"got {server_cert} instead."
+            f"{charm}.{server_cert_getter} should return a valid path to a tls cert file (string | Path)); "
+            f"got a {type(server_cert)!r} instead."
         )
 
-    if not Path(server_cert).exists():
-        logger.warning(f"cert not found at {server_cert}: sending logs over INSECURE connection")
-        return None
+    sc_path = Path(server_cert).absolute()
+    if not sc_path.exists():
+        raise RuntimeError(f"{charm}.{server_cert_getter} returned bad path {server_cert!r}: "
+                           f"file not found.")
 
-    return server_cert
+    return str(sc_path)
 
 
 def _setup_root_logger_initializer(
-    charm: Type[CharmBase],
-    logging_endpoints_getter: _GetterType,
-    server_cert_getter: Optional[_GetterType],
-    service_name: Optional[str] = None,
+        charm: Type[CharmBase],
+        logging_endpoints_getter: _EndpointGetterType,
+        server_cert_getter: Optional[_CertGetterType],
+        service_name: Optional[str] = None,
 ):
     """Patch the charm's initializer and inject a call to set up root logging."""
     original_init = charm.__init__
@@ -189,7 +206,7 @@ def _setup_root_logger_initializer(
         original_init(self, framework, *args, **kwargs)
 
         if not is_enabled():
-            logger.info("Charm logging DISABLED by env: skipping root logger initialization")
+            logger.debug("Charm logging DISABLED by env: skipping root logger initialization")
             return
 
         try:
@@ -208,11 +225,11 @@ def _setup_root_logger_initializer(
             return
 
         juju_topology = JujuTopology.from_charm(self)
-        tags = {
+        labels = {
             **juju_topology.as_dict(),
             "service_name": service_name or self.app.name,
-            "charm_type_name": type(self).__name__,
-            "dispatch_path": os.getenv("JUJU_DISPATCH_PATH", ""),
+            "charm_type": type(self).__name__,
+            "juju_hook_name": os.getenv("JUJU_HOOK_NAME", ""),
         }
         server_cert: Optional[Union[str, Path]] = (
             _get_server_cert(server_cert_getter, self, charm) if server_cert_getter else None
@@ -223,7 +240,7 @@ def _setup_root_logger_initializer(
         for url in logging_endpoints:
             handler = LokiHandler(
                 url=url,
-                tags=tags,
+                labels=labels,
                 cert=str(server_cert) if server_cert else None,
             )
 
@@ -238,15 +255,15 @@ def _setup_root_logger_initializer(
 
 
 def log_charm(
-    logging_endpoints: str,
-    server_cert: Optional[str] = None,
-    service_name: Optional[str] = None,
+        logging_endpoints: str,
+        server_cert: Optional[str] = None,
+        service_name: Optional[str] = None,
 ):
     """Set up the root logger to forward any charm logs to one or more Loki push API endpoints.
 
     Usage:
     >>> from charms.loki_k8s.v0.charm_logging import log_charm
-    >>> from charms.loki_k8s.v1.loki_push_api import LogProxyConsumer
+    >>> from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
     >>> from ops import CharmBase
     >>>
     >>> @log_charm(
@@ -256,7 +273,7 @@ def log_charm(
     >>>
     >>>     def __init__(self, framework: Framework):
     >>>         ...
-    >>>         self.logging = LogProxyConsumer(self, ...)
+    >>>         self.logging = LokiPushApiConsumer(self, ...)
     >>>
     >>>     @property
     >>>     def loki_push_api_urls(self) -> Optional[List[str]]:
@@ -286,10 +303,10 @@ def log_charm(
 
 
 def _autoinstrument(
-    charm_type: Type[CharmBase],
-    logging_endpoints_getter: _GetterType,
-    server_cert_getter: Optional[_GetterType] = None,
-    service_name: Optional[str] = None,
+        charm_type: Type[CharmBase],
+        logging_endpoints_getter: _EndpointGetterType,
+        server_cert_getter: Optional[_CertGetterType] = None,
+        service_name: Optional[str] = None,
 ) -> Type[CharmBase]:
     """Set up logging on this charm class.
 

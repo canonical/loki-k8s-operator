@@ -538,8 +538,7 @@ class LokiOperatorCharm(CharmBase):
             scheme="https" if self._certs_on_disk else "http", port=self._port
         )
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
-        # self.grafana_source_provider.update_source(source_url=self._external_url)
-        # self.grafana_source_provider.update_source(source_url=self.hostname)
+        self.grafana_source_provider.update_source(source_url=self._external_url)
         self.loki_provider.update_endpoint(url=self._external_url)
         self.catalogue.update_item(item=self._catalogue_item)
 
@@ -788,7 +787,7 @@ class LokiOperatorCharm(CharmBase):
         container = self._loki_container
         if (
             container.can_connect()
-            and container.get_service(self._name).current is ops.pebble.ServiceStatus.ACTIVE
+            and container.get_service(self._name).is_running()
         ):
             scheme = "https" if self.server_ca_cert_path else "http"
             return [f"{scheme}://localhost:3100" + self._loki_push_api_endpoint]
