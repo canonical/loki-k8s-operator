@@ -114,6 +114,7 @@ class LokiOperatorCharm(CharmBase):
     _stored = StoredState()
     _port = HTTP_LISTEN_PORT
     _name = "loki"
+    _service_name = "loki"
     _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
 
     def __init__(self, *args):
@@ -329,11 +330,11 @@ class LokiOperatorCharm(CharmBase):
                 "summary": "Loki layer",
                 "description": "pebble config layer for Loki",
                 "services": {
-                    "loki": {
+                    self._service_name: {
                         "override": "replace",
                         "summary": "loki",
                         "command": self._loki_command,
-                        "startup": "enabled",
+                        "startup": "disabled",
                     },
                 },
             }
@@ -474,7 +475,6 @@ class LokiOperatorCharm(CharmBase):
             self._stored.status["retention"] = to_tuple(
                 BlockedStatus("Please provide a non-negative retention duration")
             )
-            return
 
         current_layer = self._loki_container.get_plan()
         new_layer = self._build_pebble_layer
@@ -499,6 +499,12 @@ class LokiOperatorCharm(CharmBase):
                 "%Y-%m-%d"
             )
 
+        # We need to have the certs in place before rendering the config.
+        # At this point we're already after the can_connect guard, so if the following pebble
+        # operations fail, better to let the charm go into error state than setting blocked.
+        if self.server_cert.available and not self._certs_on_disk:
+            self._update_cert()
+
         config = ConfigBuilder(
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
@@ -510,14 +516,17 @@ class LokiOperatorCharm(CharmBase):
             v12_migration_date=v12_migration_date,
         ).build()
 
-        # At this point we're already after the can_connect guard, so if the following pebble
-        # operations fail, better to let the charm go into error state than setting blocked.
-        if self.server_cert.available and not self._certs_on_disk:
-            self._update_cert()
         restart = self._update_config(config) or restart
+        self._loki_container.add_layer(self._name, new_layer, combine=True)
+        # Now that we for sure have a layer, we can check if the service is running
+        restart = not self._loki_container.get_service(self._service_name).is_running() or restart
 
-        if restart:
-            self._loki_container.add_layer(self._name, new_layer, combine=True)
+        if self.server_cert.enabled and not self.server_cert.available:
+            # We have a TLS relation in place, but the cert isn't there
+            logger.info("Loki stopped")
+            self._loki_container.stop(self._service_name)
+
+        elif restart:
             self._loki_container.restart(self._name)
             logger.info("Loki (re)started")
 
