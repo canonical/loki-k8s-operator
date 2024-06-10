@@ -449,6 +449,16 @@ class LokiOperatorCharm(CharmBase):
                     WaitingStatus("Waiting for resource limit patch to apply")
                 )
 
+            # Note: there could be a race between the resource patch and pebble operations (charm
+            # code proceeds beyond a can_connect guard, and then lightkube patches the statefulset
+            # and the workload is no longer available). After a statefulset patch we're guaranteed
+            # to get at least upgrade-charm + config-changed + pebble-ready. Ideally, we'd like to
+            # defer relation events before we "return".
+            # Unfortunately, we can't do an isinstance check on an Event type, because relations
+            # are managed by libs, and libs emit custom events.
+            # So, returning early and relying on the holistic nature of the reconciler.
+            return
+
         # "can_connect" is a racy check, so we do it once here (instead of in collect-status)
         if self._loki_container.can_connect():
             self._stored.status["config"] = to_tuple(ActiveStatus())
