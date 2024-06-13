@@ -114,6 +114,7 @@ class LokiOperatorCharm(CharmBase):
     _stored = StoredState()
     _port = HTTP_LISTEN_PORT
     _name = "loki"
+    _service_name = "loki"
     _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
 
     def __init__(self, *args):
@@ -172,7 +173,7 @@ class LokiOperatorCharm(CharmBase):
             self,
             relation_name="ingress",
             port=self._port,
-            scheme=lambda: "https" if self._certs_on_disk else "http",
+            scheme=lambda: "https" if self._tls_ready else "http",
             strip_prefix=True,
         )
         self.framework.observe(self.ingress_per_unit.on.ready_for_unit, self._on_ingress_changed)
@@ -204,7 +205,7 @@ class LokiOperatorCharm(CharmBase):
         self.loki_provider = LokiPushApiProvider(
             self,
             address=external_url.hostname or self.hostname,
-            port=external_url.port or 443 if self._certs_on_disk else 80,
+            port=external_url.port or 443 if self._tls_ready else 80,
             scheme=external_url.scheme,
             path=f"{external_url.path}/loki/api/v1/push",
         )
@@ -329,11 +330,11 @@ class LokiOperatorCharm(CharmBase):
                 "summary": "Loki layer",
                 "description": "pebble config layer for Loki",
                 "services": {
-                    "loki": {
+                    self._service_name: {
                         "override": "replace",
                         "summary": "loki",
                         "command": self._loki_command,
-                        "startup": "enabled",
+                        "startup": "disabled",
                     },
                 },
             }
@@ -410,7 +411,7 @@ class LokiOperatorCharm(CharmBase):
         """
         job: Dict[str, Any] = {"static_configs": [{"targets": [f"{self.hostname}:{self._port}"]}]}
 
-        if self._certs_on_disk:
+        if self._tls_ready:
             job["scheme"] = "https"
 
         return [job]
@@ -431,14 +432,9 @@ class LokiOperatorCharm(CharmBase):
         )
 
     @property
-    def _certs_in_reldata(self) -> bool:
-        """Check if the certificate is available in relation data."""
-        return (
-            self.server_cert.enabled
-            and (self.server_cert.server_cert is not None)
-            and (self.server_cert.private_key is not None)
-            and (self.server_cert.ca_cert is not None)
-        )
+    def _tls_ready(self) -> bool:
+        """Return True if all TLS related certs are available from relation data and on disk."""
+        return self.server_cert.available and self._certs_on_disk
 
     ##############################################
     #             UTILITY METHODS                #
@@ -453,6 +449,16 @@ class LokiOperatorCharm(CharmBase):
                 self._stored.status["k8s_patch"] = to_tuple(
                     WaitingStatus("Waiting for resource limit patch to apply")
                 )
+
+            # Note: there could be a race between the resource patch and pebble operations (charm
+            # code proceeds beyond a can_connect guard, and then lightkube patches the statefulset
+            # and the workload is no longer available). After a statefulset patch we're guaranteed
+            # to get at least upgrade-charm + config-changed + pebble-ready. Ideally, we'd like to
+            # defer relation events before we "return".
+            # Unfortunately, we can't do an isinstance check on an Event type, because relations
+            # are managed by libs, and libs emit custom events.
+            # So, returning early and relying on the holistic nature of the reconciler.
+            return
 
         # "can_connect" is a racy check, so we do it once here (instead of in collect-status)
         if self._loki_container.can_connect():
@@ -469,7 +475,6 @@ class LokiOperatorCharm(CharmBase):
             self._stored.status["retention"] = to_tuple(
                 BlockedStatus("Please provide a non-negative retention duration")
             )
-            return
 
         current_layer = self._loki_container.get_plan()
         new_layer = self._build_pebble_layer
@@ -494,6 +499,12 @@ class LokiOperatorCharm(CharmBase):
                 "%Y-%m-%d"
             )
 
+        # We need to have the certs in place before rendering the config.
+        # At this point we're already after the can_connect guard, so if the following pebble
+        # operations fail, better to let the charm go into error state than setting blocked.
+        if self.server_cert.available and not self._certs_on_disk:
+            self._update_cert()
+
         config = ConfigBuilder(
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
@@ -501,18 +512,21 @@ class LokiOperatorCharm(CharmBase):
             ingestion_rate_mb=int(self.config["ingestion-rate-mb"]),
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
             retention_period=int(self.config["retention-period"]),
-            http_tls=(self.server_cert.server_cert is not None),
+            http_tls=self._tls_ready,
             v12_migration_date=v12_migration_date,
         ).build()
 
-        # At this point we're already after the can_connect guard, so if the following pebble operations fail, better
-        # to let the charm go into error state than setting blocked.
-        if self._certs_in_reldata and not self._certs_on_disk:
-            self._update_cert()
         restart = self._update_config(config) or restart
+        self._loki_container.add_layer(self._name, new_layer, combine=True)
+        # Now that we for sure have a layer, we can check if the service is running
+        restart = not self._loki_container.get_service(self._service_name).is_running() or restart
 
-        if restart:
-            self._loki_container.add_layer(self._name, new_layer, combine=True)
+        if self.server_cert.enabled and not self.server_cert.available:
+            # We have a TLS relation in place, but the cert isn't there
+            logger.info("Loki stopped")
+            self._loki_container.stop(self._service_name)
+
+        elif restart:
             self._loki_container.restart(self._name)
             logger.info("Loki (re)started")
 
@@ -525,7 +539,7 @@ class LokiOperatorCharm(CharmBase):
             return  # TODO: why do we have a return here?
 
         self.ingress_per_unit.provide_ingress_requirements(
-            scheme="https" if self._certs_on_disk else "http", port=self._port
+            scheme="https" if self._tls_ready else "http", port=self._port
         )
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
         self.grafana_source_provider.update_source(source_url=self._external_url)
@@ -548,7 +562,7 @@ class LokiOperatorCharm(CharmBase):
 
         ca_cert_path = Path(self._ca_cert_path)
 
-        if self._certs_in_reldata:
+        if self.server_cert.available:
             # Save the workload certificates
             self._loki_container.push(
                 CERT_FILE,
@@ -692,7 +706,7 @@ class LokiOperatorCharm(CharmBase):
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the loki api server."""
-        scheme = "https" if self._certs_on_disk else "http"
+        scheme = "https" if self._tls_ready else "http"
         return f"{scheme}://{socket.getfqdn()}:{self._port}"
 
     def _check_alert_rules(self):
@@ -773,7 +787,7 @@ class LokiOperatorCharm(CharmBase):
     @property
     def server_ca_cert_path(self) -> Optional[str]:
         """Server CA certificate path for TLS tracing."""
-        if self._certs_in_reldata:
+        if self._tls_ready:
             return self._ca_cert_path
         return None
 
