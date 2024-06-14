@@ -781,7 +781,7 @@ class LokiOperatorCharm(CharmBase):
         return None
 
     @property
-    def logging_endpoints(self) -> Optional[List[str]]:
+    def logging_endpoints(self) -> List[str]:
         """Loki endpoint for charm logging."""
         container = self._loki_container
         if container.can_connect() and container.get_service(self._name).is_running():

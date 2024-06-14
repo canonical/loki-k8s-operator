@@ -53,8 +53,12 @@ The ``log_charm`` decorator will take these endpoints and set up the root logger
 logging module root logger) to forward all logs to these loki endpoints.
 
 ## TLS support
-If your charm integrates with a tls provider which is also trusted by Loki, you can configure TLS by
-passing to charm logging a `server_cert` parameter.
+If your charm integrates with a tls provider which is also trusted by the logs receiver, you can
+configure TLS by passing to charm logging a `server_cert` parameter.
+
+If you're not using the same CA as the loki-push-api endpoint you are sending logs to,
+you'll need to implement a cert-transfer relation to obtain the CA certificate from the same
+CA that Loki is using.
 
 ```
 @log_charm(loki_push_api_endpoint="my_logging_endpoint", server_cert="my_server_cert")
@@ -122,6 +126,10 @@ class InvalidEndpointError(CharmLoggingError):
     """Raised if an endpoint is invalid."""
 
 
+class InvalidEndpointsError(CharmLoggingError):
+    """Raised if an endpoint is invalid."""
+
+
 @contextmanager
 def charm_logging_disabled():
     """Contextmanager to temporarily disable charm logging.
@@ -162,14 +170,17 @@ def _get_logging_endpoints(
 
     errors = []
     sanitized_logging_endponts = []
-    for endpoint in logging_endpoints:
-        if isinstance(endpoint, str):
-            sanitized_logging_endponts.append(endpoint)
-        else:
-            errors.append(f"invalid endpoint: expected string, got {endpoint!r}")
+    if isinstance(logging_endpoints, str):
+        errors.append("invalid return value: expected Iterable[str], got str")
+    else:
+        for endpoint in logging_endpoints:
+            if isinstance(endpoint, str):
+                sanitized_logging_endponts.append(endpoint)
+            else:
+                errors.append(f"invalid endpoint: expected string, got {endpoint!r}")
 
     if errors:
-        logger.error(
+        raise InvalidEndpointsError(
             f"{charm}.{logging_endpoints_getter} should return an iterable of Loki push-api "
             "(-compatible) endpoints (strings); "
             f"ERRORS: {errors}"
@@ -186,9 +197,12 @@ def _get_server_cert(
     else:  # method or callable
         server_cert = server_cert_getter(self)
 
+    # we're assuming that the ca cert that signed this unit is the same that has signed loki's
     if server_cert is None:
+        logger.debug(f"{charm.__name__}.{server_cert_getter} returned None.")
         logger.warning(
-            f"{charm}.{server_cert_getter} returned None; sending logs over INSECURE connection."
+            "Charm logs are being sent over insecure http because a ca cert is "
+            "not provided to the charm_logging module."
         )
         return None
 
@@ -224,17 +238,7 @@ def _setup_root_logger_initializer(
             logger.debug("Charm logging DISABLED by env: skipping root logger initialization")
             return
 
-        try:
-            logging_endpoints = _get_logging_endpoints(logging_endpoints_getter, self, charm)
-        except Exception:
-            # if anything goes wrong with retrieving the endpoint, we go on with logging disabled.
-            # better than breaking the charm.
-            logger.exception(
-                f"exception retrieving the logging "
-                f"endpoint from {charm}.{logging_endpoints_getter}; "
-                f"proceeding with charm_logging DISABLED. "
-            )
-            return
+        logging_endpoints = _get_logging_endpoints(logging_endpoints_getter, self, charm)
 
         if not logging_endpoints:
             return
@@ -258,12 +262,9 @@ def _setup_root_logger_initializer(
                 labels=labels,
                 cert=str(server_cert) if server_cert else None,
             )
-
             root_logger.addHandler(handler)
-            root_logger.debug(
-                "Initialized charm logger",
-                extra={"tags": {"endpoint": url}},
-            )
+
+        logger.debug("Initialized LokiHandler and set up root logging for charm code.")
         return
 
     charm.__init__ = wrap_init
