@@ -128,9 +128,9 @@ class LokiOperatorCharm(CharmBase):
                 config=to_tuple(ActiveStatus()),
                 rules=to_tuple(ActiveStatus()),
                 retention=to_tuple(ActiveStatus()),
-            )
+            ),
+            fresh_install=True,
         )
-        self._stored.set_default(fresh_install=True)  # Relies on controller-backed storage
 
         self._loki_container = self.unit.get_container(self._name)
         self._node_exporter_container = self.unit.get_container("node-exporter")
@@ -793,6 +793,4 @@ class LokiOperatorCharm(CharmBase):
 
 
 if __name__ == "__main__":
-    # We need use_juju_for_storage=True because ingress_per_unit
-    # requires it to keep track of the ingress address.
-    main(LokiOperatorCharm, use_juju_for_storage=True)
+    main(LokiOperatorCharm)
