@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 
 LIBID = "b5cd5cd580f3428fa5f59a8876dcbe6a"
 LIBAPI = 1
-LIBPATCH = 8
+LIBPATCH = 10
 
 VAULT_SECRET_LABEL = "cert-handler-private-vault"
 
@@ -274,6 +274,7 @@ class CertHandler(Object):
         *,
         key: str,
         certificates_relation_name: str = "certificates",
+        peer_relation_name: str = "peers",
         cert_subject: Optional[str] = None,
         sans: Optional[List[str]] = None,
     ):
@@ -285,7 +286,11 @@ class CertHandler(Object):
             charm: The owning charm.
             key: A manually-crafted, static, unique identifier used by ops to identify events.
              It shouldn't change between one event to another.
-            certificates_relation_name: Must match metadata.yaml.
+            certificates_relation_name: Name of the certificates relation over which we obtain TLS certificates.
+                Must match metadata.yaml.
+            peer_relation_name: Name of a peer relation used to store our secrets.
+                Only used on older Juju versions where secrets are not supported.
+                Must match metadata.yaml.
             cert_subject: Custom subject. Name collisions are under the caller's responsibility.
             sans: DNS names. If none are given, use FQDN.
         """
@@ -309,7 +314,7 @@ class CertHandler(Object):
             # self.framework.observe(self.charm.on.secret_remove, self._rotate_csr)
 
         else:
-            vault_backend = _RelationVaultBackend(charm, relation_name="peers")
+            vault_backend = _RelationVaultBackend(charm, relation_name=peer_relation_name)
         self.vault = Vault(vault_backend)
 
         self.certificates_relation_name = certificates_relation_name
@@ -391,29 +396,36 @@ class CertHandler(Object):
 
     @property
     def enabled(self) -> bool:
-        """Boolean indicating whether the charm has a tls_certificates relation."""
+        """Boolean indicating whether the charm has a tls_certificates relation.
+
+        See also the `available` property.
+        """
         # We need to check for units as a temporary workaround because of https://bugs.launchpad.net/juju/+bug/2024583
         # This could in theory not work correctly on scale down to 0 but it is necessary for the moment.
 
-        if not self.charm.model.get_relation(self.certificates_relation_name):
+        if not self.relation:
             return False
 
-        if not self.charm.model.get_relation(
-            self.certificates_relation_name
-        ).units:  # pyright: ignore
+        if not self.relation.units:  # pyright: ignore
             return False
 
-        if not self.charm.model.get_relation(
-            self.certificates_relation_name
-        ).app:  # pyright: ignore
+        if not self.relation.app:  # pyright: ignore
             return False
 
-        if not self.charm.model.get_relation(
-            self.certificates_relation_name
-        ).data:  # pyright: ignore
+        if not self.relation.data:  # pyright: ignore
             return False
 
         return True
+
+    @property
+    def available(self) -> bool:
+        """Return True if all certs are available in relation data; False otherwise."""
+        return (
+            self.enabled
+            and self.server_cert is not None
+            and self.private_key is not None
+            and self.ca_cert is not None
+        )
 
     def _on_certificates_relation_joined(self, _) -> None:
         # this will only generate a csr if we don't have one already
@@ -507,7 +519,7 @@ class CertHandler(Object):
         # ignoring all but the last one.
         if len(csrs) > 1:
             logger.warning(
-                "Multiple CSRs found in `certificates` relation. "
+                f"Multiple CSRs found in {self.certificates_relation_name!r} relation. "
                 "cert_handler is not ready to expect it."
             )
 
