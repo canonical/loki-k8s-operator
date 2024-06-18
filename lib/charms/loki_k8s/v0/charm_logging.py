@@ -20,7 +20,7 @@ you will be able to inspect in real time from the Grafana dashboard the logs emi
 
 ## Labels
 
-The library will inject the following labels into the records sent to grafana:
+The library will inject the following labels into the records sent to Loki:
 - ``model``: name of the juju model this charm is deployed to
 - ``model_uuid``: uuid of the model
 - ``application``: juju application name (such as 'mycharm')
@@ -35,26 +35,24 @@ The library will inject the following labels into the records sent to grafana:
 To start using this library, you need to do two things:
 1) decorate your charm class with
 
-`@log_charm(loki_push_api_endpoint="my_logging_endpoint")`
+    @log_charm(loki_push_api_endpoint="my_logging_endpoints")
 
 2) add to your charm a "my_logging_endpoint" (you can name this attribute whatever you like) **property**
 that returns an http/https endpoint url. If you are using the `LokiPushApiConsumer` as
 `self.logging = LokiPushApiConsumer(self, ...)`, the implementation could be:
 
-```
     @property
-    def my_logging_endpoint(self) -> List[str]:
+    def my_logging_endpoints(self) -> List[str]:
         '''Loki push API endpoints for charm logging.'''
         # this will return an empty list if there is no relation or there is no data yet in the relation
-        return self.logging.loki_endpoints
-```
+        return ["http://loki-0.loki.svc.cluster.local:3100"]
 
 The ``log_charm`` decorator will take these endpoints and set up the root logger (as in python's
 logging module root logger) to forward all logs to these loki endpoints.
 
 ## TLS support
 If your charm integrates with a tls provider which is also trusted by the logs receiver, you can
-configure TLS by passing to charm logging a `server_cert` parameter.
+configure TLS by passing a ``server_cert`` parameter to the decorator.
 
 If you're not using the same CA as the loki-push-api endpoint you are sending logs to,
 you'll need to implement a cert-transfer relation to obtain the CA certificate from the same
@@ -247,7 +245,6 @@ def _setup_root_logger_initializer(
         labels = {
             **juju_topology.as_dict(),
             "service_name": service_name or self.app.name,
-            "charm_type": type(self).__name__,
             "juju_hook_name": os.getenv("JUJU_HOOK_NAME", ""),
         }
         server_cert: Optional[Union[str, Path]] = (
