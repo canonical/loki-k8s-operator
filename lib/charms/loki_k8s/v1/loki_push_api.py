@@ -577,7 +577,11 @@ HTTP_LISTEN_PORT_START = 9080  # even start port
 GRPC_LISTEN_PORT_START = 9095  # odd start port
 
 
-class RelationNotFoundError(ValueError):
+class LokiPushApiError(Exception):
+    """Base class for errors raised by this module."""
+
+
+class RelationNotFoundError(LokiPushApiError):
     """Raised if there is no relation with the given name."""
 
     def __init__(self, relation_name: str):
@@ -587,7 +591,7 @@ class RelationNotFoundError(ValueError):
         super().__init__(self.message)
 
 
-class RelationInterfaceMismatchError(Exception):
+class RelationInterfaceMismatchError(LokiPushApiError):
     """Raised if the relation with the given name has a different interface."""
 
     def __init__(
@@ -607,7 +611,7 @@ class RelationInterfaceMismatchError(Exception):
         super().__init__(self.message)
 
 
-class RelationRoleMismatchError(Exception):
+class RelationRoleMismatchError(LokiPushApiError):
     """Raised if the relation with the given name has a different direction."""
 
     def __init__(
@@ -2748,3 +2752,55 @@ class CosTool:
         result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE)
         output = result.stdout.decode("utf-8").strip()
         return output
+
+
+def charm_logging_config(
+    endpoint_requirer: LokiPushApiConsumer, cert_path: Optional[Union[Path, str]]
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Utility function to determine the charm_logging config you will likely want.
+
+    If no endpoint is provided:
+     disable charm logging.
+    If https endpoint is provided but cert_path is not found on disk:
+     disable charm logging.
+    If https endpoint is provided and cert_path is None:
+     ERROR
+    Else:
+     proceed with charm logging (with or without tls, as appropriate)
+    Usage:
+    >>> from lib.charms.loki_k8s.v0.charm_logging import log_charm
+    >>> from lib.charms.loki_k8s.v1.loki_push_api import charm_logging_config
+    >>> @log_charm(logging_endpoint="my_endpoints", cert_path="cert_path")
+    >>> class MyCharm(...):
+    >>>     _cert_path = "/path/to/cert/on/charm/container.crt"
+    >>>     def __init__(self, ...):
+    >>>         self.logging = LokiPushApiConsumer(...)
+    >>>         self._my_endpoints, self._cert_path = charm_logging_config(
+    ...             self.logging, self._cert_path)
+    >>>     @property
+    >>>     def my_endpoints(self):
+    >>>         return self._my_endpoints
+    >>>     @property
+    >>>     def cert_path(self):
+    >>>         return self._cert_path
+    """
+    endpoints = [ep["url"] for ep in endpoint_requirer.loki_endpoints]
+    if not endpoints:
+        return None, None
+
+    https = tuple(endpoint.startswith("https://") for endpoint in endpoints)
+
+    if all(https):  # all endpoints are https
+        if cert_path is None:
+            raise LokiPushApiError("Cannot send logs to https endpoints without a certificate.")
+        if not Path(cert_path).exists():
+            # if endpoints is https BUT we don't have a server_cert yet:
+            # disable charm logging until we do to prevent tls errors
+            return None, None
+        return endpoints, str(cert_path)
+
+    if all(not x for x in https):  # all endpoints are http
+        return endpoints, None
+
+    # if there's a disagreement, that's very weird:
+    raise LokiPushApiError("Some endpoints are http, some others are https. That's not good.")
