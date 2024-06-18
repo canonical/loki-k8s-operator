@@ -37,3 +37,4 @@ pythonPlatform = "All"
 minversion = "6.0"
 log_cli_level = "INFO"
 asyncio_mode = "auto"
+markers = ["setup", "work", "teardown"]
