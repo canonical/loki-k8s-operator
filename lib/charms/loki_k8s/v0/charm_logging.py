@@ -97,7 +97,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 PYDEPS = ["cosl"]
 
@@ -197,11 +197,7 @@ def _get_server_cert(
 
     # we're assuming that the ca cert that signed this unit is the same that has signed loki's
     if server_cert is None:
-        logger.debug(f"{charm.__name__}.{server_cert_getter} returned None.")
-        logger.warning(
-            "Charm logs are being sent over insecure http because a ca cert is "
-            "not provided to the charm_logging module."
-        )
+        logger.debug(f"{charm.__name__}.{server_cert_getter} returned None: can't use https.")
         return None
 
     if not isinstance(server_cert, str) and not isinstance(server_cert, Path):
