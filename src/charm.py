@@ -35,7 +35,6 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiAlertRulesChanged,
     LokiPushApiProvider,
 )
-from charms.loki_k8s.v1.loki_push_api import charm_logging_config
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
