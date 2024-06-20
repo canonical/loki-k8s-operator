@@ -30,6 +30,7 @@ from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsume
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
+from charms.loki_k8s.v0.charm_logging import log_charm
 from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiAlertRulesChanged,
     LokiPushApiProvider,
@@ -108,12 +109,15 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
         MetricsEndpointProvider,
     ],
 )
+@log_charm(logging_endpoints="logging_endpoints", server_cert="server_ca_cert_path")
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
     _stored = StoredState()
     _port = HTTP_LISTEN_PORT
     _name = "loki"
+    _loki_push_api_endpoint = "/loki/api/v1/push"
+    _loki_rules_endpoint = "/loki/api/v1/rules"
     _service_name = "loki"
     _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
 
@@ -207,7 +211,7 @@ class LokiOperatorCharm(CharmBase):
             address=external_url.hostname or self.hostname,
             port=external_url.port or 443 if self._tls_ready else 80,
             scheme=external_url.scheme,
-            path=f"{external_url.path}/loki/api/v1/push",
+            path=f"{external_url.path}{self._loki_push_api_endpoint}",
         )
 
         self.dashboard_provider = GrafanaDashboardProvider(self)
@@ -381,6 +385,12 @@ class LokiOperatorCharm(CharmBase):
         return socket.getfqdn()
 
     @property
+    def internal_url(self):
+        """Fqdn plus appropriate scheme and server port."""
+        scheme = "https" if self.server_cert.server_cert else "http"
+        return f"{scheme}://{self.hostname}:{self._port}"
+
+    @property
     def _external_url(self) -> str:
         """Return the external hostname to be passed to ingress via the relation."""
         if ingress_url := self.ingress_per_unit.url:
@@ -393,8 +403,7 @@ class LokiOperatorCharm(CharmBase):
         # are routable virtually exclusively inside the cluster (as they rely)
         # on the cluster's DNS service, while the ip address is _sometimes_
         # routable from the outside, e.g., when deploying on MicroK8s on Linux.
-        scheme = "https" if self.server_cert.server_cert else "http"
-        return f"{scheme}://{self.hostname}:{self._port}"
+        return self.internal_url
 
     @property
     def scrape_jobs(self) -> List[Dict[str, Any]]:
@@ -582,6 +591,7 @@ class LokiOperatorCharm(CharmBase):
             )
 
             # Repeat for the charm container. We need it there for loki client requests.
+            # (and charm tracing and logging TLS)
             ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
             ca_cert_path.write_text(self.server_cert.ca_cert)  # pyright: ignore
         else:
@@ -714,7 +724,7 @@ class LokiOperatorCharm(CharmBase):
         ssl_context = ssl.create_default_context(
             cafile=self._ca_cert_path if Path(self._ca_cert_path).exists() else None,
         )
-        url = f"{self._internal_url}/loki/api/v1/rules"
+        url = f"{self._internal_url}{self._loki_rules_endpoint}"
         try:
             logger.debug(f"Verifying alert rules via {url}.")
             urllib.request.urlopen(url, timeout=2.0, context=ssl_context)
@@ -783,6 +793,15 @@ class LokiOperatorCharm(CharmBase):
         if self.tracing.is_ready():
             return self.tracing.get_endpoint("otlp_http")
         return None
+
+    @property
+    def logging_endpoints(self) -> List[str]:
+        """Loki endpoint for charm logging."""
+        container = self._loki_container
+        if container.can_connect() and container.get_service(self._name).is_running():
+            scheme = "https" if self.server_ca_cert_path else "http"
+            return [f"{scheme}://localhost:3100" + self._loki_push_api_endpoint]
+        return []
 
     @property
     def server_ca_cert_path(self) -> Optional[str]:

@@ -24,7 +24,6 @@ class LokiTesterCharm(CharmBase):
         super().__init__(*args)
 
         self._loki_consumer = LokiPushApiConsumer(self)
-
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.log_error_action, self._on_log_error_action)
