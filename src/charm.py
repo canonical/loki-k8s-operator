@@ -502,7 +502,7 @@ class LokiOperatorCharm(CharmBase):
         # by the upgrade hook, indicating an upgrade
 
         if not (v12_migration_date := self.get_v12_migration_date_from_backup()):
-            today = datetime.date.today()
+            today = datetime.datetime.now(datetime.timezone.utc)
             tomorrow = today + datetime.timedelta(days=1)
             v12_migration_date = (today if self._stored.fresh_install else tomorrow).strftime(
                 "%Y-%m-%d"
