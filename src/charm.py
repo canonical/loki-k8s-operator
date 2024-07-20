@@ -566,10 +566,10 @@ class LokiOperatorCharm(CharmBase):
         return False
 
     def _update_cert(self):
+        self._remove_cert_files()
+
         if self.server_cert.available:
             self._push_cert_files()
-        else:
-            self._remove_cert_files()
 
         self._update_ca_certificates()
 
