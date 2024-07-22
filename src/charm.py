@@ -66,7 +66,7 @@ from ops.model import (
     StatusBase,
     WaitingStatus,
 )
-from ops.pebble import ConnectionError, Error, ExecError, Layer, PathError, ProtocolError
+from ops.pebble import Error, Layer, PathError, ProtocolError
 
 # To keep a tidy debug-log, we suppress some DEBUG/INFO logs from some imported libs,
 # even when charm logging is set to a lower level.
@@ -566,16 +566,12 @@ class LokiOperatorCharm(CharmBase):
         return False
 
     def _update_cert(self):
-        self._remove_cert_files()
+        if not self._loki_container.can_connect():
+            return
+
+        ca_cert_path = Path(self._ca_cert_path)
 
         if self.server_cert.available:
-            self._push_cert_files()
-
-        self._update_ca_certificates()
-
-    def _push_cert_files(self):
-        ca_cert_path = Path(self._ca_cert_path)
-        try:
             # Save the workload certificates
             self._loki_container.push(
                 CERT_FILE,
@@ -593,36 +589,21 @@ class LokiOperatorCharm(CharmBase):
                 self.server_cert.ca_cert,  # pyright: ignore
                 make_dirs=True,
             )
-        except ConnectionError:
-            logger.error("Could not push cert files. Pebble refused connection. Shutting down?")
-            return
 
-        # Repeat for the charm container. We need it there for loki client requests.
-        # (and charm tracing and logging TLS)
-        ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-        ca_cert_path.write_text(self.server_cert.ca_cert)  # pyright: ignore
-
-    def _remove_cert_files(self):
-        ca_cert_path = Path(self._ca_cert_path)
-        try:
+            # Repeat for the charm container. We need it there for loki client requests.
+            # (and charm tracing and logging TLS)
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.server_cert.ca_cert)  # pyright: ignore
+        else:
             self._loki_container.remove_path(CERT_FILE, recursive=True)
             self._loki_container.remove_path(KEY_FILE, recursive=True)
             self._loki_container.remove_path(ca_cert_path, recursive=True)
-        except ConnectionError:
-            logger.error("Could not remove cert files. Pebble refused connection. Shutting down?")
-            return
 
-        # Repeat for the charm container.
-        ca_cert_path.unlink(missing_ok=True)
+            # Repeat for the charm container.
+            ca_cert_path.unlink(missing_ok=True)
 
-    def _update_ca_certificates(self):
-        try:
-            self._loki_container.exec(["update-ca-certificates", "--fresh"]).wait()
-            subprocess.run(["update-ca-certificates", "--fresh"])
-        except (ConnectionError, ExecError) as e:
-            logger.error("Could not run update-ca-certificates in workload container. %s", e)
-        except subprocess.SubprocessError as e:
-            logger.error("Could not run update-ca-certificates in charm container. %s", e)
+        self._loki_container.exec(["update-ca-certificates", "--fresh"]).wait()
+        subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _alerting_config(self) -> str:
         """Construct Loki altering configuration.
@@ -798,14 +779,7 @@ class LokiOperatorCharm(CharmBase):
         """
         if not self._loki_container.can_connect():
             return None
-        try:
-            version_output, _ = self._loki_container.exec(
-                ["/usr/bin/loki", "-version"]
-            ).wait_output()
-        except ExecError as e:
-            logger.error("Error retrieving Loki version: %s", e)
-            return None
-
+        version_output, _ = self._loki_container.exec(["/usr/bin/loki", "-version"]).wait_output()
         # Output looks like this:
         # loki, version 2.4.1 (branch: HEAD, ...
         result = re.search(r"version (\d*\.\d*\.\d*)", version_output)
