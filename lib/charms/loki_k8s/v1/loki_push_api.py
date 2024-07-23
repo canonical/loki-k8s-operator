@@ -2475,9 +2475,6 @@ class _PebbleLogClient:
         container: Container, active_endpoints: Dict[str, str], topology: JujuTopology
     ):
         """Disable forwarding for inactive endpoints by checking against the Pebble plan."""
-        if not container.can_connect():
-            return
-
         pebble_layer = container.get_plan().to_dict().get("log-targets", None)
         if not pebble_layer:
             return
@@ -2504,9 +2501,6 @@ class _PebbleLogClient:
         container: Container, active_endpoints: Dict[str, str], topology: JujuTopology
     ):
         """Enable forwarding for the specified Loki endpoints."""
-        if not container.can_connect():
-            return
-
         layer = Layer(
             {  # pyright: ignore
                 "log-targets": _PebbleLogClient._build_log_targets(
@@ -2568,6 +2562,9 @@ class LogForwarder(ConsumerBase):
             return
 
         for container in self._charm.unit.containers.values():
+            if not container.can_connect():
+                continue
+
             self._update_endpoints(container, loki_endpoints)
 
     def _retrieve_endpoints_from_relation(self) -> dict:
