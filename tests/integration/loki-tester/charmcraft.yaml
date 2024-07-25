@@ -8,3 +8,12 @@ bases:
     run-on:
     - name: "ubuntu"
       channel: "20.04"
+parts:
+  charm:
+    charm-binary-python-packages:
+      # For v2.tls_certificates
+      - cryptography
+      - jsonschema
+
+      # For v1.alertmanager_dispatch & v1.tracing
+      - pydantic>=2
