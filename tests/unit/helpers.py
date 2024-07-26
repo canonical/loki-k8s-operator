@@ -23,3 +23,6 @@ class FakeProcessVersionCheck:
 
     def wait_output(self):
         return ("v0.1.0", "")
+
+    def wait(self):
+        return ("v0.1.0", "")

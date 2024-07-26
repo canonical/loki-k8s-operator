@@ -566,6 +566,9 @@ class LokiOperatorCharm(CharmBase):
         return False
 
     def _update_cert(self):
+        # If Pebble is not ready, we do not proceed.
+        # This code will end up running anyway when Pebble is ready, because
+        # it will eventually be called from the `_configure()` method.
         if not self._loki_container.can_connect():
             return
 
