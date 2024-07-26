@@ -480,6 +480,25 @@ Loki Push API and alert rules.
 
 Units of consumer charm send their alert rules over app relation data using the `alert_rules`
 key.
+
+## Charm logging
+The `charms.loki_k8s.v0.charm_logging` library can be used in conjunction with this one to configure python's
+logging module to forward all logs to Loki via the loki-push-api interface.
+
+```python
+from lib.charms.loki_k8s.v0.charm_logging import log_charm
+from lib.charms.loki_k8s.v1.loki_push_api import charm_logging_config, LokiPushApiConsumer
+
+@log_charm(logging_endpoint="my_endpoints", cert_path="cert_path")
+class MyCharm(...):
+    _cert_path = "/path/to/cert/on/charm/container.crt"
+    def __init__(self, ...):
+        self.logging = LokiPushApiConsumer(...)
+        self.my_endpoints, self.cert_path = charm_logging_config(
+            self.logging, self._cert_path)
+```
+
+Do this, and all charm logs will be forwarded to Loki as soon as a relation is formed.
 """
 
 import json
@@ -2769,20 +2788,14 @@ def charm_logging_config(
      proceed with charm logging (with or without tls, as appropriate)
     Usage:
     >>> from lib.charms.loki_k8s.v0.charm_logging import log_charm
-    >>> from lib.charms.loki_k8s.v1.loki_push_api import charm_logging_config
+    >>> from lib.charms.loki_k8s.v1.loki_push_api import charm_logging_config, LokiPushApiConsumer
     >>> @log_charm(logging_endpoint="my_endpoints", cert_path="cert_path")
     >>> class MyCharm(...):
     >>>     _cert_path = "/path/to/cert/on/charm/container.crt"
     >>>     def __init__(self, ...):
     >>>         self.logging = LokiPushApiConsumer(...)
-    >>>         self._my_endpoints, self._cert_path = charm_logging_config(
+    >>>         self.my_endpoints, self.cert_path = charm_logging_config(
     ...             self.logging, self._cert_path)
-    >>>     @property
-    >>>     def my_endpoints(self):
-    >>>         return self._my_endpoints
-    >>>     @property
-    >>>     def cert_path(self):
-    >>>         return self._cert_path
     """
     endpoints = [ep["url"] for ep in endpoint_requirer.loki_endpoints]
     if not endpoints:
