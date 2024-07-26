@@ -13,3 +13,13 @@ parts:
   charm:
     build-packages:
       - git
+
+    charm-binary-python-packages:
+      # For v2.tls_certificates
+      - cryptography
+      - jsonschema
+
+      # For v1.alertmanager_dispatch & v1.tracing
+      - pydantic>=2
+
+      - cosl

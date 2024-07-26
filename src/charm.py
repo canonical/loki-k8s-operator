@@ -132,9 +132,9 @@ class LokiOperatorCharm(CharmBase):
                 config=to_tuple(ActiveStatus()),
                 rules=to_tuple(ActiveStatus()),
                 retention=to_tuple(ActiveStatus()),
-            )
+            ),
+            fresh_install=True,
         )
-        self._stored.set_default(fresh_install=True)  # Relies on controller-backed storage
 
         self._loki_container = self.unit.get_container(self._name)
         self._node_exporter_container = self.unit.get_container("node-exporter")
@@ -502,7 +502,7 @@ class LokiOperatorCharm(CharmBase):
         # by the upgrade hook, indicating an upgrade
 
         if not (v12_migration_date := self.get_v12_migration_date_from_backup()):
-            today = datetime.date.today()
+            today = datetime.datetime.now(datetime.timezone.utc)
             tomorrow = today + datetime.timedelta(days=1)
             v12_migration_date = (today if self._stored.fresh_install else tomorrow).strftime(
                 "%Y-%m-%d"
@@ -566,6 +566,9 @@ class LokiOperatorCharm(CharmBase):
         return False
 
     def _update_cert(self):
+        # If Pebble is not ready, we do not proceed.
+        # This code will end up running anyway when Pebble is ready, because
+        # it will eventually be called from the `_configure()` method.
         if not self._loki_container.can_connect():
             return
 
@@ -812,6 +815,4 @@ class LokiOperatorCharm(CharmBase):
 
 
 if __name__ == "__main__":
-    # We need use_juju_for_storage=True because ingress_per_unit
-    # requires it to keep track of the ingress address.
-    main(LokiOperatorCharm, use_juju_for_storage=True)
+    main(LokiOperatorCharm)
