@@ -2585,7 +2585,9 @@ class LogForwarder(ConsumerBase):
             return
 
         for container in self._charm.unit.containers.values():
-            self._update_endpoints(container, loki_endpoints)
+            if container.can_connect():
+                self._update_endpoints(container, loki_endpoints)
+            # else: `_update_endpoints` will be called on pebble-ready anyway.
 
     def _retrieve_endpoints_from_relation(self) -> dict:
         loki_endpoints = {}
