@@ -489,7 +489,7 @@ logging module to forward all logs to Loki via the loki-push-api interface.
 from lib.charms.loki_k8s.v0.charm_logging import log_charm
 from lib.charms.loki_k8s.v1.loki_push_api import charm_logging_config, LokiPushApiConsumer
 
-@log_charm(logging_endpoint="my_endpoints", cert_path="cert_path")
+@log_charm(logging_endpoint="my_endpoints", server_cert="cert_path")
 class MyCharm(...):
     _cert_path = "/path/to/cert/on/charm/container.crt"
     def __init__(self, ...):
