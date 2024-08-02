@@ -489,7 +489,7 @@ logging module to forward all logs to Loki via the loki-push-api interface.
 from lib.charms.loki_k8s.v0.charm_logging import log_charm
 from lib.charms.loki_k8s.v1.loki_push_api import charm_logging_config, LokiPushApiConsumer
 
-@log_charm(logging_endpoint="my_endpoints", cert_path="cert_path")
+@log_charm(logging_endpoint="my_endpoints", server_cert="cert_path")
 class MyCharm(...):
     _cert_path = "/path/to/cert/on/charm/container.crt"
     def __init__(self, ...):
@@ -2585,7 +2585,9 @@ class LogForwarder(ConsumerBase):
             return
 
         for container in self._charm.unit.containers.values():
-            self._update_endpoints(container, loki_endpoints)
+            if container.can_connect():
+                self._update_endpoints(container, loki_endpoints)
+            # else: `_update_endpoints` will be called on pebble-ready anyway.
 
     def _retrieve_endpoints_from_relation(self) -> dict:
         loki_endpoints = {}
@@ -2786,16 +2788,16 @@ def charm_logging_config(
      ERROR
     Else:
      proceed with charm logging (with or without tls, as appropriate)
-    Usage:
-    >>> from lib.charms.loki_k8s.v0.charm_logging import log_charm
-    >>> from lib.charms.loki_k8s.v1.loki_push_api import charm_logging_config, LokiPushApiConsumer
-    >>> @log_charm(logging_endpoint="my_endpoints", cert_path="cert_path")
-    >>> class MyCharm(...):
-    >>>     _cert_path = "/path/to/cert/on/charm/container.crt"
-    >>>     def __init__(self, ...):
-    >>>         self.logging = LokiPushApiConsumer(...)
-    >>>         self.my_endpoints, self.cert_path = charm_logging_config(
-    ...             self.logging, self._cert_path)
+
+    Args:
+        endpoint_requirer: an instance of LokiPushApiConsumer.
+        cert_path: a path where a cert is stored.
+
+    Returns:
+        A tuple with (optionally) the values of the endpoints and the certificate path.
+
+     Raises:
+         LokiPushApiError: if some endpoint are http and others https.
     """
     endpoints = [ep["url"] for ep in endpoint_requirer.loki_endpoints]
     if not endpoints:
