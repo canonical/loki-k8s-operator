@@ -219,7 +219,7 @@ LIBAPI = 1
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 12
+LIBPATCH = 13
 
 PYDEPS = ["opentelemetry-exporter-otlp-proto-http==1.21.0"]
 
@@ -642,38 +642,58 @@ def trace_type(cls: _T) -> _T:
             dev_logger.info(f"skipping {method} (dunder)")
             continue
 
-        new_method = trace_method(method)
-        if isinstance(inspect.getattr_static(cls, method.__name__), staticmethod):
+        # the span title in the general case should be:
+        #   method call: MyCharmWrappedMethods.b
+        # if the method has a name (functools.wrapped or regular method), let
+        # _trace_callable use its default algorithm to determine what name to give the span.
+        trace_method_name = None
+        try:
+            qualname_c0 = method.__qualname__.split(".")[0]
+            if not hasattr(cls, method.__name__):
+                # if the callable doesn't have a __name__ (probably a decorated method),
+                # it probably has a bad qualname too (such as my_decorator.<locals>.wrapper) which is not
+                # great for finding out what the trace is about. So we use the method name instead and
+                # add a reference to the decorator name. Result:
+                #   method call: @my_decorator(MyCharmWrappedMethods.b)
+                trace_method_name = f"@{qualname_c0}({cls.__name__}.{name})"
+        except Exception:  # noqa: failsafe
+            pass
+
+        new_method = trace_method(method, name=trace_method_name)
+
+        if isinstance(inspect.getattr_static(cls, name), staticmethod):
             new_method = staticmethod(new_method)
         setattr(cls, name, new_method)
 
     return cls
 
 
-def trace_method(method: _F) -> _F:
+def trace_method(method: _F, name: Optional[str] = None) -> _F:
     """Trace this method.
 
     A span will be opened when this method is called and closed when it returns.
     """
-    return _trace_callable(method, "method")
+    return _trace_callable(method, "method", name=name)
 
 
-def trace_function(function: _F) -> _F:
+def trace_function(function: _F, name: Optional[str] = None) -> _F:
     """Trace this function.
 
     A span will be opened when this function is called and closed when it returns.
     """
-    return _trace_callable(function, "function")
+    return _trace_callable(function, "function", name=name)
 
 
-def _trace_callable(callable: _F, qualifier: str) -> _F:
+def _trace_callable(callable: _F, qualifier: str, name: Optional[str] = None) -> _F:
     dev_logger.info(f"instrumenting {callable}")
 
     # sig = inspect.signature(callable)
     @functools.wraps(callable)
     def wrapped_function(*args, **kwargs):  # type: ignore
-        name = getattr(callable, "__qualname__", getattr(callable, "__name__", str(callable)))
-        with _span(f"{qualifier} call: {name}"):  # type: ignore
+        name_ = name or getattr(
+            callable, "__qualname__", getattr(callable, "__name__", str(callable))
+        )
+        with _span(f"{qualifier} call: {name_}"):  # type: ignore
             return callable(*args, **kwargs)  # type: ignore
 
     # wrapped_function.__signature__ = sig
