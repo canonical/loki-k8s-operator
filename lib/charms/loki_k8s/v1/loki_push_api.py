@@ -2796,7 +2796,7 @@ def charm_logging_config(
     Returns:
         A tuple with (optionally) the values of the endpoints and the certificate path.
 
-     Raises:
+    Raises:
          LokiPushApiError: if some endpoint are http and others https.
     """
     endpoints = [ep["url"] for ep in endpoint_requirer.loki_endpoints]
