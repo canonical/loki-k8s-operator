@@ -44,7 +44,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from config_builder import (
     CERT_FILE,
@@ -98,8 +98,8 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
 
 
 @trace_charm(
-    tracing_endpoint="tracing_endpoint",
-    server_cert="server_ca_cert_path",
+    tracing_endpoint="_charm_tracing_endpoint",
+    server_cert="_charm_tracing_ca_cert",
     extra_types=[
         GrafanaDashboardProvider,
         GrafanaSourceProvider,
@@ -109,7 +109,7 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
         MetricsEndpointProvider,
     ],
 )
-@log_charm(logging_endpoints="logging_endpoints", server_cert="server_ca_cert_path")
+@log_charm(logging_endpoints="_charm_logging_endpoints", server_cert="_charm_logging_ca_cert")
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
 
@@ -218,6 +218,9 @@ class LokiOperatorCharm(CharmBase):
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
         self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
+        self._charm_tracing_endpoint, self._charm_tracing_ca_cert = charm_tracing_config(
+            self.tracing, self._ca_cert_path
+        )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -791,23 +794,16 @@ class LokiOperatorCharm(CharmBase):
         return result.group(1)
 
     @property
-    def tracing_endpoint(self) -> Optional[str]:
-        """Tempo endpoint for charm tracing."""
-        if self.tracing.is_ready():
-            return self.tracing.get_endpoint("otlp_http")
-        return None
-
-    @property
-    def logging_endpoints(self) -> List[str]:
+    def _charm_logging_endpoints(self) -> List[str]:
         """Loki endpoint for charm logging."""
         container = self._loki_container
         if container.can_connect() and container.get_service(self._name).is_running():
-            scheme = "https" if self.server_ca_cert_path else "http"
+            scheme = "https" if self._charm_logging_ca_cert else "http"
             return [f"{scheme}://localhost:3100" + self._loki_push_api_endpoint]
         return []
 
     @property
-    def server_ca_cert_path(self) -> Optional[str]:
+    def _charm_logging_ca_cert(self) -> Optional[str]:
         """Server CA certificate path for TLS tracing."""
         if self._tls_ready:
             return self._ca_cert_path

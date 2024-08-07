@@ -27,7 +27,7 @@ def test_no_endpoints_on_loki_not_ready(context, loki_emitter):
 
     with context.manager("update-status", state) as mgr:
         charm = mgr.charm
-        assert charm.logging_endpoints == []
+        assert charm._charm_logging_endpoints == []
         logging.getLogger("foo").debug("bar")
 
     loki_emitter.assert_not_called()
@@ -48,7 +48,7 @@ def test_endpoints_on_loki_ready(context, loki_emitter):
 
     with context.manager("update-status", state) as mgr:
         charm = mgr.charm
-        assert charm.logging_endpoints == ["http://localhost:3100/loki/api/v1/push"]
+        assert charm._charm_logging_endpoints == ["http://localhost:3100/loki/api/v1/push"]
         logging.getLogger("foo").debug("bar")
 
     loki_emitter.assert_called()
@@ -60,7 +60,7 @@ def test_endpoints_on_loki_ready(context, loki_emitter):
             assert record.name == "foo"
 
 
-@patch("charm.LokiOperatorCharm.server_ca_cert_path", new_callable=lambda *_: True)
+@patch("charm.LokiOperatorCharm._charm_logging_ca_cert", new_callable=lambda *_: True)
 def test_endpoints_on_loki_ready_tls(_, context, loki_emitter):
     state = scenario.State(
         containers=[
@@ -76,7 +76,7 @@ def test_endpoints_on_loki_ready_tls(_, context, loki_emitter):
 
     with context.manager("update-status", state) as mgr:
         charm = mgr.charm
-        assert charm.logging_endpoints == ["https://localhost:3100/loki/api/v1/push"]
+        assert charm._charm_logging_endpoints == ["https://localhost:3100/loki/api/v1/push"]
         logging.getLogger("foo").debug("bar")
 
     loki_emitter.assert_called()
