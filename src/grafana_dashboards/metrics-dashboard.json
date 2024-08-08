@@ -27,7 +27,6 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 13407,
   "graphTooltip": 0,
-  "id": 5,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -86,7 +85,7 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -149,14 +148,14 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
             "uid": "${prometheusds}"
           },
           "editorMode": "code",
-          "expr": "sum(log_messages_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"})",
+          "expr": "sum(log_messages_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"})",
           "instant": false,
           "interval": "",
           "legendFormat": "",
@@ -211,7 +210,7 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -272,7 +271,7 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -336,7 +335,7 @@
         },
         "textMode": "value"
       },
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -402,7 +401,7 @@
         },
         "textMode": "value"
       },
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -464,7 +463,7 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -534,7 +533,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -547,7 +546,7 @@
           "datasource": {
             "uid": "${prometheusds}"
           },
-          "expr": "sum by(level) (irate(log_messages_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[1m]))",
+          "expr": "sum by(level) (irate(log_messages_total{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{ level }}",
           "refId": "A"
@@ -630,7 +629,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -726,7 +725,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -822,7 +821,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -918,7 +917,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1038,7 +1037,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1134,7 +1133,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1254,7 +1253,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1350,7 +1349,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1435,7 +1434,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1520,7 +1519,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1606,7 +1605,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.2.1",
+      "pluginVersion": "9.5.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1678,7 +1677,7 @@
           "refId": "A"
         }
       ],
-      "title": "Index",
+      "title": "Index (only for HA)",
       "type": "row"
     },
     {
@@ -3333,7 +3332,8 @@
       }
     }
   ],
-  "schemaVersion": 37,
+  "refresh": "",
+  "schemaVersion": 38,
   "style": "dark",
   "tags": [
     "loki"
@@ -3386,7 +3386,7 @@
         "datasource": {
           "uid": "${prometheusds}"
         },
-        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_charm=~\"loki-k8s\"},juju_unit)",
         "hide": 0,
         "includeAll": true,
         "label": "Juju unit",
@@ -3394,8 +3394,8 @@
         "name": "juju_unit",
         "options": [],
         "query": {
-          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\"},juju_unit)",
-          "refId": "StandardVariableQuery"
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_charm=~\"loki-k8s\"},juju_unit)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
@@ -3409,14 +3409,18 @@
       {
         "allValue": ".*",
         "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
+          "selected": true,
+          "text": [
+            "loki"
+          ],
+          "value": [
+            "loki"
+          ]
         },
         "datasource": {
           "uid": "${prometheusds}"
         },
-        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
+        "definition": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_charm=~\"loki-k8s\"},juju_application)",
         "hide": 0,
         "includeAll": true,
         "label": "Juju application",
@@ -3424,8 +3428,8 @@
         "name": "juju_application",
         "options": [],
         "query": {
-          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\"},juju_application)",
-          "refId": "StandardVariableQuery"
+          "query": "label_values(up{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_charm=~\"loki-k8s\"},juju_application)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
@@ -3519,5 +3523,6 @@
   "timezone": "",
   "title": "Loki Operator Overview",
   "uid": "loki",
-  "version": 39
+  "version": 1,
+  "weekStart": ""
 }
