@@ -273,14 +273,10 @@ class LokiOperatorCharm(CharmBase):
             logger.debug("Cannot set workload version at this time: could not get Loki version.")
 
     def _on_node_exporter_pebble_ready(self, _):
-        current_layer = self._node_exporter_container.get_plan()
         new_layer = self._node_exporter_pebble_layer
-        restart = current_layer.services != new_layer.services
-
-        if restart:
-            self._node_exporter_container.add_layer("node-exporter", new_layer, combine=True)
-            self._node_exporter_container.restart("node-exporter")
-            logger.info("Node Exporter (re)started")
+        self._node_exporter_container.add_layer("node-exporter", new_layer, combine=True)
+        self._node_exporter_container.replan()
+        logger.info("Node Exporter (re)started")
 
     def _on_alertmanager_change(self, _):
         self._configure()
@@ -323,7 +319,7 @@ class LokiOperatorCharm(CharmBase):
         return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
 
     @property
-    def _build_pebble_layer(self) -> Layer:
+    def _loki_pebble_layer(self) -> Layer:
         """Construct the pebble layer.
 
         Returns:
@@ -485,10 +481,6 @@ class LokiOperatorCharm(CharmBase):
                 BlockedStatus("Please provide a non-negative retention duration")
             )
 
-        current_layer = self._loki_container.get_plan()
-        new_layer = self._build_pebble_layer
-        restart = current_layer.services != new_layer.services
-
         # If v12_migration_date isn't set (due to missing or failed retrieval),
         # we determine the migration date for v12 schema. This occurs once
         # during initial setup, as subsequent hooks will get the value from the persisted backup config.
@@ -525,17 +517,17 @@ class LokiOperatorCharm(CharmBase):
             v12_migration_date=v12_migration_date,
         ).build()
 
-        restart = self._update_config(config) or restart
+        restart = self._update_config(config)
+        new_layer = self._loki_pebble_layer
         self._loki_container.add_layer(self._name, new_layer, combine=True)
-        # Now that we for sure have a layer, we can check if the service is running
-        restart = not self._loki_container.get_service(self._service_name).is_running() or restart
 
         if self.server_cert.enabled and not self.server_cert.available:
             # We have a TLS relation in place, but the cert isn't there
             logger.info("Loki stopped")
             self._loki_container.stop(self._service_name)
 
-        elif restart:
+        # Now that we for sure have a layer, we can check if the service is running
+        elif not self._loki_container.get_service(self._service_name).is_running() or restart:
             self._loki_container.restart(self._name)
             logger.info("Loki (re)started")
 
