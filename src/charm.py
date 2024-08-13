@@ -529,7 +529,7 @@ class LokiOperatorCharm(CharmBase):
         # Now that we for sure have a layer, we can check if the service is running
         elif not self._loki_container.get_service(self._service_name).is_running() or restart:
             self._loki_container.restart(self._name)
-            logger.info("Loki (re)started")
+            logger.info("Loki started")
 
         if isinstance(to_status(self._stored.status["rules"]), BlockedStatus):
             # Wait briefly for Loki to come back up and re-check the alert rules
