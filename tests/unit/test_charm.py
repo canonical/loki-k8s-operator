@@ -233,6 +233,7 @@ class TestConfigFile(unittest.TestCase):
         self.assertEqual(config["ruler"]["alertmanager_url"], "")
 
     @patch("socket.getfqdn", new=lambda *args: "fqdn")
+    @k8s_resource_multipatch
     def test_instance_address_is_set_to_this_unit_ip(self):
         container = self.harness.charm.unit.get_container("loki")
 
