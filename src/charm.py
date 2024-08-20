@@ -21,7 +21,7 @@ import subprocess
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
@@ -36,7 +36,6 @@ from charms.loki_k8s.v0.loki_push_api import (
     LokiPushApiProvider,
 )
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
-    K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
     ResourceRequirements,
     adjust_resource_requirements,
@@ -46,15 +45,6 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
-from config_builder import (
-    CERT_FILE,
-    HTTP_LISTEN_PORT,
-    KEY_FILE,
-    LOKI_CONFIG,
-    LOKI_CONFIG_BACKUP,
-    RULES_DIR,
-    ConfigBuilder,
-)
 from ops import CollectStatusEvent, StoredState
 from ops.charm import CharmBase
 from ops.main import main
@@ -68,6 +58,16 @@ from ops.model import (
 )
 from ops.pebble import Error, Layer, PathError, ProtocolError
 
+from config_builder import (
+    CERT_FILE,
+    HTTP_LISTEN_PORT,
+    KEY_FILE,
+    LOKI_CONFIG,
+    LOKI_CONFIG_BACKUP,
+    RULES_DIR,
+    ConfigBuilder,
+)
+
 # To keep a tidy debug-log, we suppress some DEBUG/INFO logs from some imported libs,
 # even when charm logging is set to a lower level.
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -80,7 +80,6 @@ class CompositeStatus(TypedDict):
 
     # These are going to go into stored state, so we must use marshallable objects.
     # They are passed to StatusBase.from_name().
-    k8s_patch: Tuple[str, str]
     config: Tuple[str, str]
     rules: Tuple[str, str]
     retention: Tuple[str, str]
@@ -128,7 +127,6 @@ class LokiOperatorCharm(CharmBase):
         # https://discourse.charmhub.io/t/its-probably-ok-for-a-unit-to-go-into-error-state/13022
         self._stored.set_default(
             status=CompositeStatus(
-                k8s_patch=to_tuple(ActiveStatus()),
                 config=to_tuple(ActiveStatus()),
                 rules=to_tuple(ActiveStatus()),
                 retention=to_tuple(ActiveStatus()),
@@ -165,8 +163,6 @@ class LokiOperatorCharm(CharmBase):
             self.server_cert.on.cert_changed,  # pyright: ignore
             self._on_server_cert_changed,
         )
-
-        self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
 
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.framework.observe(
@@ -243,6 +239,8 @@ class LokiOperatorCharm(CharmBase):
     def _on_collect_unit_status(self, event: CollectStatusEvent):
         # "Pull" statuses
         # TODO refactor _configure to turn the "rules" status into a "pull" status.
+        if not self.resources_patch.is_ready():
+            event.add_status(WaitingStatus("waiting for resource limit patch to apply"))
 
         # "Push" statuses
         for status in self._stored.status.values():
@@ -453,15 +451,7 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     def _configure(self):  # noqa: C901
         """Configure Loki charm."""
-        # "is_ready" is a racy check, so we do it once here (instead of in collect-status)
-        if self.resources_patch.is_ready():
-            self._stored.status["k8s_patch"] = to_tuple(ActiveStatus())
-        else:
-            if isinstance(to_status(self._stored.status["k8s_patch"]), ActiveStatus):
-                self._stored.status["k8s_patch"] = to_tuple(
-                    WaitingStatus("Waiting for resource limit patch to apply")
-                )
-
+        if not self.resources_patch.is_ready():
             # Note: there could be a race between the resource patch and pebble operations (charm
             # code proceeds beyond a can_connect guard, and then lightkube patches the statefulset
             # and the workload is no longer available). After a statefulset patch we're guaranteed
@@ -772,9 +762,6 @@ class LokiOperatorCharm(CharmBase):
         }
         requests = {"cpu": "0.25", "memory": "200Mi"}
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
-
-    def _on_k8s_patch_failed(self, event: K8sResourcePatchFailedEvent):
-        self._stored.status["k8s_patch"] = to_tuple(BlockedStatus(cast(str, event.message)))
 
     @property
     def _loki_version(self) -> Optional[str]:

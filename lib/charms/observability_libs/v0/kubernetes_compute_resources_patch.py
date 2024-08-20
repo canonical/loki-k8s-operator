@@ -4,7 +4,7 @@
 """# KubernetesComputeResourcesPatch Library.
 
 This library is designed to enable developers to more simply patch the Kubernetes compute resource
-limits and requests created by Juju during the deployment of a sidecar charm.
+limits and requests created by Juju during the deployment of a charm.
 
 When initialised, this library binds a handler to the parent charm's `config-changed` event.
 The config-changed event is used because it is guaranteed to fire on startup, on upgrade and on
@@ -18,6 +18,11 @@ that together define the resource requirements. For information regarding the `l
 `ResourceRequirements` model, please visit the `lightkube`
 [docs](https://gtsystem.github.io/lightkube-models/1.23/models/core_v1/#resourcerequirements).
 
+Note that patching compute resources will keep on retrying for a default duration of KubernetesComputeResourcesPatch.PATCH_RETRY_STOP
+if the patching failed due to a recoverable error (e.g: Network Latency).
+This will put the charm using the library in a `Maintenance` state until the patch is either successful or all retries have been consumed,
+which in that case, will raise the same exception as the original exception that caused it and will put the charm in error state.
+If the failure is not recoverable (e.g: wrong spec provided), an exception same as the original exception that caused it will be raised and will put the charm in error state.
 
 ## Getting Started
 
@@ -107,6 +112,7 @@ from decimal import Decimal
 from math import ceil, floor
 from typing import Callable, Dict, List, Optional, Union
 
+import tenacity
 from lightkube import ApiError, Client  # pyright: ignore
 from lightkube.core import exceptions
 from lightkube.models.apps_v1 import StatefulSetSpec
@@ -120,6 +126,7 @@ from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
 from lightkube.utils.quantity import equals_canonically, parse_quantity
+from ops import MaintenanceStatus
 from ops.charm import CharmBase
 from ops.framework import BoundEvent, EventBase, EventSource, Object, ObjectEvents
 
@@ -289,6 +296,22 @@ def sanitize_resource_spec_dict(spec: Optional[dict]) -> Optional[dict]:
     return d
 
 
+def _retry_on_condition(exception):
+    """Retry if the exception is an ApiError with a status code != 403.
+
+    Returns: a boolean value to indicate whether to retry or not.
+    """
+    if isinstance(exception, ApiError) and str(exception.status.code) != "403":
+        return True
+    if isinstance(exception, exceptions.ConfigError) or isinstance(exception, ValueError):
+        return True
+    return False
+
+
+class PatchFailedError(Exception):
+    """Raised when patching K8s resources requests and limits fails."""
+
+
 class K8sResourcePatchFailedEvent(EventBase):
     """Emitted when patching fails."""
 
@@ -391,12 +414,6 @@ class ResourcePatcher:
         Returns:
             bool: A boolean indicating if the service patch has been applied and is in effect.
         """
-        logger.info(
-            "reqs=%s, templated=%s, actual=%s",
-            resource_reqs,
-            self.get_templated(),
-            self.get_actual(pod_name),
-        )
         return self.is_patched(resource_reqs) and equals_canonically(  # pyright: ignore
             resource_reqs, self.get_actual(pod_name)  # pyright: ignore
         )
@@ -406,6 +423,7 @@ class ResourcePatcher:
         # Need to ignore invalid input, otherwise the StatefulSet gives "FailedCreate" and the
         # charm would be stuck in unknown/lost.
         if self.is_patched(resource_reqs):
+            logger.debug(f"resource requests {resource_reqs} are already patched.")
             return
 
         self.client.patch(
@@ -422,6 +440,9 @@ class KubernetesComputeResourcesPatch(Object):
     """A utility for patching the Kubernetes compute resources set up by Juju."""
 
     on = K8sResourcePatchEvents()  # pyright: ignore
+    PATCH_RETRY_STOP = tenacity.stop_after_delay(60 * 3)
+    PATCH_RETRY_WAIT = tenacity.wait_fixed(30)
+    PATCH_RETRY_IF = tenacity.retry_if_exception(_retry_on_condition)
 
     def __init__(
         self,
@@ -468,23 +489,28 @@ class KubernetesComputeResourcesPatch(Object):
         self._patch()
 
     def _patch(self) -> None:
-        """Patch the Kubernetes resources created by Juju to limit cpu or mem."""
+        """Patch the Kubernetes resources created by Juju to limit cpu or mem.
+
+        This method will keep on retrying to patch the kubernetes resource for a default duration of 3 minutes,
+        if the patching failure is due to a recoverable error (e.g: Network Latency).
+        This will put the charm in a `Maintenance` state until the patch is either successful or all retries have been consumed,
+        which in that case, will raise the same exception as the original exception that caused it and will put the charm in error state.
+        If the failure is not recoverable (e.g: wrong spec provided), an exception same as the original exception that caused it will be raised and will put the charm in error state.
+        """
         try:
             resource_reqs = self.resource_reqs_func()
             limits = resource_reqs.limits
             requests = resource_reqs.requests
         except ValueError as e:
             msg = f"Failed obtaining resource limit spec: {e}"
-            logger.error(msg)
-            self.on.patch_failed.emit(message=msg)
-            return
+            logger.exception(msg)
+            raise ValueError(msg) from e
 
         for spec in (limits, requests):
             if not is_valid_spec(spec):
                 msg = f"Invalid resource limit spec: {spec}"
                 logger.error(msg)
-                self.on.patch_failed.emit(message=msg)
-                return
+                raise ValueError(msg)
 
         resource_reqs = ResourceRequirements(
             limits=sanitize_resource_spec_dict(limits),  # type: ignore[arg-type]
@@ -492,27 +518,38 @@ class KubernetesComputeResourcesPatch(Object):
         )
 
         try:
-            self.patcher.apply(resource_reqs)
+            for attempt in tenacity.Retrying(
+                retry=self.PATCH_RETRY_IF,
+                stop=self.PATCH_RETRY_STOP,
+                wait=self.PATCH_RETRY_WAIT,
+                # if you don't succeed raise the last caught exception when you're done
+                reraise=True,
+            ):
+                with attempt:
+                    self._charm.unit.status = MaintenanceStatus(
+                        f"retrying patching resource limit... (attempt #{attempt.retry_state.attempt_number})"
+                    )
+                    self.patcher.apply(resource_reqs)
 
         except exceptions.ConfigError as e:
             msg = f"Error creating k8s client: {e}"
-            logger.error(msg)
-            self.on.patch_failed.emit(message=msg)
-            return
+            logger.exception(msg)
+            raise PatchFailedError(msg) from e
 
         except ApiError as e:
             if e.status.code == 403:
                 msg = f"Kubernetes resources patch failed: `juju trust` this application. {e}"
+
             else:
                 msg = f"Kubernetes resources patch failed: {e}"
 
-            logger.error(msg)
-            self.on.patch_failed.emit(message=msg)
+            logger.exception(msg)
+            raise PatchFailedError(msg) from e
 
         except ValueError as e:
             msg = f"Kubernetes resources patch failed: {e}"
-            logger.error(msg)
-            self.on.patch_failed.emit(message=msg)
+            logger.exception(msg)
+            raise PatchFailedError(msg) from e
 
         else:
             logger.info(
