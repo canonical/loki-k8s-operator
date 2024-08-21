@@ -104,7 +104,6 @@ References:
 import decimal
 import logging
 from decimal import Decimal
-from enum import Enum, unique
 from math import ceil, floor
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -123,8 +122,10 @@ from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
 from lightkube.utils.quantity import equals_canonically, parse_quantity
+from ops import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.charm import CharmBase
 from ops.framework import BoundEvent, EventBase, EventSource, Object, ObjectEvents
+from ops.model import StatusBase
 
 logger = logging.getLogger(__name__)
 
@@ -302,15 +303,6 @@ def _retry_on_condition(exception):
     if isinstance(exception, exceptions.ConfigError) or isinstance(exception, ValueError):
         return True
     return False
-
-
-@unique
-class PatchState(str, Enum):
-    """Patch operation possible states."""
-
-    in_progress = "in_progress"
-    succeeded = "succeeded"
-    failed = "failed"
 
 
 class K8sResourcePatchFailedEvent(EventBase):
@@ -571,6 +563,7 @@ class ResourcePatcher:
             "Accept": "application/json",
         }
 
+        # TODO: replace httpx with lightkube's client once https://github.com/gtsystem/lightkube/issues/73 is addressed
         with httpx.Client(verify=self.ca_path) as client:
             response = client.patch(
                 url=patch_url,
@@ -585,6 +578,7 @@ class KubernetesComputeResourcesPatch(Object):
     """A utility for patching the Kubernetes compute resources set up by Juju."""
 
     on = K8sResourcePatchEvents()  # pyright: ignore
+    # TODO: revisit values once we know leadership lease behavior
     PATCH_RETRY_STOP = tenacity.stop_after_delay(20)
     PATCH_RETRY_WAIT = tenacity.wait_fixed(5)
     PATCH_RETRY_IF = tenacity.retry_if_exception(_retry_on_condition)
@@ -736,32 +730,28 @@ class KubernetesComputeResourcesPatch(Object):
             self.on.patch_failed.emit(message=msg)
             return False
 
-    def get_status(self) -> Tuple[PatchState, str]:
-        """Return the status of patching the resource limits along with an optional message.
+    def get_status(self) -> StatusBase:
+        """Return the status of patching the resource limits in a `StatusBase` format.
 
         Returns:
-            tuple(PatchState, str): A tuple where:
-            - The first value is an Enum `PatchState` indicating the status of the patch operation.
-              Possible values are:
-                - PatchState.succeeded: The patch was applied successfully.
-                - PatchState.failed: The patch failed.
-                - PatchState.in_progress: The patch is still in progress.
-            - The second value is a string that provides additional information or a message about the status.
+            StatusBase: There is a 1:1 mapping between the state of the patching operation and a `StatusBase` value that the charm can be set to.
+        Possible values are:
+            - ActiveStatus: The patch was applied successfully.
+            - BlockedStatus: The patch failed and requires a human intervention.
+            - WaitingStatus: The patch is still in progress.
 
         Example:
-            - ("succeeded", "Patch applied successfully.")
-            - ("failed", "Failed due to missing permissions.")
-            - ("in_progress", "Patch is in progress.")
+            - ActiveStatus("Patch applied successfully")
+            - BlockedStatus("Failed due to missing permissions")
+            - WaitingStatus("Patch is in progress")
         """
-        # failed
         is_failed, msg = self.patcher.is_failed(self.resource_reqs_func)
         if is_failed:
-            return PatchState.failed, msg
-        # waiting
+            return BlockedStatus(msg)
         if self.patcher.is_in_progress():
-            return PatchState.in_progress, ""
-        # succeeded or nothing has been patched yet
-        return PatchState.succeeded, ""
+            return WaitingStatus("waiting for resources patch to apply")
+        # patch successful or nothing has been patched yet
+        return ActiveStatus()
 
     @property
     def _app(self) -> str:

@@ -2,6 +2,7 @@ from unittest.mock import PropertyMock, patch
 
 import pytest
 import scenario
+from ops import ActiveStatus
 
 from charm import LokiOperatorCharm
 
@@ -17,7 +18,7 @@ def loki_charm():
         _namespace=PropertyMock("test-namespace"),
         _patch=PropertyMock(tautology),
         is_ready=PropertyMock(tautology),
-        get_status=lambda _: ("succeeded", ""),
+        get_status=lambda _: ActiveStatus(),
     ):
         with patch("socket.getfqdn", new=lambda *args: "fqdn"):
             with patch("lightkube.core.client.GenericSyncClient"):

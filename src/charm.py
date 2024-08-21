@@ -54,7 +54,6 @@ from ops.model import (
     MaintenanceStatus,
     Port,
     StatusBase,
-    WaitingStatus,
 )
 from ops.pebble import Error, Layer, PathError, ProtocolError
 
@@ -239,11 +238,7 @@ class LokiOperatorCharm(CharmBase):
     def _on_collect_unit_status(self, event: CollectStatusEvent):
         # "Pull" statuses
         # TODO refactor _configure to turn the "rules" status into a "pull" status.
-        patch_state, msg = self.resources_patch.get_status()
-        if patch_state == "failed":
-            event.add_status(BlockedStatus(msg))
-        elif patch_state == "in_progress":
-            event.add_status(WaitingStatus("waiting for resource limit patch to apply"))
+        event.add_status(self.resources_patch.get_status())
 
         # "Push" statuses
         for status in self._stored.status.values():

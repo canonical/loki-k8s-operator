@@ -4,6 +4,8 @@
 
 from unittest.mock import patch
 
+from ops import ActiveStatus
+
 
 def tautology(*_, **__) -> bool:
     return True
@@ -14,7 +16,7 @@ k8s_resource_multipatch = patch.multiple(
     _namespace="test-namespace",
     _patch=tautology,
     is_ready=tautology,
-    get_status=lambda _: ("succeeded", ""),
+    get_status=lambda _: ActiveStatus(),
 )
 
 
