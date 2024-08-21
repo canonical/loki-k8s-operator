@@ -17,6 +17,7 @@ def loki_charm():
         _namespace=PropertyMock("test-namespace"),
         _patch=PropertyMock(tautology),
         is_ready=PropertyMock(tautology),
+        get_status=lambda _: ("succeeded", ""),
     ):
         with patch("socket.getfqdn", new=lambda *args: "fqdn"):
             with patch("lightkube.core.client.GenericSyncClient"):
