@@ -11,11 +11,12 @@ from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 
 import yaml
-from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
-from charm import LokiOperatorCharm
 from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.testing import Harness
+
+from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
+from charm import LokiOperatorCharm
 
 METADATA = {
     "model": "consumer-model",
@@ -232,6 +233,7 @@ class TestConfigFile(unittest.TestCase):
         self.assertEqual(config["ruler"]["alertmanager_url"], "")
 
     @patch("socket.getfqdn", new=lambda *args: "fqdn")
+    @k8s_resource_multipatch
     def test_instance_address_is_set_to_this_unit_ip(self):
         container = self.harness.charm.unit.get_container("loki")
 

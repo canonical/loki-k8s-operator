@@ -4,7 +4,7 @@
 """# KubernetesComputeResourcesPatch Library.
 
 This library is designed to enable developers to more simply patch the Kubernetes compute resource
-limits and requests created by Juju during the deployment of a sidecar charm.
+limits and requests created by Juju during the deployment of a charm.
 
 When initialised, this library binds a handler to the parent charm's `config-changed` event.
 The config-changed event is used because it is guaranteed to fire on startup, on upgrade and on
@@ -105,8 +105,10 @@ import decimal
 import logging
 from decimal import Decimal
 from math import ceil, floor
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
+import httpx
+import tenacity
 from lightkube import ApiError, Client  # pyright: ignore
 from lightkube.core import exceptions
 from lightkube.models.apps_v1 import StatefulSetSpec
@@ -120,8 +122,10 @@ from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Pod
 from lightkube.types import PatchType
 from lightkube.utils.quantity import equals_canonically, parse_quantity
+from ops import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.charm import CharmBase
 from ops.framework import BoundEvent, EventBase, EventSource, Object, ObjectEvents
+from ops.model import StatusBase
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +137,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 7
+LIBPATCH = 8
 
 
 _Decimal = Union[Decimal, float, str, int]  # types that are potentially convertible to Decimal
@@ -289,6 +293,18 @@ def sanitize_resource_spec_dict(spec: Optional[dict]) -> Optional[dict]:
     return d
 
 
+def _retry_on_condition(exception):
+    """Retry if the exception is an ApiError with a status code != 403.
+
+    Returns: a boolean value to indicate whether to retry or not.
+    """
+    if isinstance(exception, ApiError) and str(exception.status.code) != "403":
+        return True
+    if isinstance(exception, exceptions.ConfigError) or isinstance(exception, ValueError):
+        return True
+    return False
+
+
 class K8sResourcePatchFailedEvent(EventBase):
     """Emitted when patching fails."""
 
@@ -318,11 +334,31 @@ class ContainerNotFoundError(ValueError):
 class ResourcePatcher:
     """Helper class for patching a container's resource limits in a given StatefulSet."""
 
+    api_url = "https://kubernetes.default.svc"
+    token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    ca_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
     def __init__(self, namespace: str, statefulset_name: str, container_name: str):
         self.namespace = namespace
         self.statefulset_name = statefulset_name
         self.container_name = container_name
         self.client = Client()  # pyright: ignore
+
+    def _raw_patch_data(self, resources: dict) -> dict:
+        return {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": f"{self.container_name}",
+                                "resources": resources,
+                            }
+                        ]
+                    }
+                }
+            }
+        }
 
     def _patched_delta(self, resource_reqs: ResourceRequirements) -> StatefulSet:
         statefulset = self.client.get(
@@ -385,18 +421,113 @@ class ResourcePatcher:
         )
         return podspec.resources
 
+    def is_failed(
+        self, resource_reqs_func: Callable[[], ResourceRequirements]
+    ) -> Tuple[bool, str]:
+        """Returns a tuple indicating whether a patch operation has failed along with a failure message.
+
+        Implementation is based on dry running the patch operation to catch if there would be failures (e.g: Wrong spec and Auth errors).
+        """
+        try:
+            resource_reqs = resource_reqs_func()
+            limits = resource_reqs.limits
+            requests = resource_reqs.requests
+        except ValueError as e:
+            msg = f"Failed obtaining resource limit spec: {e}"
+            logger.error(msg)
+            return True, msg
+
+        # Dry run does not catch negative values for resource requests and limits.
+        if not is_valid_spec(limits) or not is_valid_spec(requests):
+            msg = f"Invalid resource requirements specs: {limits}, {requests}"
+            logger.error(msg)
+            return True, msg
+
+        resources = {
+            "limits": sanitize_resource_spec_dict(limits),
+            "requests": sanitize_resource_spec_dict(requests),
+        }
+
+        response = self.dry_run_apply(resources)
+        if response.status_code == 403:
+            return True, "Kubernetes resources patch failed: `juju trust` this application."
+        if response.status_code != 200:
+            msg = f"Kubernetes resources patch failed: {response.json().get('message', '')}"
+            return True, msg
+        return False, ""
+
+    def is_in_progress(self) -> bool:
+        """Returns a boolean to indicate whether a patch operation is in progress.
+
+        Implementation follows a similar approach to `kubectl rollout status statefulset` to track the progress of a rollout.
+        Reference: https://github.com/kubernetes/kubectl/blob/kubernetes-1.31.0/pkg/polymorphichelpers/rollout_status.go
+        """
+        try:
+            sts = self.client.get(
+                StatefulSet, name=self.statefulset_name, namespace=self.namespace
+            )
+        except (ValueError, ApiError):
+            return False
+
+        if sts.status is None or sts.spec is None:
+            logger.debug("status/spec are not yet available")
+            return False
+        if sts.status.observedGeneration == 0 or (
+            sts.metadata
+            and sts.status.observedGeneration
+            and sts.metadata.generation
+            and sts.metadata.generation > sts.status.observedGeneration
+        ):
+            logger.debug("waiting for statefulset spec update to be observed...")
+            return True
+        if (
+            sts.spec.replicas is not None
+            and sts.status.readyReplicas is not None
+            and sts.status.readyReplicas < sts.spec.replicas
+        ):
+            logger.debug(
+                f"Waiting for {sts.spec.replicas-sts.status.readyReplicas} pods to be ready..."
+            )
+            return True
+
+        if (
+            sts.spec.updateStrategy
+            and sts.spec.updateStrategy.type == "rollingUpdate"
+            and sts.spec.updateStrategy.rollingUpdate is not None
+        ):
+            if (
+                sts.spec.replicas is not None
+                and sts.spec.updateStrategy.rollingUpdate.partition is not None
+            ):
+                if sts.status.updatedReplicas and sts.status.updatedReplicas < (
+                    sts.spec.replicas - sts.spec.updateStrategy.rollingUpdate.partition
+                ):
+                    logger.debug(
+                        f"Waiting for partitioned roll out to finish: {sts.status.updatedReplicas} out of {sts.spec.replicas - sts.spec.updateStrategy.rollingUpdate.partition} new pods have been updated..."
+                    )
+                    return True
+            logger.debug(
+                f"partitioned roll out complete: {sts.status.updatedReplicas} new pods have been updated..."
+            )
+            return False
+
+        if sts.status.updateRevision != sts.status.currentRevision:
+            logger.debug(
+                f"waiting for statefulset rolling update to complete {sts.status.updatedReplicas} pods at revision {sts.status.updateRevision}..."
+            )
+            return True
+
+        logger.debug(
+            f"statefulset rolling update complete pods at revision {sts.status.currentRevision}"
+        )
+        return False
+
     def is_ready(self, pod_name, resource_reqs: ResourceRequirements):
         """Reports if the resource patch has been applied and is in effect.
 
         Returns:
             bool: A boolean indicating if the service patch has been applied and is in effect.
         """
-        logger.info(
-            "reqs=%s, templated=%s, actual=%s",
-            resource_reqs,
-            self.get_templated(),
-            self.get_actual(pod_name),
-        )
         return self.is_patched(resource_reqs) and equals_canonically(  # pyright: ignore
             resource_reqs, self.get_actual(pod_name)  # pyright: ignore
         )
@@ -406,6 +537,7 @@ class ResourcePatcher:
         # Need to ignore invalid input, otherwise the StatefulSet gives "FailedCreate" and the
         # charm would be stuck in unknown/lost.
         if self.is_patched(resource_reqs):
+            logger.debug(f"resource requests {resource_reqs} are already patched.")
             return
 
         self.client.patch(
@@ -417,11 +549,39 @@ class ResourcePatcher:
             field_manager=self.__class__.__name__,
         )
 
+    def dry_run_apply(self, resources: dict):
+        """Run a dry-run patch operation."""
+        # Read the token for authentication
+        with open(self.token_path, "r") as token_file:
+            token = token_file.read()
+
+        patch_url = f"{self.api_url}/apis/apps/v1/namespaces/{self.namespace}/statefulsets/{self.statefulset_name}"
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/strategic-merge-patch+json",
+            "Accept": "application/json",
+        }
+
+        # TODO: replace httpx with lightkube's client once https://github.com/gtsystem/lightkube/issues/73 is addressed
+        with httpx.Client(verify=self.ca_path) as client:
+            response = client.patch(
+                url=patch_url,
+                headers=headers,
+                json=self._raw_patch_data(resources),
+                params={"dryRun": "All", "fieldManager": self.__class__.__name__},
+            )
+        return response
+
 
 class KubernetesComputeResourcesPatch(Object):
     """A utility for patching the Kubernetes compute resources set up by Juju."""
 
     on = K8sResourcePatchEvents()  # pyright: ignore
+    # TODO: revisit values once we know leadership lease behavior
+    PATCH_RETRY_STOP = tenacity.stop_after_delay(20)
+    PATCH_RETRY_WAIT = tenacity.wait_fixed(5)
+    PATCH_RETRY_IF = tenacity.retry_if_exception(_retry_on_condition)
 
     def __init__(
         self,
@@ -468,7 +628,11 @@ class KubernetesComputeResourcesPatch(Object):
         self._patch()
 
     def _patch(self) -> None:
-        """Patch the Kubernetes resources created by Juju to limit cpu or mem."""
+        """Patch the Kubernetes resources created by Juju to limit cpu or mem.
+
+        This method will keep on retrying to patch the kubernetes resource for a default duration of 20 seconds
+        if the patching failure is due to a recoverable error (e.g: Network Latency).
+        """
         try:
             resource_reqs = self.resource_reqs_func()
             limits = resource_reqs.limits
@@ -492,7 +656,18 @@ class KubernetesComputeResourcesPatch(Object):
         )
 
         try:
-            self.patcher.apply(resource_reqs)
+            for attempt in tenacity.Retrying(
+                retry=self.PATCH_RETRY_IF,
+                stop=self.PATCH_RETRY_STOP,
+                wait=self.PATCH_RETRY_WAIT,
+                # if you don't succeed raise the last caught exception when you're done
+                reraise=True,
+            ):
+                with attempt:
+                    logger.debug(
+                        f"attempt #{attempt.retry_state.attempt_number} to patch resource limits"
+                    )
+                    self.patcher.apply(resource_reqs)
 
         except exceptions.ConfigError as e:
             msg = f"Error creating k8s client: {e}"
@@ -503,6 +678,7 @@ class KubernetesComputeResourcesPatch(Object):
         except ApiError as e:
             if e.status.code == 403:
                 msg = f"Kubernetes resources patch failed: `juju trust` this application. {e}"
+
             else:
                 msg = f"Kubernetes resources patch failed: {e}"
 
@@ -553,6 +729,29 @@ class KubernetesComputeResourcesPatch(Object):
             logger.error(msg)
             self.on.patch_failed.emit(message=msg)
             return False
+
+    def get_status(self) -> StatusBase:
+        """Return the status of patching the resource limits in a `StatusBase` format.
+
+        Returns:
+            StatusBase: There is a 1:1 mapping between the state of the patching operation and a `StatusBase` value that the charm can be set to.
+        Possible values are:
+            - ActiveStatus: The patch was applied successfully.
+            - BlockedStatus: The patch failed and requires a human intervention.
+            - WaitingStatus: The patch is still in progress.
+
+        Example:
+            - ActiveStatus("Patch applied successfully")
+            - BlockedStatus("Failed due to missing permissions")
+            - WaitingStatus("Patch is in progress")
+        """
+        is_failed, msg = self.patcher.is_failed(self.resource_reqs_func)
+        if is_failed:
+            return BlockedStatus(msg)
+        if self.patcher.is_in_progress():
+            return WaitingStatus("waiting for resources patch to apply")
+        # patch successful or nothing has been patched yet
+        return ActiveStatus()
 
     @property
     def _app(self) -> str:
