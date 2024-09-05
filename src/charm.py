@@ -46,15 +46,6 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
-from config_builder import (
-    CERT_FILE,
-    HTTP_LISTEN_PORT,
-    KEY_FILE,
-    LOKI_CONFIG,
-    LOKI_CONFIG_BACKUP,
-    RULES_DIR,
-    ConfigBuilder,
-)
 from ops import CollectStatusEvent, StoredState
 from ops.charm import CharmBase
 from ops.main import main
@@ -67,6 +58,16 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import Error, Layer, PathError, ProtocolError
+
+from config_builder import (
+    CERT_FILE,
+    HTTP_LISTEN_PORT,
+    KEY_FILE,
+    LOKI_CONFIG,
+    LOKI_CONFIG_BACKUP,
+    RULES_DIR,
+    ConfigBuilder,
+)
 
 # To keep a tidy debug-log, we suppress some DEBUG/INFO logs from some imported libs,
 # even when charm logging is set to a lower level.
@@ -323,7 +324,7 @@ class LokiOperatorCharm(CharmBase):
             a string consisting of Loki command and associated
             command line options.
         """
-        return f"/usr/bin/loki -config.file={LOKI_CONFIG}"
+        return f"/usr/bin/loki -config.expand-env=true -config.file={LOKI_CONFIG}"
 
     @property
     def _build_pebble_layer(self) -> Layer:
@@ -492,24 +493,33 @@ class LokiOperatorCharm(CharmBase):
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
 
-        # If v12_migration_date isn't set (due to missing or failed retrieval),
-        # we determine the migration date for v12 schema. This occurs once
+        # If v13_migration_date isn't set (due to missing or failed retrieval),
+        # we determine the migration date for v13 schema. This occurs once
         # during initial setup, as subsequent hooks will get the value from the persisted backup config.
 
-        # If it's a fresh Loki installation, it's safe to set the v12 schema date to today.
-        # This ensures that logs are correctly managed in v12 from the beginning of Loki's operation.
+        # If it's a fresh Loki installation, it's safe to set the v13 schema date to today.
+        # This ensures that logs are correctly managed in v13 from the beginning of Loki's operation.
         # If it's an upgrade scenario, we set the date to tomorrow to accommodate today's logs
-        # that might have been written in the previous v11 schema format.
+        # that might have been written in the previous v11/v12 schema formats.
 
         # By default, we assume it's a fresh installation unless state explicitly set to False
         # by the upgrade hook, indicating an upgrade
 
-        if not (v12_migration_date := self.get_v12_migration_date_from_backup()):
+        v12_migration_date = self._get_schema_config_version_migration_date_from_backup("v12")
+
+        if not (
+            v13_migration_date := self._get_schema_config_version_migration_date_from_backup("v13")
+        ):
             today = datetime.datetime.now(datetime.timezone.utc)
             tomorrow = today + datetime.timedelta(days=1)
-            v12_migration_date = (today if self._stored.fresh_install else tomorrow).strftime(
+            v13_migration_date = (today if self._stored.fresh_install else tomorrow).strftime(
                 "%Y-%m-%d"
             )
+
+        tsdb_versions_migration_dates = [
+            {"version": "v12", "date": v12_migration_date},
+            {"version": "v13", "date": v13_migration_date},
+        ]
 
         # We need to have the certs in place before rendering the config.
         # At this point we're already after the can_connect guard, so if the following pebble
@@ -525,7 +535,7 @@ class LokiOperatorCharm(CharmBase):
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
             retention_period=int(self.config["retention-period"]),
             http_tls=self._tls_ready,
-            v12_migration_date=v12_migration_date,
+            tsdb_versions_migration_dates=tsdb_versions_migration_dates,
         ).build()
 
         restart = self._update_config(config) or restart
@@ -627,13 +637,11 @@ class LokiOperatorCharm(CharmBase):
 
         return ",".join(alertmanagers)
 
-    def get_v12_migration_date_from_backup(self) -> str:
-        """Get the 'from' date from the v12 schema in Loki config.
-
-        In 2024-05 we changed the storage backend the charm configures from v11/boltdb to v12/tsdb.
+    def _get_schema_config_version_migration_date_from_backup(self, sc_version: str) -> str:
+        """Get the 'from' date from the sc_version schema in Loki config.
 
         Returns:
-            The 'from' date of the v12 schema, in YYYY-MM-DD format (ISO 8601), if it is found; otherwise empty string.
+            The 'from' date of the sc_version schema, in YYYY-MM-DD format (ISO 8601), if it is found; otherwise empty string.
         """
         try:
             running_config = yaml.safe_load(
@@ -644,7 +652,7 @@ class LokiOperatorCharm(CharmBase):
         except yaml.YAMLError as e:
             raise ValueError("Error parsing Loki backup config.") from e
         for config in running_config.get("schema_config", {}).get("configs", []):
-            if config.get("schema") == "v12":
+            if config.get("schema") == sc_version:
                 return config.get("from", "")
         return ""
 
