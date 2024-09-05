@@ -561,7 +561,10 @@ class LokiOperatorCharm(CharmBase):
         # If Pebble is not ready, we do not proceed.
         # This code will end up running anyway when Pebble is ready, because
         # it will eventually be called from the `_configure()` method.
-        if not self._loki_container.can_connect():
+
+        # We also need the resources_patch because the _update_cert method is called outside of the resource ready guard we have in the _configure method.
+        # Also see the comment about this inside the _configure method.
+        if not self._loki_container.can_connect() or not self.resources_patch.is_ready():
             return
 
         ca_cert_path = Path(self._ca_cert_path)
