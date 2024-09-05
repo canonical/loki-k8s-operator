@@ -46,15 +46,6 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
-from config_builder import (
-    CERT_FILE,
-    HTTP_LISTEN_PORT,
-    KEY_FILE,
-    LOKI_CONFIG,
-    LOKI_CONFIG_BACKUP,
-    RULES_DIR,
-    ConfigBuilder,
-)
 from ops import CollectStatusEvent, StoredState
 from ops.charm import CharmBase
 from ops.main import main
@@ -67,6 +58,16 @@ from ops.model import (
     WaitingStatus,
 )
 from ops.pebble import Error, Layer, PathError, ProtocolError
+
+from config_builder import (
+    CERT_FILE,
+    HTTP_LISTEN_PORT,
+    KEY_FILE,
+    LOKI_CONFIG,
+    LOKI_CONFIG_BACKUP,
+    RULES_DIR,
+    ConfigBuilder,
+)
 
 # To keep a tidy debug-log, we suppress some DEBUG/INFO logs from some imported libs,
 # even when charm logging is set to a lower level.
