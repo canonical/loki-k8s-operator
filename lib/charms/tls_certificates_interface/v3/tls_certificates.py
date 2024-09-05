@@ -305,6 +305,7 @@ from ops.model import (
     ModelError,
     Relation,
     RelationDataContent,
+    Secret,
     SecretNotFoundError,
     Unit,
 )
@@ -317,7 +318,7 @@ LIBAPI = 3
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 17
+LIBPATCH = 18
 
 PYDEPS = ["cryptography", "jsonschema"]
 
@@ -1966,9 +1967,10 @@ class TLSCertificatesRequiresV3(Object):
         Args:
             event (SecretExpiredEvent): Juju event
         """
-        if not event.secret.label or not event.secret.label.startswith(f"{LIBID}-"):
+        csr = self._get_csr_from_secret(event.secret)
+        if not csr:
+            logger.error("Failed to get CSR from secret %s", event.secret.label)
             return
-        csr = event.secret.get_content()["csr"]
         provider_certificate = self._find_certificate_in_relation_data(csr)
         if not provider_certificate:
             # A secret expired but we did not find matching certificate. Cleaning up
@@ -2008,3 +2010,18 @@ class TLSCertificatesRequiresV3(Object):
                 continue
             return provider_certificate
         return None
+
+    def _get_csr_from_secret(self, secret: Secret) -> str:
+        """Extract the CSR from the secret label or content.
+
+        This function is a workaround to maintain backwards compatiblity
+        and fix the issue reported in
+        https://github.com/canonical/tls-certificates-interface/issues/228
+        """
+        if not (csr := secret.get_content().get("csr", "")):
+            # In versions <14 of the Lib we were storing the CSR in the label of the secret
+            # The CSR now is stored int the content of the secret, which was a breaking change
+            # Here we get the CSR if the secret was created by an app using libpatch 14 or lower
+            if secret.label and secret.label.startswith(f"{LIBID}-"):
+                csr = secret.label[len(f"{LIBID}-") :]
+        return csr
