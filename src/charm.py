@@ -277,7 +277,7 @@ class LokiOperatorCharm(CharmBase):
         new_layer = self._node_exporter_pebble_layer
         self._node_exporter_container.add_layer("node-exporter", new_layer, combine=True)
         self._node_exporter_container.replan()
-        logger.info("Node Exporter (re)started")
+        logger.info("Node Exporter started")
 
     def _on_alertmanager_change(self, _):
         self._configure()
