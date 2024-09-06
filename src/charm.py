@@ -493,34 +493,6 @@ class LokiOperatorCharm(CharmBase):
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
 
-        # If v13_migration_date isn't set (due to missing or failed retrieval),
-        # we determine the migration date for v13 schema. This occurs once
-        # during initial setup, as subsequent hooks will get the value from the persisted backup config.
-
-        # If it's a fresh Loki installation, it's safe to set the v13 schema date to today.
-        # This ensures that logs are correctly managed in v13 from the beginning of Loki's operation.
-        # If it's an upgrade scenario, we set the date to tomorrow to accommodate today's logs
-        # that might have been written in the previous v11/v12 schema formats.
-
-        # By default, we assume it's a fresh installation unless state explicitly set to False
-        # by the upgrade hook, indicating an upgrade
-
-        v12_migration_date = self._get_schema_config_version_migration_date_from_backup("v12")
-
-        if not (
-            v13_migration_date := self._get_schema_config_version_migration_date_from_backup("v13")
-        ):
-            today = datetime.datetime.now(datetime.timezone.utc)
-            tomorrow = today + datetime.timedelta(days=1)
-            v13_migration_date = (today if self._stored.fresh_install else tomorrow).strftime(
-                "%Y-%m-%d"
-            )
-
-        tsdb_versions_migration_dates = [
-            {"version": "v12", "date": v12_migration_date},
-            {"version": "v13", "date": v13_migration_date},
-        ]
-
         # We need to have the certs in place before rendering the config.
         # At this point we're already after the can_connect guard, so if the following pebble
         # operations fail, better to let the charm go into error state than setting blocked.
@@ -535,7 +507,7 @@ class LokiOperatorCharm(CharmBase):
             ingestion_burst_size_mb=int(self.config["ingestion-burst-size-mb"]),
             retention_period=int(self.config["retention-period"]),
             http_tls=self._tls_ready,
-            tsdb_versions_migration_dates=tsdb_versions_migration_dates,
+            tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
         ).build()
 
         restart = self._update_config(config) or restart
@@ -816,6 +788,46 @@ class LokiOperatorCharm(CharmBase):
         if self._tls_ready:
             return self._ca_cert_path
         return None
+
+    @property
+    def _tsdb_versions_migration_dates(self) -> List[Dict[str, str]]:
+
+        # If v13_migration_date isn't set (due to missing or failed retrieval),
+        # we determine the migration date for v13 schema. This occurs once
+        # during initial setup, as subsequent hooks will get the value from the persisted backup config.
+
+        # If it's a fresh Loki installation, it's safe to set the v13 schema date to today.
+        # This ensures that logs are correctly managed in v13 from the beginning of Loki's operation.
+        # If it's an upgrade scenario, we set the date to tomorrow to accommodate today's logs
+        # that might have been written in the previous v11/v12 schema formats.
+
+        # By default, we assume it's a fresh installation unless state explicitly set to False
+        # by the upgrade hook, indicating an upgrade
+
+        date_format = "%Y-%m-%d"
+        today = datetime.datetime.now(datetime.timezone.utc)
+
+        if self._stored.fresh_install:
+            return [{"version": "v13", "date": today.strftime(date_format)}]
+
+        ret = []
+
+        if v12_migration_date := self._get_schema_config_version_migration_date_from_backup("v12"):
+            ret.append({"version": "v12", "date": v12_migration_date})
+
+        if v13_migration_date := self._get_schema_config_version_migration_date_from_backup("v13"):
+            ret.append({"version": "v13", "date": v13_migration_date})
+            return ret
+
+        tomorrow = today + datetime.timedelta(days=1)
+
+        if tomorrow.strftime(date_format) == v12_migration_date:
+            after_tomorrow = tomorrow + datetime.timedelta(days=1)
+            ret.append({"version": "v13", "date": after_tomorrow.strftime(date_format)})
+            return ret
+
+        ret.append({"version": "v13", "date": tomorrow.strftime(date_format)})
+        return ret
 
 
 if __name__ == "__main__":
