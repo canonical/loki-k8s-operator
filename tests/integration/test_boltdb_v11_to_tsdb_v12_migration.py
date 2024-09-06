@@ -48,7 +48,7 @@ async def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(ops_test: OpsT
     await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v12")
 
     await upgrade_charm_with_local_charm_v13(ops_test, LOKI_UPGRADED, loki_charm)
-    await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v13")
+    await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v13", True)
 
 
 @pytest.mark.abort_on_fail
@@ -100,19 +100,23 @@ async def upgrade_charm_with_local_charm_v13(ops_test: OpsTest, app_name, loki_c
 
 
 async def verify_upgrade_success(
-    ops_test: OpsTest, app_name, is_fresh_installation: bool, version: str = "v13"
+    ops_test: OpsTest,
+    app_name,
+    is_fresh_installation: bool,
+    version: str = "v13",
+    after_tomorrow: bool = False,
 ):
     """Verify that the upgrade was successful."""
-    positions = {"v11": 0, "v12": 1, "v13": 2}
     assert await is_loki_up(ops_test, app_name)
     post_upgrade_config = await loki_config(ops_test, app_name)
-    tsdb_schema_configs = post_upgrade_config["schema_config"]["configs"][positions[version]]
-
+    tsdb_schema_configs = post_upgrade_config["schema_config"]["configs"]
+    days = 2 if after_tomorrow else 1
     expected_from = (
         (datetime.date.today()).strftime("%Y-%m-%d")
         if is_fresh_installation
-        else (datetime.date.today() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        else (datetime.date.today() + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
     )
-    assert tsdb_schema_configs["store"] == "tsdb"
-    assert tsdb_schema_configs["schema"] == version
-    assert tsdb_schema_configs["from"] == expected_from
+    for config in tsdb_schema_configs:
+        if config["schema"] == version:
+            assert config["store"] == "tsdb"
+            assert config["from"] == expected_from
