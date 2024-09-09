@@ -11,11 +11,12 @@ from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 
 import yaml
-from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
-from charm import LokiOperatorCharm
 from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.testing import Harness
+
+from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
+from charm import LokiOperatorCharm
 
 METADATA = {
     "model": "consumer-model",
