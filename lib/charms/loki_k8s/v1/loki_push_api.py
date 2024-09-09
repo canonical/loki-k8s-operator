@@ -546,7 +546,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 13
 
 PYDEPS = ["cosl"]
 
@@ -2281,6 +2281,19 @@ class LogProxyConsumer(ConsumerBase):
         config = {"targets": ["localhost"], "labels": labels}
         scrape_config = {
             "job_name": "system",
+            "pipeline_stages": [
+                {
+                    "drop": {
+                        "expression": ".*file is a directory.*",
+                    },
+                },
+                {
+                    "structured_metadata": {"filename": "filename"},
+                },
+                {
+                    "labeldrop": ["filename"],
+                },
+            ],
             "static_configs": self._generate_static_configs(config, container_name),
         }
         scrape_configs.append(scrape_config)
@@ -2298,8 +2311,18 @@ class LogProxyConsumer(ConsumerBase):
             ]
             syslog_labels = common_labels.copy()
             syslog_labels.update({"job": f"{job_name}_syslog"})
+            # The job_name should be journal.
+            # we are not modifying it to avoid backwards compatibility issues.
             syslog_config = {
                 "job_name": "syslog",
+                "pipeline_stages": [
+                    {
+                        "structured_metadata": {"filename": "filename"},
+                    },
+                    {
+                        "labeldrop": ["filename"],
+                    },
+                ],
                 "syslog": {
                     "listen_address": f"127.0.0.1:{syslog_port}",
                     "label_structured_data": True,
