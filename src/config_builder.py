@@ -4,6 +4,7 @@
 """Config builder for Loki Charmed Operator."""
 
 import os
+from typing import Dict, List, Optional
 
 # Paths in workload container
 HTTP_LISTEN_PORT = 3100
@@ -49,11 +50,11 @@ class ConfigBuilder:
         instance_addr: str,
         alertmanager_url: str,
         external_url: str,
-        v12_migration_date: str,
         ingestion_rate_mb: int,
         ingestion_burst_size_mb: int,
         retention_period: int,
         http_tls: bool = False,
+        tsdb_versions_migration_dates: Optional[List[Dict[str, str]]] = None,
     ):
         """Init method."""
         self.instance_addr = instance_addr
@@ -63,7 +64,7 @@ class ConfigBuilder:
         self.ingestion_burst_size_mb = ingestion_burst_size_mb
         self.http_tls = http_tls
         self.retention_period = retention_period
-        self.v12_migration_date = v12_migration_date
+        self.tsdb_versions_migration_dates = tsdb_versions_migration_dates or []
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -119,24 +120,29 @@ class ConfigBuilder:
 
     @property
     def _schema_config(self) -> dict:
-        return {
-            "configs": [
-                {
-                    "from": "2020-10-24",
-                    "index": {"period": "24h", "prefix": "index_"},
-                    "object_store": "filesystem",
-                    "schema": "v11",
-                    "store": "boltdb-shipper",
-                },
-                {
-                    "from": self.v12_migration_date,
-                    "index": {"period": "24h", "prefix": "index_"},
-                    "object_store": "filesystem",
-                    "schema": "v12",
-                    "store": "tsdb",
-                },
-            ]
-        }
+        configs = [
+            {
+                "from": "2020-10-24",
+                "index": {"period": "24h", "prefix": "index_"},
+                "object_store": "filesystem",
+                "schema": "v11",
+                "store": "boltdb-shipper",
+            }
+        ]
+
+        for migration in self.tsdb_versions_migration_dates:
+            if migration["date"]:
+                configs.append(
+                    {
+                        "from": migration["date"],
+                        "index": {"period": "24h", "prefix": "index_"},
+                        "object_store": "filesystem",
+                        "schema": migration["version"],
+                        "store": "tsdb",
+                    }
+                )
+
+        return {"configs": configs}
 
     @property
     def _server(self) -> dict:
@@ -174,6 +180,7 @@ class ConfigBuilder:
     def _limits_config(self) -> dict:
         # Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
         return {
+            "allow_structured_metadata": True,
             # For convenience, we use an integer but Loki takes a float
             "ingestion_rate_mb": float(self.ingestion_rate_mb),
             "ingestion_burst_size_mb": float(self.ingestion_burst_size_mb),
