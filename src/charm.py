@@ -518,9 +518,8 @@ class LokiOperatorCharm(CharmBase):
             v12_migration_date=v12_migration_date,
         ).build()
 
-        restart = self._update_config(config)
-        new_layer = self._loki_pebble_layer
-        self._loki_container.add_layer(self._name, new_layer, combine=True)
+        has_config_changed = self._update_config(config)
+        self._loki_container.add_layer(self._name, self._loki_pebble_layer, combine=True)
 
         if self.server_cert.enabled and not self.server_cert.available:
             # We have a TLS relation in place, but the cert isn't there
@@ -528,9 +527,13 @@ class LokiOperatorCharm(CharmBase):
             self._loki_container.stop(self._service_name)
 
         # Now that we for sure have a layer, we can check if the service is running
-        elif not self._loki_container.get_service(self._service_name).is_running() or restart:
+        elif not self._loki_container.get_service(self._service_name).is_running():
             self._loki_container.restart(self._name)
-            logger.info("Loki started")
+            logger.info("Loki restarted. The service was not in the active state.")
+
+        elif has_config_changed:
+            self._loki_container.restart(self._name)
+            logger.info("Loki restarted. There was a change to the configuration.")
 
         if isinstance(to_status(self._stored.status["rules"]), BlockedStatus):
             # Wait briefly for Loki to come back up and re-check the alert rules
