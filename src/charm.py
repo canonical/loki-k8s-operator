@@ -66,7 +66,7 @@ from ops.model import (
     StatusBase,
     WaitingStatus,
 )
-from ops.pebble import Error, Layer, PathError, ProtocolError
+from ops.pebble import Error, Layer, PathError, ProtocolError, Check
 
 # To keep a tidy debug-log, we suppress some DEBUG/INFO logs from some imported libs,
 # even when charm logging is set to a lower level.
@@ -492,6 +492,8 @@ class LokiOperatorCharm(CharmBase):
         new_layer = self._build_pebble_layer
         restart = current_layer.services != new_layer.services
 
+        self._add_readiness_check(new_layer)
+
         # If v12_migration_date isn't set (due to missing or failed retrieval),
         # we determine the migration date for v12 schema. This occurs once
         # during initial setup, as subsequent hooks will get the value from the persisted backup config.
@@ -809,6 +811,11 @@ class LokiOperatorCharm(CharmBase):
             return self._ca_cert_path
         return None
 
+    def _add_readiness_check(self, new_layer: Layer):
+        """Add readiness check to a pebble layer."""
+        new_layer.checks["ready"] = Check(
+            "ready", {"override": "replace", "http": {"url": "http://localhost:3100/ready"}}
+        )
 
 if __name__ == "__main__":
     main(LokiOperatorCharm)
