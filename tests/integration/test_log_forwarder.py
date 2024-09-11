@@ -45,9 +45,7 @@ async def test_containers_forward_logs_after_pod_kill(
             application_name=tester_app_name,
         ),
     )
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=300, raise_on_error=False
-    )
+    await ops_test.model.wait_for_idle(apps=app_names, status="active")
 
     await ops_test.model.add_relation(loki_app_name, tester_app_name)
     await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
