@@ -15,4 +15,10 @@ cryptography
 
 # deps: tracing, charm_tracing
 pydantic
+
+opentelemetry-api==1.21.0
+opentelemetry-exporter-otlp-proto-common==1.21.0
 opentelemetry-exporter-otlp-proto-http==1.21.0
+opentelemetry-proto==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-semantic-conventions==0.42b0
