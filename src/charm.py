@@ -485,10 +485,6 @@ class LokiOperatorCharm(CharmBase):
                 BlockedStatus("Please provide a non-negative retention duration")
             )
 
-        current_layer = self._loki_container.get_plan()
-        new_layer = self._build_pebble_layer
-        restart = current_layer.services != new_layer.services
-
         # We need to have the certs in place before rendering the config.
         # At this point we're already after the can_connect guard, so if the following pebble
         # operations fail, better to let the charm go into error state than setting blocked.
