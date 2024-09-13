@@ -278,6 +278,7 @@ class LokiOperatorCharm(CharmBase):
     def _on_node_exporter_pebble_ready(self, _):
         current_layer = self._node_exporter_container.get_plan()
         new_layer = self._node_exporter_pebble_layer
+        self._add_node_exporter_readiness_checks(new_layer)
         restart = current_layer.services != new_layer.services
 
         if restart:
@@ -490,9 +491,8 @@ class LokiOperatorCharm(CharmBase):
 
         current_layer = self._loki_container.get_plan()
         new_layer = self._build_pebble_layer
+        self._add_loki_readiness_checks(new_layer)
         restart = current_layer.services != new_layer.services
-
-        self._add_readiness_check(new_layer)
 
         # If v12_migration_date isn't set (due to missing or failed retrieval),
         # we determine the migration date for v12 schema. This occurs once
@@ -811,10 +811,16 @@ class LokiOperatorCharm(CharmBase):
             return self._ca_cert_path
         return None
 
-    def _add_readiness_check(self, new_layer: Layer):
+    def _add_loki_readiness_checks(self, new_layer: Layer):
         """Add readiness check to a pebble layer."""
         new_layer.checks["ready"] = Check(
-            "ready", {"override": "replace", "http": {"url": "http://localhost:3100/ready"}}
+            "loki-ready", {"override": "replace", "http": {"url": f"{self._external_url}/ready"}}
+        )
+
+    def _add_node_exporter_readiness_checks(self, new_layer: Layer):
+        """Add readiness check to a pebble layer."""
+        new_layer.checks["ready"] = Check(
+            "node-exporter-healthy", {"override": "replace", "http": {"url": "http://localhost:9100/metrics"}}
         )
 
 if __name__ == "__main__":
