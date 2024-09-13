@@ -2602,7 +2602,7 @@ class LogForwarder(ConsumerBase):
 
         self._update_endpoints(event.workload, loki_endpoints)
 
-    def _update_logging(self, _):
+    def _update_logging(self, event: RelationEvent):
         """Update the log forwarding to match the active Loki endpoints."""
         if not (loki_endpoints := self._retrieve_endpoints_from_relation()):
             logger.warning("No Loki endpoints available")
@@ -2612,6 +2612,8 @@ class LogForwarder(ConsumerBase):
             if container.can_connect():
                 self._update_endpoints(container, loki_endpoints)
             # else: `_update_endpoints` will be called on pebble-ready anyway.
+
+        self._handle_alert_rules(event.relation)
 
     def _retrieve_endpoints_from_relation(self) -> dict:
         loki_endpoints = {}

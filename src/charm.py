@@ -277,14 +277,10 @@ class LokiOperatorCharm(CharmBase):
             logger.debug("Cannot set workload version at this time: could not get Loki version.")
 
     def _on_node_exporter_pebble_ready(self, _):
-        current_layer = self._node_exporter_container.get_plan()
         new_layer = self._node_exporter_pebble_layer
-        restart = current_layer.services != new_layer.services
-
-        if restart:
-            self._node_exporter_container.add_layer("node-exporter", new_layer, combine=True)
-            self._node_exporter_container.restart("node-exporter")
-            logger.info("Node Exporter (re)started")
+        self._node_exporter_container.add_layer("node-exporter", new_layer, combine=True)
+        self._node_exporter_container.replan()
+        logger.info("Node Exporter started")
 
     def _on_alertmanager_change(self, _):
         self._configure()
@@ -327,7 +323,7 @@ class LokiOperatorCharm(CharmBase):
         return f"/usr/bin/loki -config.expand-env=true -config.file={LOKI_CONFIG}"
 
     @property
-    def _build_pebble_layer(self) -> Layer:
+    def _loki_pebble_layer(self) -> Layer:
         """Construct the pebble layer.
 
         Returns:
@@ -489,10 +485,6 @@ class LokiOperatorCharm(CharmBase):
                 BlockedStatus("Please provide a non-negative retention duration")
             )
 
-        current_layer = self._loki_container.get_plan()
-        new_layer = self._build_pebble_layer
-        restart = current_layer.services != new_layer.services
-
         # We need to have the certs in place before rendering the config.
         # At this point we're already after the can_connect guard, so if the following pebble
         # operations fail, better to let the charm go into error state than setting blocked.
@@ -510,19 +502,22 @@ class LokiOperatorCharm(CharmBase):
             tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
         ).build()
 
-        restart = self._update_config(config) or restart
-        self._loki_container.add_layer(self._name, new_layer, combine=True)
-        # Now that we for sure have a layer, we can check if the service is running
-        restart = not self._loki_container.get_service(self._service_name).is_running() or restart
+        # Add a layer so we can check if the service is running
+        self._loki_container.add_layer(self._name, self._loki_pebble_layer, combine=True)
 
         if self.server_cert.enabled and not self.server_cert.available:
             # We have a TLS relation in place, but the cert isn't there
             logger.info("Loki stopped")
             self._loki_container.stop(self._service_name)
 
-        elif restart:
+        elif self._update_config(config):
             self._loki_container.restart(self._name)
-            logger.info("Loki (re)started")
+            logger.info("Loki restarted. There was a change to the configuration.")
+
+        # Now that we for sure have a layer, we can check if the service is running
+        elif not self._loki_container.get_service(self._service_name).is_running():
+            self._loki_container.restart(self._name)
+            logger.info("Loki restarted. The service was not in the active state.")
 
         if isinstance(to_status(self._stored.status["rules"]), BlockedStatus):
             # Wait briefly for Loki to come back up and re-check the alert rules
@@ -554,7 +549,10 @@ class LokiOperatorCharm(CharmBase):
         # If Pebble is not ready, we do not proceed.
         # This code will end up running anyway when Pebble is ready, because
         # it will eventually be called from the `_configure()` method.
-        if not self._loki_container.can_connect():
+
+        # We also need the resources_patch because the _update_cert method is called outside of the resource ready guard we have in the _configure method.
+        # Also see the comment about this inside the _configure method.
+        if not self._loki_container.can_connect() or not self.resources_patch.is_ready():
             return
 
         ca_cert_path = Path(self._ca_cert_path)
