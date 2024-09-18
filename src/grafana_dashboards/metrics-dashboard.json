@@ -1305,7 +1305,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P55C85133CC058AEE"
+            "uid": "${prometheusds}"
           },
           "description": "Distribution of bytes processed per second for LogQL queries. It shows no data if nothing is reading from Loki.\n\nEach time series shows the 95th-percentile (the maximum data rate for *most* queries)",
           "fieldConfig": {
