@@ -1397,7 +1397,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "P55C85133CC058AEE"
+                "uid": "${prometheusds}"
               },
               "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum(rate(loki_logql_querystats_bytes_processed_per_seconds_bucket{juju_application=~\"$juju_application\",juju_charm=\"loki-k8s\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[$__rate_interval])) by (le, juju_application))",
