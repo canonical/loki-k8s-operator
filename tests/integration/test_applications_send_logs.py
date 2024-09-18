@@ -30,7 +30,7 @@ tester_resources = {
 # Proceed with care
 tester_apps = {
     "loki-tester": '{juju_application="loki-tester",level="debug"}',
-    "log-proxy-tester-file": '{juju_application="log-proxy-tester-file",filename=~".+"}',
+    "log-proxy-tester-file": '{juju_application="log-proxy-tester-file"} | filename=~".+"',
     "log-proxy-tester-syslog": '{juju_application="log-proxy-tester-syslog",job=~".+syslog"}',
 }
 
