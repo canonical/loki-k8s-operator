@@ -2316,14 +2316,6 @@ class LogProxyConsumer(ConsumerBase):
             # we are not modifying it to avoid backwards compatibility issues.
             syslog_config = {
                 "job_name": "syslog",
-                "pipeline_stages": [
-                    {
-                        "structured_metadata": {"filename": "filename"},
-                    },
-                    {
-                        "labeldrop": ["filename"],
-                    },
-                ],
                 "syslog": {
                     "listen_address": f"127.0.0.1:{syslog_port}",
                     "label_structured_data": True,
