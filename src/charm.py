@@ -31,7 +31,7 @@ from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
 from charms.loki_k8s.v0.charm_logging import log_charm
-from charms.loki_k8s.v0.loki_push_api import (
+from charms.loki_k8s.v1.loki_push_api import (
     LokiPushApiAlertRulesChanged,
     LokiPushApiProvider,
 )
