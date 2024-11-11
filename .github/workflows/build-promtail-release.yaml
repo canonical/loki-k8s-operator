@@ -36,9 +36,9 @@ jobs:
           fetch-depth: 0
           path: ./loki-k8s-operator
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          go-version: '1.21.8'
       - name: Install systemd dependencies
         run: |
           sudo apt-get update
@@ -122,9 +122,9 @@ jobs:
           fetch-depth: 0
           path: ./loki-k8s-operator
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          go-version: '1.21.8'
       - name: Build Promtail
         # We run the make-based build with CGO_ENABLED=0
         # because we want statically-linked binaries and

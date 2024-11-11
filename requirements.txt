@@ -1,5 +1,6 @@
 cosl>=0.0.12
-ops
+# pinned to 2.16 as 2.17 breaks our unittests
+ops == 2.16
 kubernetes
 requests
 lightkube
@@ -14,7 +15,8 @@ lightkube-models
 cryptography
 
 # deps: tracing, charm_tracing
-pydantic
+pydantic>=2.9.0
+importlib-metadata==6.0.0
 
 opentelemetry-api==1.21.0
 opentelemetry-exporter-otlp-proto-common==1.21.0

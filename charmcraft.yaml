@@ -17,6 +17,7 @@ parts:
 
       # For v1.alertmanager_dispatch & v1.tracing
       - pydantic>=2
+      - pydantic-core
     build-packages: [git]
   cos-tool:
     plugin: dump
