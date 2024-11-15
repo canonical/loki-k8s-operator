@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import ops.pebble
 import pytest
-import scenario
+from ops.testing import Container, Exec, State
 
 
 @pytest.fixture
@@ -13,19 +13,19 @@ def loki_emitter():
 
 
 def test_no_endpoints_on_loki_not_ready(context, loki_emitter):
-    state = scenario.State(
+    state = State(
         containers=[
-            scenario.Container(
+            Container(
                 "loki",
                 can_connect=True,
                 layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
-                service_status={"loki": ops.pebble.ServiceStatus.INACTIVE},
-                exec_mock={("update-ca-certificates", "--fresh"): scenario.ExecOutput()},
+                service_statuses={"loki": ops.pebble.ServiceStatus.INACTIVE},
+                execs={Exec(["update-ca-certificates", "--fresh"], return_code=0)},
             )
         ]
     )
 
-    with context.manager("update-status", state) as mgr:
+    with context(context.on.update_status(), state) as mgr:
         charm = mgr.charm
         assert charm._charm_logging_endpoints == []
         logging.getLogger("foo").debug("bar")
@@ -34,19 +34,19 @@ def test_no_endpoints_on_loki_not_ready(context, loki_emitter):
 
 
 def test_endpoints_on_loki_ready(context, loki_emitter):
-    state = scenario.State(
+    state = State(
         containers=[
-            scenario.Container(
+            Container(
                 "loki",
                 can_connect=True,
                 layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
-                service_status={"loki": ops.pebble.ServiceStatus.ACTIVE},
-                exec_mock={("update-ca-certificates", "--fresh"): scenario.ExecOutput()},
+                service_statuses={"loki": ops.pebble.ServiceStatus.ACTIVE},
+                execs={Exec(["update-ca-certificates", "--fresh"], return_code=0)},
             )
         ]
     )
 
-    with context.manager("update-status", state) as mgr:
+    with context(context.on.update_status(), state) as mgr:
         charm = mgr.charm
         assert charm._charm_logging_endpoints == ["http://localhost:3100/loki/api/v1/push"]
         logging.getLogger("foo").debug("bar")
@@ -62,19 +62,19 @@ def test_endpoints_on_loki_ready(context, loki_emitter):
 
 @patch("charm.LokiOperatorCharm._charm_logging_ca_cert", new_callable=lambda *_: True)
 def test_endpoints_on_loki_ready_tls(_, context, loki_emitter):
-    state = scenario.State(
+    state = State(
         containers=[
-            scenario.Container(
+            Container(
                 "loki",
                 can_connect=True,
                 layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
-                service_status={"loki": ops.pebble.ServiceStatus.ACTIVE},
-                exec_mock={("update-ca-certificates", "--fresh"): scenario.ExecOutput()},
+                service_statuses={"loki": ops.pebble.ServiceStatus.ACTIVE},
+                execs={Exec(["update-ca-certificates", "--fresh"], return_code=0)},
             )
         ]
     )
 
-    with context.manager("update-status", state) as mgr:
+    with context(context.on.update_status(), state) as mgr:
         charm = mgr.charm
         assert charm._charm_logging_endpoints == ["https://localhost:3100/loki/api/v1/push"]
         logging.getLogger("foo").debug("bar")

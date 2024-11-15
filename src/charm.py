@@ -500,6 +500,7 @@ class LokiOperatorCharm(CharmBase):
             retention_period=int(self.config["retention-period"]),
             http_tls=self._tls_ready,
             tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
+            reporting_enabled=bool(self.config["reporting-enabled"]),
         ).build()
 
         # Add a layer so we can check if the service is running

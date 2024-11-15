@@ -459,17 +459,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
     def tearDown(self):
         self.mock_request.stop()
 
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def _add_alerting_relation(self, mock_unit_ip):
-        fake_network = {
-            "bind-addresses": [
-                {
-                    "interface-name": "eth0",
-                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
-                }
-            ]
-        }
-        mock_unit_ip.return_value = fake_network
+    def _add_alerting_relation(self):
         rel_id = self.harness.add_relation("logging", "tester")
         self.harness.add_relation_unit(rel_id, "tester/0")
 

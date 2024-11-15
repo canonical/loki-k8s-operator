@@ -55,6 +55,7 @@ class ConfigBuilder:
         retention_period: int,
         http_tls: bool = False,
         tsdb_versions_migration_dates: Optional[List[Dict[str, str]]] = None,
+        reporting_enabled: bool,
     ):
         """Init method."""
         self.instance_addr = instance_addr
@@ -65,10 +66,11 @@ class ConfigBuilder:
         self.http_tls = http_tls
         self.retention_period = retention_period
         self.tsdb_versions_migration_dates = tsdb_versions_migration_dates or []
+        self.reporting_enabled = reporting_enabled
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
-        return {
+        loki_config = {
             "target": self._target,
             "auth_enabled": self._auth_enabled,
             "common": self._common,
@@ -84,6 +86,12 @@ class ConfigBuilder:
             "querier": self._querier,
             "compactor": self._compactor,
         }
+
+        # Overwrite the default only if reporting is not enabled
+        if not self.reporting_enabled:
+            loki_config["analytics"] = self._analytics
+
+        return loki_config
 
     @property
     def _common(self) -> dict:
@@ -249,4 +257,12 @@ class ConfigBuilder:
             "retention_enabled": retention_enabled,
             "working_directory": COMPACTOR_DIR,
             "shared_store": "filesystem",
+        }
+
+    @property
+    def _analytics(self) -> dict:
+        # Ref: https://grafana.com/docs/loki/latest/configure/#analytics
+        return {
+            # Enable anonymous usage reporting.
+            "reporting_enabled": self.reporting_enabled,
         }

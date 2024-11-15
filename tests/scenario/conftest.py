@@ -1,7 +1,7 @@
 from unittest.mock import PropertyMock, patch
 
 import pytest
-import scenario
+from ops.testing import Context
 
 from charm import LokiOperatorCharm
 
@@ -25,4 +25,4 @@ def loki_charm():
 
 @pytest.fixture
 def context(loki_charm):
-    return scenario.Context(loki_charm)
+    return Context(loki_charm)
