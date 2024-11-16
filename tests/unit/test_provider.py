@@ -4,7 +4,6 @@
 import json
 import textwrap
 import unittest
-from unittest.mock import patch
 
 from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
 from ops.charm import CharmBase
@@ -122,17 +121,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
         expected_value = {"url": endpoint}
         self.assertEqual(expected_value, self.harness.charm.loki_provider._endpoint(url))
 
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def test__on_logging_relation_changed(self, mock_unit_ip):
-        fake_network = {
-            "bind-addresses": [
-                {
-                    "interface-name": "eth0",
-                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
-                }
-            ]
-        }
-        mock_unit_ip.return_value = fake_network
+    def test__on_logging_relation_changed(self):
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
 
@@ -141,17 +130,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
         )
         self.assertEqual(len(self.harness.charm._stored.events), 1)
 
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def test__on_logging_relation_created_and_broken(self, mock_unit_ip):
-        fake_network = {
-            "bind-addresses": [
-                {
-                    "interface-name": "eth0",
-                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
-                }
-            ]
-        }
-        mock_unit_ip.return_value = fake_network
+    def test__on_logging_relation_created_and_broken(self):
         rel_id = self.harness.add_relation("logging", "promtail")
         self.harness.add_relation_unit(rel_id, "promtail/0")
 
@@ -163,17 +142,7 @@ class TestLokiPushApiProvider(unittest.TestCase):
         self.harness.remove_relation(rel_id)
         self.assertEqual(len(self.harness.charm._stored.events), 3)
 
-    @patch("ops.testing._TestingModelBackend.network_get")
-    def test_alerts(self, mock_unit_ip):
-        fake_network = {
-            "bind-addresses": [
-                {
-                    "interface-name": "eth0",
-                    "addresses": [{"hostname": "loki-0", "value": "10.1.2.3"}],
-                }
-            ]
-        }
-        mock_unit_ip.return_value = fake_network
+    def test_alerts(self):
         rel_id = self.harness.add_relation("logging", "consumer")
         self.harness.update_relation_data(
             rel_id,

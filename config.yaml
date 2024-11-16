@@ -48,3 +48,13 @@ options:
       Ref: https://grafana.com/docs/loki/latest/operations/storage/retention/
     type: int
     default: 0
+  reporting-enabled:
+    description: |
+      When disabled, Loki will be configured to not send anonymous usage statistics to stats.grafana.org.
+      It is very helpful to the Grafana project, so please leave this enabled.
+      
+      When enabled, Loki will use its default values for analytics.
+      
+      Ref: https://grafana.com/docs/loki/latest/configure/#analytics
+    type: boolean
+    default: true
