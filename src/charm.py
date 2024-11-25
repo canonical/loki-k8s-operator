@@ -46,6 +46,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
+from cosl import JujuTopology
 from ops import CollectStatusEvent, StoredState
 from ops.charm import CharmBase
 from ops.main import main
@@ -141,6 +142,8 @@ class LokiOperatorCharm(CharmBase):
         self._node_exporter_container = self.unit.get_container("node-exporter")
         self.unit.set_ports(self._port)
 
+        self._juju_topology = JujuTopology.from_charm(self)
+
         # If Loki is run in single-tenant mode, all the chunks are put in a folder named "fake"
         # https://grafana.com/docs/loki/latest/operations/storage/filesystem/
         # https://grafana.com/docs/loki/latest/rules/#ruler-storage
@@ -218,9 +221,23 @@ class LokiOperatorCharm(CharmBase):
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
-        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
+        self.charm_tracing = TracingEndpointRequirer(
+            self, relation_name="charm-tracing", protocols=["otlp_http"]
+        )
+        self.workload_tracing = TracingEndpointRequirer(
+            self, relation_name="workload-tracing", protocols=["jaeger_thrift_http"]
+        )
         self._charm_tracing_endpoint, self._charm_tracing_ca_cert = charm_tracing_config(
-            self.tracing, self._ca_cert_path
+            self.charm_tracing, self._ca_cert_path
+        )
+
+        self.framework.observe(
+            self.workload_tracing.on.endpoint_changed,  # type: ignore
+            self._on_workload_tracing_endpoint_changed,
+        )
+        self.framework.observe(
+            self.workload_tracing.on.endpoint_removed,  # type: ignore
+            self._on_workload_tracing_endpoint_removed,
         )
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -294,6 +311,14 @@ class LokiOperatorCharm(CharmBase):
         # when it is related with ingress. If not, endpoints will end up outdated in consumer side.
         self.loki_provider.update_endpoint(url=self._external_url, relation=event.relation)
 
+    def _on_workload_tracing_endpoint_changed(self, _) -> None:
+        """Adds workload tracing information to loki's config."""
+        self._configure()
+
+    def _on_workload_tracing_endpoint_removed(self, _) -> None:
+        """Removes workload tracing information from loki's config."""
+        self._configure()
+
     ##############################################
     #                 PROPERTIES                 #
     ##############################################
@@ -329,6 +354,20 @@ class LokiOperatorCharm(CharmBase):
         Returns:
             a Pebble layer specification for the Loki workload container.
         """
+        env = {}
+        if self.workload_tracing.is_ready():
+            tempo_endpoint = self.workload_tracing.get_endpoint("jaeger_thrift_http")
+            topology = self._juju_topology
+            env.update(
+                {
+                    "JAEGER_ENDPOINT": (f"{tempo_endpoint}/api/traces?format=jaeger.thrift"),
+                    "JAEGER_SAMPLER_PARAM": "1",
+                    "JAEGER_SAMPLER_TYPE": "const",
+                    "JAEGER_TAGS": f"juju_application={topology.application},juju_model={topology.model}"
+                    + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
+                },
+            )
+
         pebble_layer = Layer(
             {
                 "summary": "Loki layer",
@@ -339,6 +378,7 @@ class LokiOperatorCharm(CharmBase):
                         "summary": "loki",
                         "command": self._loki_command,
                         "startup": "disabled",
+                        "environment": env,
                     },
                 },
             }
@@ -519,6 +559,9 @@ class LokiOperatorCharm(CharmBase):
         elif not self._loki_container.get_service(self._service_name).is_running():
             self._loki_container.restart(self._name)
             logger.info("Loki restarted. The service was not in the active state.")
+
+        # trigger replan to notice if it was the pebble layer itself that changed
+        self._loki_container.replan()
 
         if isinstance(to_status(self._stored.status["rules"]), BlockedStatus):
             # Wait briefly for Loki to come back up and re-check the alert rules

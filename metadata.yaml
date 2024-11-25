@@ -76,9 +76,16 @@ requires:
       Certificate and key files for the loki server.
   catalogue:
     interface: catalogue
-  tracing:
-    interface: tracing
+  charm-tracing:
+    description: |
+      Enables sending charm traces to a distributed tracing backend such as Tempo.
     limit: 1
+    interface: tracing
+  workload-tracing:
+    description: |
+      Enables sending workload traces to a distributed tracing backend such as Tempo.
+    limit: 1
+    interface: tracing
 
 peers:
   replicas:
