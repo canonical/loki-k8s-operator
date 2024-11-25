@@ -48,7 +48,7 @@ async def test_workload_tracing_is_present(ops_test, loki_charm):
     await ops_test.model.wait_for_idle(apps=[app_name], status="active")
     assert await is_loki_up(ops_test, app_name, num_units=1)
 
-    # Verify workload traces from grafana are ingested into Tempo
+    # Verify workload traces are ingested into Tempo
     assert await get_traces_patiently(
         await get_application_ip(ops_test, TEMPO_APP_NAME),
         service_name=f"{app_name}",
