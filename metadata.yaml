@@ -62,6 +62,10 @@ provides:
     interface: prometheus_scrape
   grafana-dashboard:
     interface: grafana_dashboard
+  send-datasource:
+    interface: grafana_datasource_exchange
+    description: |
+      Integration to share with other COS components this charm's grafana datasources, and receive theirs.
 
 requires:
   alertmanager:
