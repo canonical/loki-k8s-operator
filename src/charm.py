@@ -898,6 +898,9 @@ class LokiOperatorCharm(CharmBase):
 
     def _update_datasource_exchange(self) -> None:
         """Update the grafana-datasource-exchange relations."""
+        if not self.unit.is_leader():
+            return
+
         grafana_uids_to_units_to_uids = self.grafana_source_provider.get_source_uids()
         raw_datasources: List[DatasourceDict] = []
 
