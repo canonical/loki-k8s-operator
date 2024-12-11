@@ -52,9 +52,7 @@ grafana_source_relation = Relation(
 grafana_datasource_exchange_relation = Relation(
     "send-datasource",
     remote_app_data={
-        "datasources": json.dumps(
-            {"loki/0": {"type": "loki", "uid": "01234", "grafana_uid": "5678"}}
-        )
+        "datasources": json.dumps([{"type": "loki", "uid": "01234", "grafana_uid": "5678"}])
     },
 )
 
