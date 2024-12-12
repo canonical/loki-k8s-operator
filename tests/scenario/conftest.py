@@ -24,8 +24,7 @@ def loki_charm(tmp_path):
         with patch("socket.getfqdn", new=lambda *args: "fqdn"):
             with patch("lightkube.core.client.GenericSyncClient"):
                 with charm_tracing_disabled():
-                    with patch("subprocess.run"):
-                        yield LokiOperatorCharm
+                    yield LokiOperatorCharm
 
 
 @pytest.fixture

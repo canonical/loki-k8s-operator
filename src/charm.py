@@ -280,7 +280,7 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
 
     def _on_grafana_source_changed(self, _):
-        self._configure()
+        self._update_datasource_exchange()
 
     def _on_collect_unit_status(self, event: CollectStatusEvent):
         # "Pull" statuses
@@ -602,7 +602,6 @@ class LokiOperatorCharm(CharmBase):
         self.grafana_source_provider.update_source(source_url=self._external_url)
         self.loki_provider.update_endpoint(url=self._external_url)
         self.catalogue.update_item(item=self._catalogue_item)
-        self._update_datasource_exchange()
 
     def _update_config(self, config: dict) -> bool:
         if self._running_config() != config:
@@ -901,11 +900,15 @@ class LokiOperatorCharm(CharmBase):
         if not self.unit.is_leader():
             return
 
+        # we might have multiple grafana-source relations, this method collects them all and returns a mapping from
+        # the `grafana_uid` to the contents of the `datasource_uids` field
+        # for simplicity, we assume that we're sending the same data to different grafanas.
+        # read more in https://discourse.charmhub.io/t/tempo-ha-docs-correlating-traces-metrics-logs/16116
         grafana_uids_to_units_to_uids = self.grafana_source_provider.get_source_uids()
         raw_datasources: List[DatasourceDict] = []
 
         for grafana_uid, ds_uids in grafana_uids_to_units_to_uids.items():
-            for _unit_name, ds_uid in ds_uids.items():
+            for _, ds_uid in ds_uids.items():
                 raw_datasources.append({"type": "loki", "uid": ds_uid, "grafana_uid": grafana_uid})
         self.datasource_exchange.publish(datasources=raw_datasources)
 
