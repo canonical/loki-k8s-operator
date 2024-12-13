@@ -47,6 +47,7 @@ from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
 from cosl import JujuTopology
+from cosl.interfaces.datasource_exchange import DatasourceDict, DatasourceExchange
 from ops import CollectStatusEvent, StoredState
 from ops.charm import CharmBase
 from ops.main import main
@@ -231,6 +232,12 @@ class LokiOperatorCharm(CharmBase):
             self.charm_tracing, self._ca_cert_path
         )
 
+        self.datasource_exchange = DatasourceExchange(
+            self,
+            provider_endpoint="send-datasource",
+            requirer_endpoint=None,
+        )
+
         self.framework.observe(
             self.workload_tracing.on.endpoint_changed,  # type: ignore
             self._on_workload_tracing_endpoint_changed,
@@ -252,11 +259,28 @@ class LokiOperatorCharm(CharmBase):
             self._loki_push_api_alert_rules_changed,
         )
         self.framework.observe(self.on.logging_relation_changed, self._on_logging_relation_changed)
+
+        self.framework.observe(
+            self.on.send_datasource_relation_changed, self._on_grafana_source_changed
+        )
+        self.framework.observe(
+            self.on.send_datasource_relation_departed, self._on_grafana_source_changed
+        )
+        self.framework.observe(
+            self.on.grafana_source_relation_changed, self._on_grafana_source_changed
+        )
+        self.framework.observe(
+            self.on.grafana_source_relation_departed, self._on_grafana_source_changed
+        )
+
         self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
     ##############################################
+
+    def _on_grafana_source_changed(self, _):
+        self._update_datasource_exchange()
 
     def _on_collect_unit_status(self, event: CollectStatusEvent):
         # "Pull" statuses
@@ -870,6 +894,23 @@ class LokiOperatorCharm(CharmBase):
 
         ret.append({"version": "v13", "date": tomorrow.strftime(date_format)})
         return ret
+
+    def _update_datasource_exchange(self) -> None:
+        """Update the grafana-datasource-exchange relations."""
+        if not self.unit.is_leader():
+            return
+
+        # we might have multiple grafana-source relations, this method collects them all and returns a mapping from
+        # the `grafana_uid` to the contents of the `datasource_uids` field
+        # for simplicity, we assume that we're sending the same data to different grafanas.
+        # read more in https://discourse.charmhub.io/t/tempo-ha-docs-correlating-traces-metrics-logs/16116
+        grafana_uids_to_units_to_uids = self.grafana_source_provider.get_source_uids()
+        raw_datasources: List[DatasourceDict] = []
+
+        for grafana_uid, ds_uids in grafana_uids_to_units_to_uids.items():
+            for _, ds_uid in ds_uids.items():
+                raw_datasources.append({"type": "loki", "uid": ds_uid, "grafana_uid": grafana_uid})
+        self.datasource_exchange.publish(datasources=raw_datasources)
 
 
 if __name__ == "__main__":
