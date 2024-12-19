@@ -5,8 +5,6 @@
 # https://discourse.charmhub.io/t/charm-metadata-v2/3674/15
 
 name: loki-k8s
-
-
 assumes:
   - k8s-api
 
