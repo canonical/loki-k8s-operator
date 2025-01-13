@@ -485,7 +485,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 31
+LIBPATCH = 32
 
 PYDEPS = ["cosl"]
 
@@ -1976,7 +1976,7 @@ class LogProxyConsumer(ConsumerBase):
         }
         self._container.add_layer(
             self._container_name,
-            pebble_layer,
+            pebble_layer,  # pyright: ignore
             combine=True,  # pyright: ignore
         )
 
