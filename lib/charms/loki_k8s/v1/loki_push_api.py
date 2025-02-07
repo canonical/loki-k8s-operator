@@ -533,7 +533,7 @@ from ops.charm import (
     RelationRole,
     WorkloadEvent,
 )
-from ops.framework import EventBase, EventSource, Object, ObjectEvents
+from ops.framework import BoundEvent, EventBase, EventSource, Object, ObjectEvents
 from ops.jujuversion import JujuVersion
 from ops.model import Container, ModelError, Relation
 from ops.pebble import APIError, ChangeError, Layer, PathError, ProtocolError
@@ -1622,6 +1622,7 @@ class LokiPushApiConsumer(ConsumerBase):
         recursive: bool = True,
         skip_alert_topology_labeling: bool = False,
         *,
+        refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None,
         forward_alert_rules: bool = True,
     ):
         """Construct a Loki charm client.
@@ -1649,6 +1650,8 @@ class LokiPushApiConsumer(ConsumerBase):
             recursive: Whether to scan for rule files recursively.
             skip_alert_topology_labeling: whether to skip the alert topology labeling.
             forward_alert_rules: a boolean flag to toggle forwarding of charmed alert rules.
+            refresh_event: an optional bound event or list of bound events which
+                will be observed to re-set scrape job data (IP address and others)
 
         Raises:
             RelationNotFoundError: If there is no relation in the charm's metadata.yaml
@@ -1687,6 +1690,12 @@ class LokiPushApiConsumer(ConsumerBase):
         self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
+
+        if refresh_event:
+            if not isinstance(refresh_event, list):
+                refresh_event = [refresh_event]
+            for ev in refresh_event:
+                self.framework.observe(ev, self._push_alerts_to_all_relation_databags)
 
     def _on_lifecycle_event(self, _: HookEvent):
         """Update require relation data on charm upgrades and other lifecycle events.
@@ -2563,7 +2572,7 @@ class LogForwarder(ConsumerBase):
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = True,
         skip_alert_topology_labeling: bool = False,
-        *,
+        refresh_event: Optional[Union[BoundEvent, List[BoundEvent]]] = None,
         forward_alert_rules: bool = True,
     ):
         _PebbleLogClient.check_juju_version()
@@ -2585,6 +2594,12 @@ class LogForwarder(ConsumerBase):
         self.framework.observe(on.relation_broken, self._update_logging)
 
         self.framework.observe(on.config_changed, self._update_logging)
+
+        if refresh_event:
+            if not isinstance(refresh_event, list):
+                refresh_event = [refresh_event]
+            for ev in refresh_event:
+                self.framework.observe(ev, self._update_logging)
 
         for container_name in self._charm.meta.containers.keys():
             snake_case_container_name = container_name.replace("-", "_")
