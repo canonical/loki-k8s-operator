@@ -2563,6 +2563,7 @@ class LogForwarder(ConsumerBase):
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = True,
         skip_alert_topology_labeling: bool = False,
+        *,
         forward_alert_rules: bool = True,
     ):
         _PebbleLogClient.check_juju_version()
