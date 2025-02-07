@@ -1543,6 +1543,7 @@ class ConsumerBase(Object):
         alert_rules_path: str = DEFAULT_ALERT_RULES_RELATIVE_PATH,
         recursive: bool = False,
         skip_alert_topology_labeling: bool = False,
+        *,
         forward_alert_rules: bool = True,
     ):
         super().__init__(charm, relation_name)
