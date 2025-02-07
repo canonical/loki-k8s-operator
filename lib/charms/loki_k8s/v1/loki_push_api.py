@@ -2593,8 +2593,6 @@ class LogForwarder(ConsumerBase):
         self.framework.observe(on.relation_departed, self._update_logging)
         self.framework.observe(on.relation_broken, self._update_logging)
 
-        self.framework.observe(on.config_changed, self._update_logging)
-
         if refresh_event:
             if not isinstance(refresh_event, list):
                 refresh_event = [refresh_event]
