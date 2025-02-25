@@ -12,7 +12,7 @@ consumers/forwarders from the ``loki_push_api`` library, you need to:
     charmcraft fetch-lib charms.loki_k8s.v1.loki_push_api
 
 and add the logging consumer that matches your use case.
-See https://charmhub.io/loki-k8s/libraries/loki_push_apihttps://charmhub.io/loki-k8s/libraries/loki_push_api
+See [https://charmhub.io/loki-k8s/libraries/loki_push_api](https://charmhub.io/loki-k8s/libraries/loki_push_api)
 for more information.
 
 Once your charm is related to, for example, COS' Loki charm (or a Grafana Agent),
