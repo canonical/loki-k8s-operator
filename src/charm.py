@@ -565,6 +565,7 @@ class LokiOperatorCharm(CharmBase):
             http_tls=self._tls_ready,
             tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
             reporting_enabled=bool(self.config["reporting-enabled"]),
+            grafana_external_url=self.grafana_source_provider.get_grafana_base_url()
         ).build()
 
         # Add a layer so we can check if the service is running

@@ -56,6 +56,7 @@ class ConfigBuilder:
         http_tls: bool = False,
         tsdb_versions_migration_dates: Optional[List[Dict[str, str]]] = None,
         reporting_enabled: bool,
+        grafana_external_url: str,
     ):
         """Init method."""
         self.instance_addr = instance_addr
@@ -120,9 +121,11 @@ class ConfigBuilder:
     @property
     def _ruler(self) -> dict:
         # Reference: https://grafana.com/docs/loki/latest/configure/#ruler
+        first_key = next(iter(self.grafana_external_url))
         return {
             "alertmanager_url": self.alertmanager_url,
-            "external_url": self.external_url,
+            "external_url": self.grafana_external_url[first_key],
+            # "datasource_uid": "juju_am-test_3688ddf4-84ec-4f55-81da-5afc4166105d_loki_0",
             "enable_alertmanager_v2": True,
         }
 
