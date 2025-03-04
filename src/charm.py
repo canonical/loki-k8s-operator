@@ -11,6 +11,7 @@ develop a new k8s charm using the Operator Framework:
 
     https://discourse.charmhub.io/t/4208
 """
+
 import datetime
 import logging
 import os
@@ -554,7 +555,13 @@ class LokiOperatorCharm(CharmBase):
         # operations fail, better to let the charm go into error state than setting blocked.
         if self.server_cert.available and not self._certs_on_disk:
             self._update_cert()
-
+        # Obtain the Grafana base URL
+        urls = self.grafana_source_provider.get_grafana_base_urls()
+        if urls:
+            grafana_uid = next(iter(urls))  # TODO How to handle multiple grafanas?
+            grafana_external_url = urls[grafana_uid]
+        else:
+            grafana_external_url = ""
         config = ConfigBuilder(
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
@@ -565,7 +572,7 @@ class LokiOperatorCharm(CharmBase):
             http_tls=self._tls_ready,
             tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
             reporting_enabled=bool(self.config["reporting-enabled"]),
-            grafana_external_url=self.grafana_source_provider.get_grafana_base_url()
+            grafana_external_url=grafana_external_url,
         ).build()
 
         # Add a layer so we can check if the service is running
@@ -858,7 +865,6 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def _tsdb_versions_migration_dates(self) -> List[Dict[str, str]]:
-
         # If v13_migration_date isn't set (due to missing or failed retrieval),
         # we determine the migration date for v13 schema. This occurs once
         # during initial setup, as subsequent hooks will get the value from the persisted backup config.

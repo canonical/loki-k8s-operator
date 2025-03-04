@@ -68,6 +68,7 @@ class ConfigBuilder:
         self.retention_period = retention_period
         self.tsdb_versions_migration_dates = tsdb_versions_migration_dates or []
         self.reporting_enabled = reporting_enabled
+        self.grafana_external_url = grafana_external_url
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -121,10 +122,9 @@ class ConfigBuilder:
     @property
     def _ruler(self) -> dict:
         # Reference: https://grafana.com/docs/loki/latest/configure/#ruler
-        first_key = next(iter(self.grafana_external_url))
         return {
             "alertmanager_url": self.alertmanager_url,
-            "external_url": self.grafana_external_url[first_key],
+            "external_url": self.grafana_external_url,
             # "datasource_uid": "juju_am-test_3688ddf4-84ec-4f55-81da-5afc4166105d_loki_0",
             "enable_alertmanager_v2": True,
         }
