@@ -555,13 +555,11 @@ class LokiOperatorCharm(CharmBase):
         # operations fail, better to let the charm go into error state than setting blocked.
         if self.server_cert.available and not self._certs_on_disk:
             self._update_cert()
-        # Obtain the Grafana base URL
+        # Obtain the Grafana base URL and datasource UID by picking the first item in the sorted list due to:
+        #   1. Loki config can only accept 1 URL and datasource to render the link in the UI
+        #   2. Loki is the datasource so it doesn't matter which Grafana UI shows the query
         urls = self.grafana_source_provider.get_grafana_base_urls()
-        if urls:
-            grafana_uid = next(iter(urls))  # TODO How to handle multiple grafanas?
-            grafana_external_url = urls[grafana_uid]
-        else:
-            grafana_external_url = ""
+        uids = self.grafana_source_provider.get_source_uids()
         config = ConfigBuilder(
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
@@ -572,7 +570,8 @@ class LokiOperatorCharm(CharmBase):
             http_tls=self._tls_ready,
             tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
             reporting_enabled=bool(self.config["reporting-enabled"]),
-            grafana_external_url=grafana_external_url,
+            grafana_external_url=urls[sorted(urls)[0]] if urls else "",
+            datasource_uid=uids[sorted(uids)[0]][self.unit.name] if uids else "",
         ).build()
 
         # Add a layer so we can check if the service is running
