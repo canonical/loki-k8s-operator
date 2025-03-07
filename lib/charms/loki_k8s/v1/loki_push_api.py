@@ -1608,20 +1608,6 @@ class ConsumerBase(Object):
 
         return endpoints
 
-    # @property
-    # def loki_otlp_endpoints(self) -> List[dict]:
-    #     """Fetch Loki OTLP API endpoints sent from LokiPushApiProvider through relation data.
-
-    #     Returns:
-    #         A list of dictionaries with Loki OTLP API endpoints (the otel-collector automatically completes the endpoint), for instance:
-    #         [
-    #             {"url": "http://loki1:3100/otlp"},
-    #             {"url": "http://loki2:3100/otlp"},
-    #         ]
-    #     """
-    #     from urllib.parse import urljoin
-    #     return [{"url": urljoin(e["url"], "/otlp")} for e in self.loki_endpoints]
-
 
 class LokiPushApiConsumer(ConsumerBase):
     """Loki Consumer class."""
@@ -1770,7 +1756,7 @@ class LokiPushApiConsumer(ConsumerBase):
 
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def reload_alerts(self) -> None:  # TODO charmcraft fetch-lib in loki before PR
+    def reload_alerts(self) -> None:
         """Reloads alert rules and updates all relations."""
         self._reinitialize_alert_rules()
 
