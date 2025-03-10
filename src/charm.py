@@ -555,11 +555,8 @@ class LokiOperatorCharm(CharmBase):
         # operations fail, better to let the charm go into error state than setting blocked.
         if self.server_cert.available and not self._certs_on_disk:
             self._update_cert()
-        # Obtain the Grafana base URL and datasource UID by picking the first item in the sorted list due to:
-        #   1. Loki config can only accept 1 URL and datasource to render the link in the UI
-        #   2. Loki is the datasource so it doesn't matter which Grafana UI shows the query
-        urls = self.grafana_source_provider.get_grafana_base_urls()
-        uids = self.grafana_source_provider.get_source_uids()
+
+        datasource_uid, grafana_external_url = self._sorted_ruler_cfg()
         config = ConfigBuilder(
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
@@ -570,8 +567,8 @@ class LokiOperatorCharm(CharmBase):
             http_tls=self._tls_ready,
             tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
             reporting_enabled=bool(self.config["reporting-enabled"]),
-            grafana_external_url=urls[sorted(urls)[0]] if urls else "",
-            datasource_uid=uids[sorted(uids)[0]][self.unit.name] if uids else "",
+            grafana_external_url=grafana_external_url,
+            datasource_uid=datasource_uid,
         ).build()
 
         # Add a layer so we can check if the service is running
@@ -609,6 +606,29 @@ class LokiOperatorCharm(CharmBase):
         self.grafana_source_provider.update_source(source_url=self._external_url)
         self.loki_provider.update_endpoint(url=self._external_url)
         self.catalogue.update_item(item=self._catalogue_item)
+
+    def _sorted_ruler_cfg(self) -> Tuple[str, str]:
+        """Obtain the 'external_url' and 'datasource_uid' for the Loki ruler config.
+
+        From the 'grafana-source' relation, pick the first item in the sorted list for consistency.
+
+        Given multiple Grafana instances:
+            1. The Loki ruler config can only accept 1 'external_url' and 'datasource_uid' to render the link in the Alertmanager UI
+            2. Loki is the datasource so it doesn't matter which Grafana UI shows the query
+        """
+        urls = self.grafana_source_provider.get_grafana_base_urls()
+        external_url = urls[sorted(urls)[0]] if urls else ""
+
+        uids = self.grafana_source_provider.get_source_uids()
+        if not uids:
+            return "", external_url
+        chosen_uids = uids[sorted(uids)[0]]
+        if self.unit.name in chosen_uids:
+            datasource_uid = chosen_uids[self.unit.name]
+        else:
+            datasource_uid = ""
+
+        return datasource_uid, external_url
 
     def _update_config(self, config: dict) -> bool:
         if self._running_config() != config:
