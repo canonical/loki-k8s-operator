@@ -30,7 +30,7 @@ import yaml
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
+from charms.grafana_k8s.v0.grafana_source import GrafanaSourceData, GrafanaSourceProvider
 from charms.loki_k8s.v0.charm_logging import log_charm
 from charms.loki_k8s.v1.loki_push_api import (
     LokiPushApiAlertRulesChanged,
@@ -556,7 +556,7 @@ class LokiOperatorCharm(CharmBase):
         if self.server_cert.available and not self._certs_on_disk:
             self._update_cert()
 
-        datasource_uid, grafana_external_url = self._sorted_ruler_cfg()
+        source_data = self._sorted_source_data()
         config = ConfigBuilder(
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
@@ -567,8 +567,8 @@ class LokiOperatorCharm(CharmBase):
             http_tls=self._tls_ready,
             tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
             reporting_enabled=bool(self.config["reporting-enabled"]),
-            grafana_external_url=grafana_external_url,
-            datasource_uid=datasource_uid,
+            grafana_external_url=source_data.external_url,
+            datasource_uid=source_data.get_unit_uid(self.unit.name),
         ).build()
 
         # Add a layer so we can check if the service is running
@@ -607,28 +607,15 @@ class LokiOperatorCharm(CharmBase):
         self.loki_provider.update_endpoint(url=self._external_url)
         self.catalogue.update_item(item=self._catalogue_item)
 
-    def _sorted_ruler_cfg(self) -> Tuple[str, str]:
-        """Obtain the 'external_url' and 'datasource_uid' for the Loki ruler config.
-
-        From the 'grafana-source' relation, pick the first item in the sorted list for consistency.
+    def _sorted_source_data(self) -> GrafanaSourceData:
+        """From the `grafana-source` relation, pick the first Grafana instance in the sorted list for consistency.
 
         Given multiple Grafana instances:
             1. The Loki ruler config can only accept 1 'external_url' and 'datasource_uid' to render the link in the Alertmanager UI
             2. Loki is the datasource so it doesn't matter which Grafana UI shows the query
         """
-        urls = self.grafana_source_provider.get_grafana_base_urls()
-        external_url = urls[sorted(urls)[0]] if urls else ""
-
-        uids = self.grafana_source_provider.get_source_uids()
-        if not uids:
-            return "", external_url
-        chosen_uids = uids[sorted(uids)[0]]
-        if self.unit.name in chosen_uids:
-            datasource_uid = chosen_uids[self.unit.name]
-        else:
-            datasource_uid = ""
-
-        return datasource_uid, external_url
+        nested_data = self.grafana_source_provider.get_source_data()
+        return nested_data[sorted(nested_data)[0]] if nested_data else GrafanaSourceData({}, "")
 
     def _update_config(self, config: dict) -> bool:
         if self._running_config() != config:
