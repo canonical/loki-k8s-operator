@@ -56,7 +56,7 @@ class ConfigBuilder:
         http_tls: bool = False,
         tsdb_versions_migration_dates: Optional[List[Dict[str, str]]] = None,
         reporting_enabled: bool,
-        grafana_external_url: str,
+        grafana_external_url: Optional[str],
         datasource_uid: str,
     ):
         """Init method."""

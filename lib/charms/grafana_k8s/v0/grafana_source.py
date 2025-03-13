@@ -177,7 +177,7 @@ class GrafanaSourceData:
     """This class represents the data Grafana provides others about itself."""
 
     datasource_uids: Dict[str, str]
-    external_url: str
+    external_url: Optional[str]
 
     def get_unit_uid(self, unit: str):
         """Return the UID for a given unit."""
@@ -223,8 +223,7 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            "The '{}' relation has '{}' as "
-            "interface rather than the expected '{}'".format(
+            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
                 relation_name, actual_relation_interface, expected_relation_interface
             )
         )
@@ -465,7 +464,7 @@ class GrafanaSourceProvider(Object):
                 continue
             grafana_data = GrafanaSourceData(
                 datasource_uids=json.loads(app_databag.get("datasource_uids", "{}")),
-                external_url=app_databag.get("grafana_base_url", "")
+                external_url=app_databag.get("grafana_base_url"),
             )
             data[grafana_uid] = grafana_data
         return data
@@ -473,9 +472,8 @@ class GrafanaSourceProvider(Object):
     def get_source_uids(self) -> Dict[str, Dict[str, str]]:
         """Get the datasource UID(s) assigned by the remote end(s) to this datasource.
 
+        DEPRECATED: This method is deprecated. Use the `get_source_data` instead.
         Returns a mapping from remote application UIDs to unit names to datasource uids.
-
-        Use the `get_source_data` public method instead.
         """
         data = self.get_source_data()
         return {grafana_uid: data[grafana_uid].datasource_uids for grafana_uid in data}
@@ -767,9 +765,7 @@ class GrafanaSourceConsumer(Object):
             )
             self._stored.sources_to_delete = set()
             peer_sources_to_delete = set(self.get_peer_data("sources_to_delete"))
-            sources_to_delete = set.union(
-                old_sources_to_delete, peer_sources_to_delete  # pyright: ignore
-            )
+            sources_to_delete = set.union(old_sources_to_delete, peer_sources_to_delete)  # pyright: ignore
             self.set_peer_data("sources_to_delete", sources_to_delete)
 
     def update_sources(self, relation: Optional[Relation] = None) -> None:

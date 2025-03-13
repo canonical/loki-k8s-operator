@@ -615,7 +615,7 @@ class LokiOperatorCharm(CharmBase):
             2. Loki is the datasource so it doesn't matter which Grafana UI shows the query
         """
         nested_data = self.grafana_source_provider.get_source_data()
-        return nested_data[sorted(nested_data)[0]] if nested_data else GrafanaSourceData({}, "")
+        return nested_data[sorted(nested_data)[0]] if nested_data else GrafanaSourceData({}, None)
 
     def _update_config(self, config: dict) -> bool:
         if self._running_config() != config:

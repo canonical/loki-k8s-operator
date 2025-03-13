@@ -51,4 +51,4 @@ def test_sorted_source_data_no_relations(context, loki_container):
     with context(context.on.update_status(), state_in) as mgr:
         charm: LokiOperatorCharm = mgr.charm
         # THEN we receive an empty GrafanaSourceData instance
-        assert charm._sorted_source_data() == GrafanaSourceData({}, "")
+        assert charm._sorted_source_data() == GrafanaSourceData({}, None)
