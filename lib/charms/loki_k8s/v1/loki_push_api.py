@@ -546,7 +546,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 15
+LIBPATCH = 16
 
 PYDEPS = ["cosl"]
 
@@ -1756,8 +1756,11 @@ class LokiPushApiConsumer(ConsumerBase):
 
         self.on.loki_push_api_endpoint_joined.emit()
 
-    def _reinitialize_alert_rules(self):
+    def reload_alerts(self) -> None:
         """Reloads alert rules and updates all relations."""
+        self._reinitialize_alert_rules()
+
+    def _reinitialize_alert_rules(self):
         for relation in self._charm.model.relations[self._relation_name]:
             self._handle_alert_rules(relation)
 
