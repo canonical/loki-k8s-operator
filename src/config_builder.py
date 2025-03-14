@@ -56,6 +56,8 @@ class ConfigBuilder:
         http_tls: bool = False,
         tsdb_versions_migration_dates: Optional[List[Dict[str, str]]] = None,
         reporting_enabled: bool,
+        grafana_external_url: Optional[str],
+        datasource_uid: str,
     ):
         """Init method."""
         self.instance_addr = instance_addr
@@ -67,6 +69,8 @@ class ConfigBuilder:
         self.retention_period = retention_period
         self.tsdb_versions_migration_dates = tsdb_versions_migration_dates or []
         self.reporting_enabled = reporting_enabled
+        self.grafana_external_url = grafana_external_url
+        self.datasource_uid = datasource_uid
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -120,11 +124,14 @@ class ConfigBuilder:
     @property
     def _ruler(self) -> dict:
         # Reference: https://grafana.com/docs/loki/latest/configure/#ruler
-        return {
+        ruler_config = {
             "alertmanager_url": self.alertmanager_url,
-            "external_url": self.external_url,
             "enable_alertmanager_v2": True,
+            "datasource_uid": self.datasource_uid,
         }
+        if self.grafana_external_url:  # external_url has no default so we conditionally add it
+            ruler_config.update({"external_url": self.grafana_external_url})
+        return ruler_config
 
     @property
     def _schema_config(self) -> dict:

@@ -11,6 +11,7 @@ develop a new k8s charm using the Operator Framework:
 
     https://discourse.charmhub.io/t/4208
 """
+
 import datetime
 import logging
 import os
@@ -29,7 +30,7 @@ import yaml
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
+from charms.grafana_k8s.v0.grafana_source import GrafanaSourceData, GrafanaSourceProvider
 from charms.loki_k8s.v0.charm_logging import log_charm
 from charms.loki_k8s.v1.loki_push_api import (
     LokiPushApiAlertRulesChanged,
@@ -555,6 +556,7 @@ class LokiOperatorCharm(CharmBase):
         if self.server_cert.available and not self._certs_on_disk:
             self._update_cert()
 
+        source_data = self._sorted_source_data()
         config = ConfigBuilder(
             instance_addr=self.hostname,
             alertmanager_url=self._alerting_config(),
@@ -565,6 +567,8 @@ class LokiOperatorCharm(CharmBase):
             http_tls=self._tls_ready,
             tsdb_versions_migration_dates=self._tsdb_versions_migration_dates,
             reporting_enabled=bool(self.config["reporting-enabled"]),
+            grafana_external_url=source_data.external_url,
+            datasource_uid=source_data.get_unit_uid(self.unit.name),
         ).build()
 
         # Add a layer so we can check if the service is running
@@ -602,6 +606,16 @@ class LokiOperatorCharm(CharmBase):
         self.grafana_source_provider.update_source(source_url=self._external_url)
         self.loki_provider.update_endpoint(url=self._external_url)
         self.catalogue.update_item(item=self._catalogue_item)
+
+    def _sorted_source_data(self) -> GrafanaSourceData:
+        """From the `grafana-source` relation, pick the first Grafana instance in the sorted list for consistency.
+
+        Given multiple Grafana instances:
+            1. The Loki ruler config can only accept 1 'external_url' and 'datasource_uid' to render the link in the Alertmanager UI
+            2. Loki is the datasource so it doesn't matter which Grafana UI shows the query
+        """
+        nested_data = self.grafana_source_provider.get_source_data()
+        return nested_data[sorted(nested_data)[0]] if nested_data else GrafanaSourceData({}, None)
 
     def _update_config(self, config: dict) -> bool:
         if self._running_config() != config:
@@ -857,7 +871,6 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def _tsdb_versions_migration_dates(self) -> List[Dict[str, str]]:
-
         # If v13_migration_date isn't set (due to missing or failed retrieval),
         # we determine the migration date for v13 schema. This occurs once
         # during initial setup, as subsequent hooks will get the value from the persisted backup config.
