@@ -12,7 +12,7 @@ from helpers import is_loki_up, loki_rules
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 app_name = METADATA["name"]
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
