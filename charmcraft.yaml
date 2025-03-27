@@ -39,7 +39,7 @@ parts:
     source-type: file
     permissions:
       - path: cos-tool-${CRAFT_ARCH_BUILD_FOR}
-        mode: "500"
+        mode: "755"
 
 containers:
   loki:
