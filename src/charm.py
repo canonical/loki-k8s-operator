@@ -27,6 +27,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
 import yaml
+from charms.k6_k8s.v0.k6_test import K6TestProvider
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -238,6 +239,11 @@ class LokiOperatorCharm(CharmBase):
             provider_endpoint="send-datasource",
             requirer_endpoint=None,
         )
+
+        self.k6_test = K6TestProvider(
+            self, environment={"FRUIT": "loki coconut", "LOKI_ENDPOINT": self._external_url}
+        )
+        self.k6_test.reconcile()
 
         self.framework.observe(
             self.workload_tracing.on.endpoint_changed,  # type: ignore
