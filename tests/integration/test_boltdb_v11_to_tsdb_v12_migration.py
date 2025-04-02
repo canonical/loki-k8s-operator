@@ -33,6 +33,7 @@ resources = {
 
 
 async def test_setup_env(ops_test: OpsTest):
+    assert ops_test.model
     await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
@@ -66,6 +67,7 @@ async def test_deploy_and_upgrade_v13_locally(ops_test: OpsTest, loki_charm):
 async def deploy_charm_from_charmhub_v11(ops_test: OpsTest, app_name):
     """Deploy the charm from Charmhub."""
     logger.debug("Deploying charm from Charmhub")
+    assert ops_test.model
     await ops_test.model.deploy(
         "ch:loki-k8s",
         application_name=app_name,
@@ -79,13 +81,17 @@ async def deploy_charm_from_charmhub_v11(ops_test: OpsTest, app_name):
 async def upgrade_charm_from_charmhub_v12(ops_test: OpsTest, app_name, loki_charm):
     """Upgrade the deployed charm with the local charm."""
     logger.debug("Upgrading deployed charm with local charm %s", loki_charm)
-    await ops_test.model.applications[app_name].refresh(channel="stable", revision=151)
+    assert ops_test.model
+    application = ops_test.model.applications[app_name]
+    assert application
+    await application.refresh(channel="stable", revision=151)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
 
 async def deploy_local_charm_v13(ops_test: OpsTest, app_name, loki_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
+    assert ops_test.model
     await ops_test.model.deploy(
         loki_charm, application_name=app_name, resources=resources, trust=True
     )
@@ -95,7 +101,10 @@ async def deploy_local_charm_v13(ops_test: OpsTest, app_name, loki_charm):
 async def upgrade_charm_with_local_charm_v13(ops_test: OpsTest, app_name, loki_charm):
     """Upgrade the deployed charm with the local charm."""
     logger.debug("Upgrading deployed charm with local charm %s", loki_charm)
-    await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
+    assert ops_test.model
+    application = ops_test.model.applications[app_name]
+    assert application
+    await application.refresh(path=loki_charm, resources=resources)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
 

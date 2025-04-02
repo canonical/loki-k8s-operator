@@ -131,7 +131,9 @@ async def log_forwarder_tester_charm(ops_test):
     dest_charmlib = testingcharm_path / LOKI_PUSH_API_V1_PATH
     shutil.rmtree(dest_charmlib.parent, ignore_errors=True)
     dest_charmlib.parent.mkdir(parents=True)
-    dest_charmlib.hardlink_to(LOKI_PUSH_API_V1_PATH)
+    # The type: ignore is needed because hardlink_to is available in Python 3.9,
+    # and we're static checking for 3.8
+    dest_charmlib.hardlink_to(LOKI_PUSH_API_V1_PATH)  # type: ignore
 
     charm_path = "tests/integration/log-forwarder-tester"
     clean_cmd = ["charmcraft", "clean", "-p", charm_path]

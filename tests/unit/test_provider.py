@@ -89,7 +89,7 @@ class FakeLokiCharm(CharmBase):
 
     @property
     def _loki_push_api(self) -> str:
-        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
+        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"  # type: ignore
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 

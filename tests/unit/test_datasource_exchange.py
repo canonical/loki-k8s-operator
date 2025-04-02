@@ -11,7 +11,7 @@ from cosl.interfaces.datasource_exchange import (
 )
 from scenario import Relation, State
 
-from charm import LokiOperatorCharm
+from src.charm import LokiOperatorCharm
 
 ds_tempo = [
     {"type": "tempo", "uid": "3", "grafana_uid": "4"},
@@ -61,7 +61,7 @@ def test_datasource_send(context, loki_container, relation_to_observe, event_typ
     ) as mgr:
         charm: LokiOperatorCharm = mgr.charm
         # THEN we can find all received datasource uids
-        dsx: DatasourceExchange = charm.datasource_exchange
+        dsx: DatasourceExchange = charm.datasource_exchange  # type: ignore
         received = dsx.received_datasources
         assert received == (
             GrafanaDatasource(type="tempo", uid="3", grafana_uid="4"),

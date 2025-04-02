@@ -75,6 +75,11 @@ lint.pydocstyle.convention = "google"
 extraPaths = ["lib"]
 pythonVersion = "3.8"
 pythonPlatform = "All"
+exclude = [
+  "tests/integration/loki-tester/**",
+  "tests/integration/log-proxy-tester/**",
+  "tests/integration/log-forwarder-tester/**"
+]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
