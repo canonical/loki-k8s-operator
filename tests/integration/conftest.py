@@ -67,6 +67,9 @@ def copy_loki_library_into_test_charms(ops_test):
 @timed_memoizer
 async def loki_charm(ops_test: OpsTest):
     """Loki charm used for integration testing."""
+    if charm_file := os.environ.get("CHARM_PATH"):
+        return Path(charm_file)
+
     charm = await ops_test.build_charm(".")
     return charm
 
