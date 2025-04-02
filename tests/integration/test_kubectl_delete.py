@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import sh
 import yaml
-from helpers import is_loki_up, uk8s_group
+from helpers import is_loki_up
 
 logger = logging.getLogger(__name__)
 
