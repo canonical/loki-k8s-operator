@@ -268,7 +268,13 @@ class LokiOperatorCharm(CharmBase):
             self.on.send_datasource_relation_departed, self._on_grafana_source_changed
         )
         self.framework.observe(
+            self.on.grafana_source_relation_joined, self._on_grafana_source_changed
+        )
+        self.framework.observe(
             self.on.grafana_source_relation_changed, self._on_grafana_source_changed
+        )
+        self.framework.observe(
+            self.on.grafana_source_relation_created, self._on_grafana_source_changed
         )
         self.framework.observe(
             self.on.grafana_source_relation_departed, self._on_grafana_source_changed

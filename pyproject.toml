@@ -1,5 +1,50 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
+[project]
+name = "loki-k8s"
+version = "0.0"
+requires-python = "~=3.8"
+
+dependencies = [
+  "ops",
+  "cosl",
+  "kubernetes",
+  "requests",
+  "lightkube",
+  "lightkube-models",
+  "aiohttp",
+  "jsonschema",
+  "cryptography",
+  "pydantic>=2.9.0",
+  "importlib-metadata==6.0.0",
+  "opentelemetry-api==1.21.0",
+  "opentelemetry-exporter-otlp-proto-common==1.21.0",
+  "opentelemetry-exporter-otlp-proto-http==1.21.0",
+  "opentelemetry-proto==1.21.0",
+  "opentelemetry-sdk==1.21.0",
+  "opentelemetry-semantic-conventions==0.42b0",
+]
+
+[project.optional-dependencies]
+dev = [
+  # Linting
+  "ruff",
+  "codespell",
+  # Static
+  "pyright",
+  # Unit
+  "pytest",
+  "coverage[toml]",
+  "ops[testing]",
+  "responses",
+  "fs",
+  # Interface
+  "pytest-interface-tester",
+  # Integration
+  "juju",
+  "pytest-operator",
+  "minio",
+]
 
 # Testing tools configuration
 [tool.coverage.run]
@@ -23,9 +68,7 @@ lint.select = ["E", "W", "F", "C", "N", "R", "D", "I001"]
 lint.ignore = ["E501", "D107", "RET504"]
 # D100, D101, D102, D103: Ignore missing docstrings in tests
 lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103"]}
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
+lint.pydocstyle.convention = "google"
 
 # Static analysis tools configuration
 [tool.pyright]
@@ -37,4 +80,9 @@ pythonPlatform = "All"
 minversion = "6.0"
 log_cli_level = "INFO"
 asyncio_mode = "auto"
+addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 markers = ["setup", "work", "teardown"]
+
+[tool.codespell]
+skip = ".git,.tox,build,venv*"
+ignore-words-list = "assertIn"
