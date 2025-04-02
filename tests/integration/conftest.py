@@ -99,7 +99,7 @@ async def faulty_loki_tester_charm(ops_test):
     clean_cmd = ["charmcraft", "clean", "-p", charm_path]
     await ops_test.run(*clean_cmd)
 
-    rules_path = "tests/resourecs/alert.rule"
+    rules_path = "tests/resources/alert.rule"
     install_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule"
     shutil.copyfile(rules_path, install_path)
     charm = await ops_test.build_charm(charm_path)
