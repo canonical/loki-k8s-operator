@@ -15,8 +15,8 @@ from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.testing import Harness
 
-from src.charm import LOKI_CONFIG as LOKI_CONFIG_PATH
-from src.charm import LokiOperatorCharm
+from charm import LOKI_CONFIG as LOKI_CONFIG_PATH  # type: ignore
+from charm import LokiOperatorCharm  # type: ignore
 
 METADATA = {
     "model": "consumer-model",
@@ -126,18 +126,18 @@ class TestCharm(unittest.TestCase):
         self.harness.container_pebble_ready("loki")
 
     def test__alerting_config(self):
-        self.harness.charm.alertmanager_consumer = Mock()  # type: ignore
+        self.harness.charm.alertmanager_consumer = Mock()
         mock_cluster = {"http://10.1.2.52", "http://10.1.3.52"}
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = mock_cluster  # type: ignore
+        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = mock_cluster
         expected_value = "http://10.1.2.52,http://10.1.3.52"
-        self.assertEqual(mock_cluster, set(self.harness.charm._alerting_config().split(",")))  # type: ignore
+        self.assertEqual(mock_cluster, set(self.harness.charm._alerting_config().split(",")))
 
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = set()  # type: ignore
+        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = set()
         expected_value = ""
-        self.assertEqual(self.harness.charm._alerting_config(), expected_value)  # type: ignore
+        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
 
         with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._alerting_config()  # type: ignore
+            self.harness.charm._alerting_config()
             searched_message = "DEBUG:charm:No alertmanagers available"
             any_matches = any(searched_message in log_message for log_message in logger.output)
             self.assertTrue(any_matches)
@@ -499,7 +499,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.mock_request.side_effect = None
         self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
 
-        self.harness.charm._loki_push_api_alert_rules_changed(None)  # type: ignore
+        self.harness.charm._loki_push_api_alert_rules_changed(None)
         self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 

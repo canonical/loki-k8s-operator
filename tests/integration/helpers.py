@@ -9,8 +9,8 @@ import subprocess
 import urllib.request
 from pathlib import Path
 from typing import List, Optional
-from urllib.parse import urljoin
 from urllib.error import HTTPError
+from urllib.parse import urljoin
 
 import requests
 import yaml
