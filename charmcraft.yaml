@@ -68,7 +68,6 @@ provides:
     interface: loki_push_api
     optional: true
     description: Integration to receive logs from other charms.
-      
   grafana-source:
     interface: grafana_datasource
     optional: true

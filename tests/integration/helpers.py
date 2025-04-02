@@ -305,7 +305,7 @@ def oci_image(metadata_file: str, image_name: str) -> str:
         metadata_file: string path of metadata YAML file relative
             to top level charm directory
         image_name: OCI container image string name as defined in
-            metadata.yaml file
+            charmcraft.yaml file
     Returns:
         upstream image source
     Raises:

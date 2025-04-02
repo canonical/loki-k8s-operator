@@ -20,7 +20,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 V11_APP_NAME = f'v11-{METADATA["name"]}'
 V12_APP_NAME = f'v12-{METADATA["name"]}'
 V13_APP_NAME = f'v13-{METADATA["name"]}'
