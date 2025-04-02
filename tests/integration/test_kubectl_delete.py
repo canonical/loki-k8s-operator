@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 
 import pytest
+import sh
 import yaml
 from helpers import is_loki_up, uk8s_group
 
@@ -36,20 +37,8 @@ async def test_deploy_from_local_path(ops_test, loki_charm):
 async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_test):
     pod_name = f"{app_name}-0"
 
-    cmd = [
-        "sg",
-        uk8s_group(),
-        "-c",
-        " ".join(["kubectl", "delete", "pod", "-n", ops_test.model_name, pod_name]),
-    ]
+    sh.kubectl.delete.pod(pod_name, namespace=ops_test.model_name)  # pyright: ignore
 
-    logger.debug(
-        "Removing pod '%s' from model '%s' with cmd: %s", pod_name, ops_test.model_name, cmd
-    )
-
-    retcode, stdout, stderr = await ops_test.run(*cmd)
-    assert retcode == 0, f"kubectl failed: {(stderr or stdout).strip()}"
-    logger.debug(stdout)
     await ops_test.model.block_until(lambda: len(ops_test.model.applications[app_name].units) > 0)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
     assert await is_loki_up(ops_test, app_name)
