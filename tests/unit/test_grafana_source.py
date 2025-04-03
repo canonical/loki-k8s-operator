@@ -6,7 +6,7 @@ import json
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceData
 from scenario import Relation, State
 
-from charm import LokiOperatorCharm
+from src.charm import LokiOperatorCharm
 
 
 def test_sorted_source_data(context, loki_container):
@@ -38,7 +38,7 @@ def test_sorted_source_data(context, loki_container):
     with context(context.on.update_status(), state_in) as mgr:
         charm: LokiOperatorCharm = mgr.charm
         # THEN we receive a single GrafanaSourceData instance, sorted by `grafana_uid`
-        assert charm._sorted_source_data() == GrafanaSourceData({"loki/0": "first"}, "http://one")
+        assert charm._sorted_source_data() == GrafanaSourceData({"loki/0": "first"}, "http://one")  # type: ignore
 
 
 def test_sorted_source_data_no_relations(context, loki_container):
@@ -51,4 +51,4 @@ def test_sorted_source_data_no_relations(context, loki_container):
     with context(context.on.update_status(), state_in) as mgr:
         charm: LokiOperatorCharm = mgr.charm
         # THEN we receive an empty GrafanaSourceData instance
-        assert charm._sorted_source_data() == GrafanaSourceData({}, None)
+        assert charm._sorted_source_data() == GrafanaSourceData({}, None)  # type: ignore

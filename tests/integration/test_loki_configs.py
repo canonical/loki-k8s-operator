@@ -12,7 +12,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 app_name = METADATA["name"]
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
@@ -24,6 +24,7 @@ resources = {
 async def test_services_running(ops_test: OpsTest, loki_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
+    assert ops_test.model
 
     await ops_test.model.deploy(
         loki_charm, application_name=app_name, resources=resources, trust=True
@@ -37,6 +38,7 @@ async def test_services_running(ops_test: OpsTest, loki_charm):
 
 @pytest.mark.abort_on_fail
 async def test_retention_configs(ops_test: OpsTest):
+    assert ops_test.model
     default_configs = await loki_config(ops_test, app_name)
     assert all(
         [
@@ -45,7 +47,9 @@ async def test_retention_configs(ops_test: OpsTest):
         ]
     )
 
-    await ops_test.model.applications[app_name].set_config({"retention-period": "3"})
+    application = ops_test.model.applications[app_name]
+    assert application
+    await application.set_config({"retention-period": "3"})
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     configs_with_retention = await loki_config(ops_test, app_name)

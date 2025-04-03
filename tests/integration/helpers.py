@@ -8,7 +8,8 @@ import logging
 import subprocess
 import urllib.request
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+from urllib.error import HTTPError
 from urllib.parse import urljoin
 
 import requests
@@ -62,7 +63,7 @@ async def loki_rules(ops_test, app_name) -> dict:
         if response.code == 200:
             return yaml.safe_load(response.read())
         return {}
-    except urllib.error.HTTPError:
+    except HTTPError:
         return {}
 
 
@@ -285,6 +286,7 @@ class ModelConfigChange:
 
     async def __aenter__(self):
         """On entry, the config is set to the user provided custom values."""
+        assert self.ops_test.model
         config = await self.ops_test.model.get_config()
         self.revert_to = {k: config[k] for k in self.change_to.keys()}
         await self.ops_test.model.set_config(self.change_to)
@@ -292,6 +294,7 @@ class ModelConfigChange:
 
     async def __aexit__(self, exc_type, exc_value, exc_traceback):
         """On exit, the modified config options are reverted to their original values."""
+        assert self.ops_test.model
         await self.ops_test.model.set_config(self.revert_to)
 
 
@@ -302,7 +305,7 @@ def oci_image(metadata_file: str, image_name: str) -> str:
         metadata_file: string path of metadata YAML file relative
             to top level charm directory
         image_name: OCI container image string name as defined in
-            metadata.yaml file
+            charmcraft.yaml file
     Returns:
         upstream image source
     Raises:
@@ -340,8 +343,8 @@ async def juju_show_unit(
     ops_test: OpsTest,
     unit_name: str,
     *,
-    endpoint: str = None,
-    related_unit: str = None,
+    endpoint: Optional[str] = None,
+    related_unit: Optional[str] = None,
     app_data_only: bool = False,
 ) -> dict:
     """Helper function for obtaining output of `juju show-unit`.
@@ -476,6 +479,7 @@ async def delete_pod(model_name: str, app_name: str, unit_num: int) -> bool:
 
 async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
     """Deploy and set up minio and s3-integrator needed for s3-like storage backend in the HA charms."""
+    assert ops_test.model
     config = {
         "access-key": "accesskey",
         "secret-key": "secretkey",
@@ -497,7 +501,7 @@ async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
         mc_client.make_bucket("tempo")
 
     # configure s3-integrator
-    s3_integrator_app: Application = ops_test.model.applications["s3-integrator"]
+    s3_integrator_app: Application = ops_test.model.applications["s3-integrator"]  # type: ignore
     s3_integrator_leader: Unit = s3_integrator_app.units[0]
 
     await s3_integrator_app.set_config(
@@ -514,6 +518,7 @@ async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
 
 async def deploy_tempo_cluster(ops_test: OpsTest):
     """Deploys tempo in its HA version together with minio and s3-integrator."""
+    assert ops_test.model
     tempo_app = "tempo"
     worker_app = "tempo-worker"
     tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", "edge"
@@ -570,6 +575,7 @@ async def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tl
 
 async def get_application_ip(ops_test: OpsTest, app_name: str) -> str:
     """Get the application IP address."""
+    assert ops_test.model
     status = await ops_test.model.get_status()
     app = status["applications"][app_name]
     return app.public_address

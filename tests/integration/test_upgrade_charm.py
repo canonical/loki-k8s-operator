@@ -22,7 +22,7 @@ from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 app_name = METADATA["name"]
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
@@ -31,6 +31,7 @@ resources = {
 
 
 async def test_setup_env(ops_test: OpsTest):
+    assert ops_test.model
     await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
@@ -38,6 +39,7 @@ async def test_setup_env(ops_test: OpsTest):
 async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
+    assert ops_test.model
     await ops_test.model.deploy(
         f"ch:{app_name}",
         application_name=app_name,
@@ -47,13 +49,16 @@ async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_char
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
-    await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
+    application = ops_test.model.applications[app_name]
+    assert application
+    await application.refresh(path=loki_charm, resources=resources)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
     assert await is_loki_up(ops_test, app_name)
 
 
 @pytest.mark.abort_on_fail
 async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm):
+    assert ops_test.model
     # Deploy related apps
     app_names = [app_name, "am", "grafana"]
     await asyncio.gather(
@@ -81,7 +86,9 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     )
 
     # Refresh from path
-    await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
+    application = ops_test.model.applications[app_name]
+    assert application
+    await application.refresh(path=loki_charm, resources=resources)
     await ops_test.model.wait_for_idle(
         apps=app_names, status="active", timeout=1000, idle_period=60
     )
@@ -90,15 +97,18 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
 
 @pytest.mark.abort_on_fail
 async def test_upgrade_with_multiple_units(ops_test: OpsTest, loki_charm):
+    assert ops_test.model
     app_names = [app_name, "am", "grafana"]
+    application = ops_test.model.applications[app_name]
+    assert application
     # Add unit
-    await ops_test.model.applications[app_name].scale(scale_change=1)
+    await application.scale(scale_change=1)
     await ops_test.model.wait_for_idle(
         apps=app_names, status="active", timeout=1000, idle_period=60
     )
 
     # Refresh from path
-    await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
+    await application.refresh(path=loki_charm, resources=resources)
     await ops_test.model.wait_for_idle(
         apps=app_names, status="active", timeout=1000, idle_period=60
     )

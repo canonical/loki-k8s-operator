@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 LOKI = "loki"
 GRAFANA = "grafana"
 PROMETHEUS = "prometheus"
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
     "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
