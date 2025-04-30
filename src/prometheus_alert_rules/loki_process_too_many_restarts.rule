@@ -3,11 +3,14 @@
 # two restarts just from deploying the charm.
 # Changing the config soon after deploy (e.g. set resource limits) would cause another restart.
 # Using 5 as the alert threshold to take into account restart (2 starts) + immediate config change (1 more start).
-alert: LokiProcessTooManyRestarts
-expr: changes(process_start_time_seconds[15m]) > 5
-for: 0m
-labels:
-  severity: warning
-annotations:
-  summary: Loki process too many restarts (instance {{ $labels.instance }})
-  description: "A loki process had too many restarts (target {{ $labels.instance }})\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+groups:
+- name: LokiProcessTooManyRestarts
+  rules:
+  - alert: LokiProcessTooManyRestarts
+    expr: changes(process_start_time_seconds[15m]) > 5
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: Loki process too many restarts (instance {{ $labels.instance }})
+      description: "A loki process had too many restarts (target {{ $labels.instance }})\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
