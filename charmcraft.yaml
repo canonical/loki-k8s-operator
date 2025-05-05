@@ -26,6 +26,9 @@ parts:
     plugin: uv
     build-packages: [git]
     build-snaps: [astral-uv]
+    build-environment:
+      # https://github.com/python/importlib_metadata/issues/516
+      - PIP_CONSTRAINT: constraints.txt
     override-build: |
       craftctl default
       git describe --always > $CRAFT_PART_INSTALL/version
