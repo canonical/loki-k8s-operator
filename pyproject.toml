@@ -12,7 +12,7 @@ dependencies = [
   "requests",
   "lightkube",
   "lightkube-models",
-  "aiohttp",
+  "aiohttp!=3.11.13",  # Yanked
   "jsonschema",
   "cryptography",
   "pydantic>=2.9.0",
@@ -31,7 +31,7 @@ dev = [
   "ruff",
   "codespell",
   # Static
-  "pyright",
+  "pyright<1.1.399", # 1.1.399 vendors typeshed that dropped Python 3.8 support
   # Unit
   "pytest",
   "coverage[toml]",
