@@ -10,6 +10,7 @@ dependencies = [
   "cosl",
   "kubernetes",
   "requests",
+  "pyyaml",
   "lightkube",
   "lightkube-models",
   "aiohttp!=3.11.13",  # Yanked
