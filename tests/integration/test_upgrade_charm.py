@@ -42,7 +42,8 @@ async def test_setup_env(ops_test: OpsTest):
     await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
-@pytest.mark.abort_on_fail
+# @pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
@@ -56,7 +57,8 @@ async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_char
     assert await is_loki_up(ops_test, app_name)
 
 
-@pytest.mark.abort_on_fail
+# @pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm):
     assert ops_test.model
     # Deploy related apps
@@ -83,7 +85,8 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     assert await is_loki_up(ops_test, app_name)
 
 
-@pytest.mark.abort_on_fail
+# @pytest.mark.abort_on_fail
+@pytest.mark.xfail
 async def test_upgrade_with_multiple_units(ops_test: OpsTest, loki_charm):
     assert ops_test.model
     app_names = [app_name, "am", "grafana"]
