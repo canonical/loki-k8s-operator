@@ -51,9 +51,7 @@ async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_char
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
-    application = ops_test.model.applications[app_name]
-    assert application
-    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm, resource=resources_arg)
+    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
     assert await is_loki_up(ops_test, app_name)
 
@@ -78,7 +76,7 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     )
 
     # Refresh from path
-    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm, resources=resources_arg)
+    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm)
     await ops_test.model.wait_for_idle(
         apps=app_names, status="active", timeout=1000, idle_period=60
     )
@@ -98,7 +96,7 @@ async def test_upgrade_with_multiple_units(ops_test: OpsTest, loki_charm):
     )
 
     # Refresh from path
-    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm, resources=resources_arg)
+    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm)
     await ops_test.model.wait_for_idle(
         apps=app_names, status="active", timeout=1000, idle_period=60
     )
