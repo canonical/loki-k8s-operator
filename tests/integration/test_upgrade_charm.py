@@ -65,10 +65,6 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     app_names = [app_name, "am", "grafana"]
 
     # Relate apps
-    await asyncio.gather(
-        ops_test.model.add_relation(app_name, "am"),
-        ops_test.model.add_relation(app_name, "grafana:grafana-source"),
-    )
     sh.juju.relate(app_name, "am", model=ops_test.model.name)
     sh.juju.relate(app_name, "grafana:grafana-source", model=ops_test.model.name)
     await ops_test.model.wait_for_idle(
