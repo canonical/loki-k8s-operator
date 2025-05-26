@@ -11,7 +11,6 @@
 5. Add unit and refresh again (test multi unit upgrade with relations).
 """
 
-import asyncio
 import logging
 from pathlib import Path
 
@@ -42,13 +41,12 @@ async def test_setup_env(ops_test: OpsTest):
     await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
-# @pytest.mark.abort_on_fail
-@pytest.mark.xfail
+@pytest.mark.abort_on_fail
 async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
     assert ops_test.model
-    sh.juju.deploy(app_name, app_name, model=ops_test.model.name, channel="edge", trust=True)
+    sh.juju.deploy(app_name, app_name, model=ops_test.model.name, channel="1/edge", trust=True)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
@@ -57,8 +55,7 @@ async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_char
     assert await is_loki_up(ops_test, app_name)
 
 
-# @pytest.mark.abort_on_fail
-@pytest.mark.xfail
+@pytest.mark.abort_on_fail
 async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm):
     assert ops_test.model
     # Deploy related apps
@@ -67,10 +64,6 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     app_names = [app_name, "am", "grafana"]
 
     # Relate apps
-    await asyncio.gather(
-        ops_test.model.add_relation(app_name, "am"),
-        ops_test.model.add_relation(app_name, "grafana:grafana-source"),
-    )
     sh.juju.relate(app_name, "am", model=ops_test.model.name)
     sh.juju.relate(app_name, "grafana:grafana-source", model=ops_test.model.name)
     await ops_test.model.wait_for_idle(
@@ -85,8 +78,7 @@ async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_c
     assert await is_loki_up(ops_test, app_name)
 
 
-# @pytest.mark.abort_on_fail
-@pytest.mark.xfail
+@pytest.mark.abort_on_fail
 async def test_upgrade_with_multiple_units(ops_test: OpsTest, loki_charm):
     assert ops_test.model
     app_names = [app_name, "am", "grafana"]
