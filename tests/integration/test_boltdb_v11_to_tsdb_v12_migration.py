@@ -71,7 +71,6 @@ async def deploy_charm_from_charmhub_v11(ops_test: OpsTest, app_name):
     await ops_test.model.deploy(
         "ch:loki-k8s",
         application_name=app_name,
-        channel="edge",
         revision=140,
         trust=True,
     )
@@ -84,7 +83,7 @@ async def upgrade_charm_from_charmhub_v12(ops_test: OpsTest, app_name, loki_char
     assert ops_test.model
     application = ops_test.model.applications[app_name]
     assert application
-    await application.refresh(channel="stable", revision=151)
+    await application.refresh(channel="2/edge")
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
 

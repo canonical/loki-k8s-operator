@@ -46,7 +46,7 @@ async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_char
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
     assert ops_test.model
-    sh.juju.deploy(app_name, app_name, model=ops_test.model.name, channel="1/edge", trust=True)
+    sh.juju.deploy(app_name, app_name, model=ops_test.model.name, channel="2/edge", trust=True)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
