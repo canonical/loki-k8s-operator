@@ -11,7 +11,6 @@
 5. Add unit and refresh again (test multi unit upgrade with relations).
 """
 
-import asyncio
 import logging
 from pathlib import Path
 
