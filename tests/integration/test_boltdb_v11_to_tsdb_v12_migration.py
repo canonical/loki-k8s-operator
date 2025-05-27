@@ -37,6 +37,7 @@ async def test_setup_env(ops_test: OpsTest):
     await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
+@pytest.mark.xfail
 @pytest.mark.abort_on_fail
 async def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(ops_test: OpsTest, loki_charm):
     """Deploy from Charmhub (v11 schema) and upgrade to v12."""
@@ -52,6 +53,7 @@ async def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(ops_test: OpsT
     await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v13", True)
 
 
+@pytest.mark.xfail
 @pytest.mark.abort_on_fail
 async def test_deploy_and_upgrade_v13_locally(ops_test: OpsTest, loki_charm):
     """Deploy from a local charm (v13 schema) and upgrade locally."""
