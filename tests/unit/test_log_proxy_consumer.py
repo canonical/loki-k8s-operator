@@ -252,7 +252,7 @@ class TestLogProxyConsumer(unittest.TestCase):
 
         with self.assertLogs(level="DEBUG") as logger:
             self.harness.charm.log_proxy._obtain_promtail(PROMTAIL_INFO)
-            self.assertTrue(any("File sha256sum mismatch" in line for line in logger.output))
+            self.assertTrue(any("File sha256sum mismatch" in line for line in logger.output))  # type: ignore
 
             # Don't actually download, but make sure we would
             self.assertTrue(
@@ -307,7 +307,7 @@ class TestLogProxyConsumerWithPromtailResource(unittest.TestCase):
             binary_path = os.path.join("/tmp", PROMTAIL_INFO["filename"])
             self.harness.charm.log_proxy._push_promtail_if_attached(binary_path)
             self.assertEqual(
-                sorted(logger.output),
+                sorted(logger.output),  # type: ignore
                 [
                     "INFO:charms.loki_k8s.v0.loki_push_api:Promtail binary file has been obtained from an attached resource."
                 ],

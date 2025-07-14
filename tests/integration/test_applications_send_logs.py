@@ -5,12 +5,12 @@
 import asyncio
 import logging
 from pathlib import Path
-import jubilant
 
+import jubilant
 import pytest
-from pytest_operator.plugin import OpsTest
 import yaml
 from helpers import is_loki_up, loki_api_query, oci_image
+from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 

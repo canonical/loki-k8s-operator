@@ -392,7 +392,7 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
         # AND an error message is recorded for every empty file
-        logger_output = "\n".join(logger.output)
+        logger_output = "\n".join(logger.output)  # type: ignore
         self.assertIn("empty.rule", logger_output)
         self.assertIn("whitespace1.rule", logger_output)
         self.assertIn("whitespace2.rule", logger_output)
@@ -414,7 +414,7 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
         # AND an error message is recorded for every invalid file
-        logger_output = "\n".join(logger.output)
+        logger_output = "\n".join(logger.output)  # type: ignore
         self.assertIn("tab.rule", logger_output)
         self.assertIn("multicolon.rule", logger_output)
 

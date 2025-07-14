@@ -2,15 +2,14 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import logging
 from pathlib import Path
 
 import jubilant
 import pytest
-from pytest_operator.plugin import OpsTest
 import yaml
 from helpers import get_alertmanager_alerts
+from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
