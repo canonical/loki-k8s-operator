@@ -197,6 +197,7 @@ class LokiOperatorCharm(CharmBase):
             ],
             source_type="loki",
             source_url=self._external_url,
+            is_ingressed=self.ingress_per_unit.is_ready(),
         )
 
         self.metrics_provider = MetricsEndpointProvider(

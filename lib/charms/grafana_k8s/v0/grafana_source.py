@@ -163,7 +163,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 27
+LIBPATCH = 28
 
 logger = logging.getLogger(__name__)
 
@@ -343,6 +343,7 @@ class GrafanaSourceProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         extra_fields: Optional[dict] = None,
         secure_extra_fields: Optional[dict] = None,
+        is_ingressed: bool = False,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -385,6 +386,9 @@ class GrafanaSourceProvider(Object):
                 for some datasources in the `jsonData` field
             secure_extra_fields: a :dict: which is used for additional information required
                 for some datasources in the `secureJsonData`
+            is_ingressed: whether this application is behind an ingress. If set to True, then only
+                the leader unit will be listed as a datasource in grafana. If False, each
+                follower unit will show up as a datasource as well.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -421,11 +425,17 @@ class GrafanaSourceProvider(Object):
             )
 
         self._source_port = source_port
+
+        # If there's no ingress, then each unit is a datasource.
+        # If there is an ingress, then only the leader is a datasource.
+        self._this_unit_is_datasource = (not is_ingressed) or charm.unit.is_leader()
+
         self._source_url = self._sanitize_source_url(source_url)
 
         self.framework.observe(events.relation_joined, self._set_sources_from_event)
-        for ev in refresh_event:
-            self.framework.observe(ev, self._set_unit_details)
+        if self._this_unit_is_datasource:
+            for ev in refresh_event:
+                self.framework.observe(ev, self._set_unit_details)
 
     def _sanitize_source_url(self, source_url: Optional[str]) -> Optional[str]:
         if source_url and not re.match(r"^\w+://", source_url):
@@ -484,7 +494,8 @@ class GrafanaSourceProvider(Object):
 
     def _set_sources(self, rel: Relation):
         """Inform the consumer about the source configuration."""
-        self._set_unit_details(rel)
+        if self._this_unit_is_datasource:
+            self._set_unit_details(rel)
 
         if not self._charm.unit.is_leader():
             return
