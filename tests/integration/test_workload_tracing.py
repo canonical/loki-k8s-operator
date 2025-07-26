@@ -34,7 +34,7 @@ async def test_workload_tracing_is_present(ops_test, loki_charm, cos_channel):
         loki_charm, resources=loki_resources, application_name=app_name, trust=True
     )
     await ops_test.model.wait_for_idle(
-        apps=[app_name], status="active", timeout=300, wait_for_exact_units=1
+        apps=[app_name], status="active", timeout=300, idle_period=30,
     )
 
     # we relate _only_ workload tracing not to confuse with charm traces
@@ -45,7 +45,7 @@ async def test_workload_tracing_is_present(ops_test, loki_charm, cos_channel):
     await ops_test.model.add_relation(
         "{}:logging".format(TEMPO_APP_NAME), "{}:logging".format(app_name)
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active")
+    await ops_test.model.wait_for_idle(apps=[app_name], status="active", idle_period=30)
     assert await is_loki_up(ops_test, app_name, num_units=1)
 
     # Verify workload traces are ingested into Tempo
