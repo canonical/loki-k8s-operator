@@ -66,27 +66,27 @@ async def test_deploy_and_upgrade_v13_locally(ops_test: OpsTest, loki_charm):
     await verify_upgrade_success(ops_test, V13_APP_NAME, True, "v13")
 
 
-async def deploy_charm_from_charmhub_v11(ops_test: OpsTest, app_name):
+async def deploy_charm_from_charmhub_v11(ops_test: OpsTest, app_name, cos_channel):
     """Deploy the charm from Charmhub."""
     logger.debug("Deploying charm from Charmhub")
     assert ops_test.model
     await ops_test.model.deploy(
         "ch:loki-k8s",
         application_name=app_name,
-        channel="2/edge",
+        channel=cos_channel,
         revision=140,
         trust=True,
     )
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
 
-async def upgrade_charm_from_charmhub_v12(ops_test: OpsTest, app_name, loki_charm):
+async def upgrade_charm_from_charmhub_v12(ops_test: OpsTest, app_name, loki_charm, cos_channel):
     """Upgrade the deployed charm with the local charm."""
     logger.debug("Upgrading deployed charm with local charm %s", loki_charm)
     assert ops_test.model
     application = ops_test.model.applications[app_name]
     assert application
-    await application.refresh(channel="2/edge")
+    await application.refresh(channel=cos_channel)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
 

@@ -25,9 +25,9 @@ async def test_setup_env(ops_test):
 
 
 @pytest.mark.abort_on_fail
-async def test_workload_tracing_is_present(ops_test, loki_charm):
+async def test_workload_tracing_is_present(ops_test, loki_charm, cos_channel):
     logger.info("deploying tempo cluster")
-    await deploy_tempo_cluster(ops_test)
+    await deploy_tempo_cluster(ops_test, cos_channel)
 
     logger.info("deploying local charm")
     await ops_test.model.deploy(

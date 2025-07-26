@@ -516,13 +516,13 @@ async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
     assert action_result.status == "completed"
 
 
-async def deploy_tempo_cluster(ops_test: OpsTest):
+async def deploy_tempo_cluster(ops_test: OpsTest, cos_channel):
     """Deploys tempo in its HA version together with minio and s3-integrator."""
     assert ops_test.model
     tempo_app = "tempo"
     worker_app = "tempo-worker"
-    tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", "edge"
-    tempo_coordinator_charm_url, coordinator_channel = "tempo-coordinator-k8s", "edge"
+    tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", cos_channel
+    tempo_coordinator_charm_url, coordinator_channel = "tempo-coordinator-k8s", cos_channel
     await ops_test.model.deploy(
         tempo_worker_charm_url, application_name=worker_app, channel=worker_channel, trust=True
     )
