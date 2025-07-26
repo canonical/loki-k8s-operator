@@ -39,14 +39,14 @@ async def test_setup_env(ops_test: OpsTest):
 
 @pytest.mark.xfail
 @pytest.mark.abort_on_fail
-async def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(ops_test: OpsTest, loki_charm):
+async def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(ops_test: OpsTest, loki_charm, cos_channel):
     """Deploy from Charmhub (v11 schema) and upgrade to v12."""
-    await deploy_charm_from_charmhub_v11(ops_test, LOKI_UPGRADED)
-    await upgrade_charm_from_charmhub_v12(ops_test, LOKI_UPGRADED, loki_charm)
+    await deploy_charm_from_charmhub_v11(ops_test, LOKI_UPGRADED, cos_channel)
+    await upgrade_charm_from_charmhub_v12(ops_test, LOKI_UPGRADED, loki_charm, cos_channel)
     await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v12")
 
     # Here we upgrade again to ensure config is persisted and won't be overwritten with any weird values
-    await upgrade_charm_from_charmhub_v12(ops_test, LOKI_UPGRADED, loki_charm)
+    await upgrade_charm_from_charmhub_v12(ops_test, LOKI_UPGRADED, loki_charm, cos_channel)
     await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v12")
 
     await upgrade_charm_with_local_charm_v13(ops_test, LOKI_UPGRADED, loki_charm)
