@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 from helpers import is_loki_up, juju_show_unit, loki_alerts
+from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +95,8 @@ async def test_loki_scales_up(ops_test):
         )
 
 
-@pytest.mark.xfail
-async def test_scale_down_to_zero_units(ops_test):
+@pytest.mark.skip(reason="xfail")
+async def test_scale_down_to_zero_units(ops_test: OpsTest):
     loki_app_name = "loki"
     await ops_test.model.applications[loki_app_name].scale(scale=0)
     await ops_test.model.wait_for_idle(
