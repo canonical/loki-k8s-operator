@@ -1,10 +1,59 @@
-# Copyright 2021 Canonical Ltd.
-# See LICENSE file for licensing details.
-
+# Learn more about charmcraft.yaml configuration at:
+# https://juju.is/docs/sdk/charmcraft-config
+name: log-forwarder-tester
 type: charm
+summary: Fake log generator
+description: Fake log generator
+
 platforms:
   ubuntu@24.04:amd64:
+
 parts:
   charm:
-    build-packages:
-      - git
+    source: .
+    plugin: uv
+    build-packages: [git]
+    build-snaps: [astral-uv]
+
+containers:
+  workload-a:
+    resource: workload-image
+  workload-b:
+    resource: workload-image
+
+resources:
+  workload-image:
+    type: oci-image
+    description: OCI image just so we have a pebble_ready etc.
+    upstream-source: ghcr.io/sed-i/flog:latest
+
+requires:
+  log-forwarder:
+    interface: loki_push_api
+
+actions:
+  log-error:
+    description: Log an error message.
+    params:
+      message:
+        description: Error message to be logged.
+        type: string
+        default: ""
+
+config:
+  options:
+    rate:
+      default: 1
+      description: Number of logs per second to generate.
+      type: int
+    rotate:
+      description: Rotate log after x logs.
+      type: int
+    syslog:
+      description: Enable syslog forwarding
+      type: boolean
+      default: false
+    file_forwarding:
+      description: Enable file forwarding
+      type: boolean
+      default: true

@@ -1,6 +1,34 @@
 # Learn more about charmcraft.yaml configuration at:
 # https://juju.is/docs/sdk/charmcraft-config
-type: "charm"
+name: loki-tester
+type: charm
+summary: |
+description: |
+  This charm exercises the functionality offerred by the Loki Operator
+  in order to integration test it.
+
+assumes:
+  - k8s-api
 
 platforms:
   ubuntu@24.04:amd64:
+
+parts:
+  charm:
+    source: .
+    plugin: uv
+    build-packages: [git]
+    build-snaps: [astral-uv]
+
+requires:
+  logging:
+    interface: loki_push_api
+
+actions:
+  log-error:
+    description: Log an error message.
+    params:
+      message:
+        description: Error message to be logged.
+        type: string
+        default: ""

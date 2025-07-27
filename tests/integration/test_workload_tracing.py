@@ -47,7 +47,11 @@ async def test_workload_tracing_is_present(ops_test, loki_charm, cos_channel):
         trust=True,
     )
     # Set up minio and s3-integrator
-    await ops_test.model.deploy("minio",application_name="minio-tempo", trust=True, config={"access-key": minio_user, "secret-key": minio_pass})
+    await ops_test.model.deploy("minio",
+                                application_name="minio-tempo",
+                                channel="edge",
+                                trust=True,
+                                config={"access-key": minio_user, "secret-key": minio_pass})
     await ops_test.model.deploy("s3-integrator", application_name="s3-tempo", channel="edge")
 
     await ops_test.model.wait_for_idle(
