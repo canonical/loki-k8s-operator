@@ -295,21 +295,21 @@ class ModelConfigChange:
         await self.ops_test.model.set_config(self.revert_to)
 
 
-def oci_image(metadata_file: str, image_name: str) -> str:
+def oci_image(charmcraft_file: str, image_name: str) -> str:
     """Find upstream source for a container image.
 
     Args:
-        metadata_file: string path of metadata YAML file relative
+        charmcraft_file: string path of charmcraft YAML file relative
             to top level charm directory
         image_name: OCI container image string name as defined in
             charmcraft.yaml file
     Returns:
         upstream image source
     Raises:
-        FileNotFoundError: if metadata_file path is invalid
+        FileNotFoundError: if charmcraft_file path is invalid
         ValueError: if upstream source for image name can not be found
     """
-    metadata = yaml.safe_load(Path(metadata_file).read_text())
+    metadata = yaml.safe_load(Path(charmcraft_file).read_text())
 
     resources = metadata.get("resources", {})
     if not resources:
