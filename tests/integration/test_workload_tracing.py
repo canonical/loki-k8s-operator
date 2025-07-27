@@ -82,7 +82,7 @@ async def test_workload_tracing_is_present(ops_test, loki_charm, cos_channel):
         }
     )
 
-    action = await s3_integrator_leader.run_action("sync-s3-credentials", {"access-key": minio_user, "secret-key": minio_pass})
+    action = await s3_integrator_leader.run_action("sync-s3-credentials", **{"access-key": minio_user, "secret-key": minio_pass})
     await action.wait()
 
     await ops_test.model.integrate(f"{TEMPO_APP_NAME}:s3", "s3-tempo")

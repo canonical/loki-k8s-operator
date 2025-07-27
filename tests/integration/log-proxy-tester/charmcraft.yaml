@@ -28,7 +28,7 @@ resources:
     upstream-source: ghcr.io/sed-i/flog:latest
 
 requires:
-  log-forwarder:
+  log-proxy:
     interface: loki_push_api
 
 actions:
