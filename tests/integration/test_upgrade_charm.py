@@ -42,11 +42,11 @@ async def test_setup_env(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm):
+async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm, cos_channel):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
     assert ops_test.model
-    sh.juju.deploy(app_name, app_name, model=ops_test.model.name, channel="2/edge", trust=True)
+    sh.juju.deploy(app_name, app_name, model=ops_test.model.name, channel=cos_channel, trust=True)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
@@ -56,11 +56,11 @@ async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_char
 
 
 @pytest.mark.abort_on_fail
-async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm):
+async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm, cos_channel):
     assert ops_test.model
     # Deploy related apps
-    sh.juju.deploy("alertmanager-k8s", "am", model=ops_test.model.name, channel="edge", trust=True)
-    sh.juju.deploy("grafana-k8s", "grafana", model=ops_test.model.name, channel="edge", trust=True)
+    sh.juju.deploy("alertmanager-k8s", "am", model=ops_test.model.name, channel=cos_channel, trust=True)
+    sh.juju.deploy("grafana-k8s", "grafana", model=ops_test.model.name, channel=cos_channel, trust=True)
     app_names = [app_name, "am", "grafana"]
 
     # Relate apps

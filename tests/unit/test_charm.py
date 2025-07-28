@@ -122,6 +122,7 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(version_patcher.stop)
         self.harness.set_leader(True)
+        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
@@ -189,7 +190,7 @@ class TestConfigFile(unittest.TestCase):
 
         # GIVEN this unit is the leader
         self.harness.set_leader(True)
-
+        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
@@ -453,6 +454,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
+        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 

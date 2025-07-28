@@ -1,3 +1,0 @@
-cosl
-ops >= 1.2.0
-python-logging-loki
