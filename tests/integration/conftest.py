@@ -52,6 +52,9 @@ def timed_memoizer(func):
 
     return wrapper
 
+@pytest.fixture(scope="session")
+def cos_channel():
+    return "2/edge"
 
 @pytest.fixture(scope="module", autouse=True)
 def copy_loki_library_into_test_charms(ops_test):

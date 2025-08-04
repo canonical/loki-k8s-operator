@@ -14,9 +14,6 @@ from urllib.parse import urljoin
 
 import requests
 import yaml
-from juju.application import Application
-from juju.unit import Unit
-from minio import Minio
 from pytest_operator.plugin import OpsTest
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -298,21 +295,21 @@ class ModelConfigChange:
         await self.ops_test.model.set_config(self.revert_to)
 
 
-def oci_image(metadata_file: str, image_name: str) -> str:
+def oci_image(charmcraft_file: str, image_name: str) -> str:
     """Find upstream source for a container image.
 
     Args:
-        metadata_file: string path of metadata YAML file relative
+        charmcraft_file: string path of charmcraft YAML file relative
             to top level charm directory
         image_name: OCI container image string name as defined in
             charmcraft.yaml file
     Returns:
         upstream image source
     Raises:
-        FileNotFoundError: if metadata_file path is invalid
+        FileNotFoundError: if charmcraft_file path is invalid
         ValueError: if upstream source for image name can not be found
     """
-    metadata = yaml.safe_load(Path(metadata_file).read_text())
+    metadata = yaml.safe_load(Path(charmcraft_file).read_text())
 
     resources = metadata.get("resources", {})
     if not resources:
@@ -475,78 +472,6 @@ async def delete_pod(model_name: str, app_name: str, unit_num: int) -> bool:
     except subprocess.CalledProcessError as e:
         logger.error(e.stdout.decode())
         raise e
-
-
-async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
-    """Deploy and set up minio and s3-integrator needed for s3-like storage backend in the HA charms."""
-    assert ops_test.model
-    config = {
-        "access-key": "accesskey",
-        "secret-key": "secretkey",
-    }
-    await ops_test.model.deploy("minio", channel="edge", trust=True, config=config)
-    await ops_test.model.wait_for_idle(apps=["minio"], status="active", timeout=2000)
-    minio_addr = await get_unit_address(ops_test, "minio", 0)
-
-    mc_client = Minio(
-        f"{minio_addr}:9000",
-        access_key="accesskey",
-        secret_key="secretkey",
-        secure=False,
-    )
-
-    # create tempo bucket
-    found = mc_client.bucket_exists("tempo")
-    if not found:
-        mc_client.make_bucket("tempo")
-
-    # configure s3-integrator
-    s3_integrator_app: Application = ops_test.model.applications["s3-integrator"]  # type: ignore
-    s3_integrator_leader: Unit = s3_integrator_app.units[0]
-
-    await s3_integrator_app.set_config(
-        {
-            "endpoint": f"minio-0.minio-endpoints.{ops_test.model.name}.svc.cluster.local:9000",
-            "bucket": "tempo",
-        }
-    )
-
-    action = await s3_integrator_leader.run_action("sync-s3-credentials", **config)
-    action_result = await action.wait()
-    assert action_result.status == "completed"
-
-
-async def deploy_tempo_cluster(ops_test: OpsTest):
-    """Deploys tempo in its HA version together with minio and s3-integrator."""
-    assert ops_test.model
-    tempo_app = "tempo"
-    worker_app = "tempo-worker"
-    tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", "edge"
-    tempo_coordinator_charm_url, coordinator_channel = "tempo-coordinator-k8s", "edge"
-    await ops_test.model.deploy(
-        tempo_worker_charm_url, application_name=worker_app, channel=worker_channel, trust=True
-    )
-    await ops_test.model.deploy(
-        tempo_coordinator_charm_url,
-        application_name=tempo_app,
-        channel=coordinator_channel,
-        trust=True,
-    )
-    await ops_test.model.deploy("s3-integrator", channel="edge")
-
-    await ops_test.model.integrate(tempo_app + ":s3", "s3-integrator" + ":s3-credentials")
-    await ops_test.model.integrate(tempo_app + ":tempo-cluster", worker_app + ":tempo-cluster")
-
-    await deploy_and_configure_minio(ops_test)
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=[tempo_app, worker_app, "s3-integrator"],
-            status="active",
-            timeout=2000,
-            idle_period=30,
-            # TODO: remove when https://github.com/canonical/tempo-coordinator-k8s-operator/issues/90 is fixed
-            raise_on_error=False,
-        )
 
 
 def get_traces(tempo_host: str, service_name="tracegen-otlp_http", tls=True):
