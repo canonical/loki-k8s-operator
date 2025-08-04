@@ -8,7 +8,7 @@
 
 [Loki](https://grafana.com/oss/loki/) is an open-source fully-featured logging system. This Loki charmed operator handles installation, scaling, configuration, optimisation, networking, service mesh, observability, and Day 2 operations specific to [Loki](https://grafana.com/docs/loki/latest/) using [Juju](https://juju.is) and the [Charmed Operator Lifecycle Manager (OLM)](https://juju.is/docs/olm).
 
-On the principle that an operator should *"do one thing and do it well"*, this operator drives Loki application only. However, it can be composed with other operators to deliver a complex application or service. Because operators package expert knowledge in a reusable and shareable form, they hugely simplify software management and operations.
+On the principle that an operator should *"do one thing and do it well"*, this operator drives the Loki application only. However, it can be composed with other operators to deliver a complex application or service. Because operators package expert knowledge in a reusable and shareable form, they hugely simplify software management and operations.
 
 
 
@@ -16,13 +16,13 @@ On the principle that an operator should *"do one thing and do it well"*, this o
 
 ### Basic deployment
 
-Create a Juju model for your operator, say "observability"
+Create a Juju model for your operator, say "observability":
 
 ```bash
 juju add-model observability
 ```
 
-The Loki Charmed Operator may be deployed using the Juju command line in a quite very way.
+Deploy the Loki Charmed Operator using the Juju command line tool:
 
 ```bash
 juju deploy loki-k8s --channel=stable

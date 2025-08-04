@@ -12,7 +12,7 @@ from helpers import get_alertmanager_alerts
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
     "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
@@ -20,7 +20,7 @@ resources = {
 
 
 @pytest.mark.abort_on_fail
-async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki_tester_charm):
+async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki_tester_charm, cos_channel):
     """Test basic functionality of Loki push API relation interface."""
     loki_app_name = "loki"
     tester_app_name = "loki-tester"
@@ -43,7 +43,7 @@ async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki
         ops_test.model.deploy(
             "ch:alertmanager-k8s",
             application_name=alertmanager_app_name,
-            channel="edge",
+            channel=cos_channel,
             trust=True,
         ),
     )

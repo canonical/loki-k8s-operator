@@ -1,29 +1,17 @@
-# Copyright 2021 Canonical Ltd.
+# Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 [project]
-name = "loki-k8s"
+name = "loki-tester"
 version = "0.0"
 requires-python = "~=3.8"
 
 dependencies = [
   "ops",
   "cosl",
-  "kubernetes",
-  "requests",
-  "pyyaml",
-  "lightkube",
-  "lightkube-models",
-  "aiohttp!=3.11.13",  # Yanked
-  "jsonschema",
   "cryptography",
-  "pydantic>=2.9.0",
-  "importlib-metadata==6.0.0",
-  "opentelemetry-api==1.21.0",
-  "opentelemetry-exporter-otlp-proto-common==1.21.0",
-  "opentelemetry-exporter-otlp-proto-http==1.21.0",
-  "opentelemetry-proto==1.21.0",
-  "opentelemetry-sdk==1.21.0",
-  "opentelemetry-semantic-conventions==0.42b0",
+  "jsonschema",
+  "pydantic>=2",
+  "python-logging-loki",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +34,7 @@ dev = [
   "pytest-operator",
   "minio",
   "sh",
+  "jubilant",
 ]
 
 # Testing tools configuration

@@ -1,29 +1,200 @@
 # Learn more about charmcraft.yaml configuration at:
 # https://juju.is/docs/sdk/charmcraft-config
+name: loki-k8s
 type: "charm"
-bases:
-  - build-on:
-    - name: "ubuntu"
-      channel: "20.04"
-    run-on:
-    - name: "ubuntu"
-      channel: "20.04"
+summary: Loki is a log aggregation system inspired by Prometheus.
+description: >
+  Loki is a set of components that can be composed into a fully featured logging stack.
+
+links:
+  documentation: https://discourse.charmhub.io/t/loki-k8s-docs-index/5228
+  website: https://charmhub.io/loki-k8s
+  source: https://github.com/canonical/loki-k8s-operator
+  issues: https://github.com/canonical/loki-k8s-operator/issues
+
+assumes:
+  - k8s-api
+  - juju >= 3.6  # Juju 3.0.3+ needed for secrets and open-port
+
+platforms:
+  ubuntu@24.04:amd64:
+
 parts:
   charm:
-    charm-binary-python-packages:
-      # For v2.tls_certificates
-      - cryptography
-      - jsonschema
-
-      # For v1.alertmanager_dispatch & v1.tracing
-      - pydantic>=2
-      - pydantic-core
+    source: .
+    plugin: uv
     build-packages: [git]
+    build-snaps: [astral-uv]
+    override-build: |
+      craftctl default
+      git describe --always > $CRAFT_PART_INSTALL/version
   cos-tool:
     plugin: dump
-    source: .
-    build-packages:
-      - curl
-    override-pull: |
-      curl -L -O https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_TARGET_ARCH}
-      chmod 775 cos-tool-*
+    source: https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_ARCH_BUILD_FOR}
+    source-type: file
+    permissions:
+      - path: cos-tool-${CRAFT_ARCH_BUILD_FOR}
+        mode: "755"
+
+containers:
+  loki:
+    resource: loki-image
+    mounts:
+      - storage: active-index-directory
+        location: /loki/boltdb-shipper-active
+      - storage: loki-chunks
+        location: /loki/chunks
+  node-exporter:
+    resource: node-exporter-image
+    mounts:
+      - storage: active-index-directory
+        location: /loki/boltdb-shipper-active
+      - storage: loki-chunks
+        location: /loki/chunks
+
+# We do not need separate storages. TODO: In the next breaking change for Loki,
+# switch to having just one persisted storage, e.g. `/loki/persisted`.
+storage:
+  active-index-directory:
+    type: filesystem
+    description: Mount point in which Loki will store index
+  loki-chunks:
+    type: filesystem
+    description: Mount point in which Loki will store chunks (objects)
+
+provides:
+  logging:
+    interface: loki_push_api
+    optional: true
+    description: Integration to receive logs from other charms.
+  grafana-source:
+    interface: grafana_datasource
+    optional: true
+    description: |
+      Configures Grafana to be able to use this Loki instance as a datasource.
+  metrics-endpoint:
+    interface: prometheus_scrape
+    optional: true
+    description: |
+      Exposes the Prometheus metrics endpoint providing telemetry about the Loki instance.
+  grafana-dashboard:
+    interface: grafana_dashboard
+    optional: true
+    description: |
+      Forwards the built-in Grafana dashboard(s) for monitoring Loki.
+  send-datasource:
+    interface: grafana_datasource_exchange
+    optional: true
+    description: |
+      Integration to share with other COS components this charm's grafana datasources,
+      and receive theirs.
+
+requires:
+  alertmanager:
+    interface: alertmanager_dispatch
+    optional: true
+    description: |
+      Integrates with an Alertmanager to send notifications when alert rules are triggered.
+  ingress:
+    interface: ingress_per_unit
+    optional: true
+    limit: 1 # Since this is the ingress there is no point in having more than one.
+    description: |
+      Ingress integration for Loki, so that cross-model workloads can send their logs
+      to Loki through the ingress.
+      Loki uses "ingress per unit" (not per app), so each unit gets is ingressed separately.
+  certificates:
+    interface: tls-certificates
+    optional: true
+    limit: 1
+    description: Certificate and key files for the Loki server.
+  catalogue:
+    interface: catalogue
+    optional: true
+    description: Add Loki as an item to a Catalogue charm.
+  charm-tracing:
+    interface: tracing
+    optional: true
+    limit: 1
+    description: |
+      Enables sending charm traces to a distributed tracing backend such as Tempo.
+  workload-tracing:
+    interface: tracing
+    optional: true
+    limit: 1
+    description: |
+      Enables sending workload traces to a distributed tracing backend such as Tempo.
+
+peers:
+  replicas:
+    interface: loki_replica
+
+resources:
+  loki-image:
+    type: oci-image
+    description: Loki OCI image
+    upstream-source: docker.io/ubuntu/loki:2-22.04
+  node-exporter-image:
+    type: oci-image
+    description: Node-exporter OCI image
+    upstream-source: docker.io/prom/node-exporter:v1.7.0
+
+config:
+  options:
+    cpu:
+      description: |
+        K8s cpu resource limit, e.g. "1" or "500m". Default is unset (no limit). This value is used
+        for the "limits" portion of the resource requirements (the "requests" portion is
+        automatically deduced from it).
+        See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+      type: string
+    memory:
+      description: |
+        K8s memory resource limit, e.g. "1Gi". Default is unset (no limit). This value is used
+        for the "limits" portion of the resource requirements (the "requests" portion is
+        automatically deduced from it).
+        See https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+      type: string
+    ingestion-rate-mb:
+      description: |
+        Per-user ingestion rate limit (MB/s).
+        This config option matches exactly Loki's `ingestion_rate_mb`, except that it is an integer here
+        (Loki takes a float).
+        This same value is used internally for setting `per_stream_rate_limit`. Loki uses a default of 3 for
+        `ingestion_rate_mb`, but 4 for `per_stream_rate_limit`. For this reason we use 4 as the default here.
+        
+        Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
+      type: int
+      default: 4
+    ingestion-burst-size-mb:
+      description: |
+        This config option matches exactly Loki's `ingestion_burst_size_mb`, except that it is an integer here
+        (Loki takes a float).
+        This same value is used internally for setting `per_stream_rate_limit_burst`. Loki uses a default of 6 for 
+        `ingestion_burst_size_mb`, but 15 for `per_stream_rate_limit_burst`. For this reason we use 15 as the default
+        here.
+        
+        Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
+      type: int
+      default: 15
+    retention-period:
+      description: |
+        Sets a global retention period, in days, for log streams in Loki.
+        The minimum retention period is 1 day, and a value of 0 (default) means "infinity" (disables retention).
+        Loki will not be cleaning up logs if duration is set to 0.
+        This config maps directly to the loki `compactor.retention_enabled` configuration option, which is set to `false` when no retention period is defined.
+        Specifying retention periods for individual streams is not currently supported.
+
+        Ref: https://grafana.com/docs/loki/latest/operations/storage/retention/
+      type: int
+      default: 0
+    reporting-enabled:
+      description: |
+        When disabled, Loki will be configured to not send anonymous usage statistics to stats.grafana.org.
+        It is very helpful to the Grafana project, so please leave this enabled.
+        
+        When enabled, Loki will use its default values for analytics.
+        
+        Ref: https://grafana.com/docs/loki/latest/configure/#analytics
+      type: boolean
+      default: true

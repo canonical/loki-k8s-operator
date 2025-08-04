@@ -256,12 +256,12 @@ class TestLogProxyConsumer(unittest.TestCase):
 
             # Don't actually download, but make sure we would
             self.assertTrue(
-                self.harness.charm.log_proxy._download_and_push_promtail_to_workload.called
+                self.harness.charm.log_proxy._download_and_push_promtail_to_workload.called  # type: ignore
             )
 
     @patch("ops.model.Container.pull")
     def test__promtail_can_handle_missing_configuration(self, mock_pull):
-        mock_pull.side_effect = PathError(None, "irrelevant")
+        mock_pull.side_effect = PathError("", "irrelevant")
         self.assertEqual(self.harness.charm.log_proxy._current_config, {})
 
 

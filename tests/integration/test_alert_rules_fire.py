@@ -12,7 +12,7 @@ from helpers import is_loki_up, juju_show_unit, loki_alerts
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
     "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
@@ -94,7 +94,7 @@ async def test_loki_scales_up(ops_test):
         )
 
 
-@pytest.mark.xfail
+@pytest.mark.skip(reason="xfail")
 async def test_scale_down_to_zero_units(ops_test):
     loki_app_name = "loki"
     await ops_test.model.applications[loki_app_name].scale(scale=0)

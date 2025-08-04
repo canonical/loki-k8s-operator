@@ -52,6 +52,9 @@ def timed_memoizer(func):
 
     return wrapper
 
+@pytest.fixture(scope="session")
+def cos_channel():
+    return "2/edge"
 
 @pytest.fixture(scope="module", autouse=True)
 def copy_loki_library_into_test_charms(ops_test):
@@ -67,6 +70,9 @@ def copy_loki_library_into_test_charms(ops_test):
 @timed_memoizer
 async def loki_charm(ops_test: OpsTest):
     """Loki charm used for integration testing."""
+    if charm_file := os.environ.get("CHARM_PATH"):
+        return Path(charm_file)
+
     charm = await ops_test.build_charm(".")
     return charm
 
@@ -96,7 +102,7 @@ async def faulty_loki_tester_charm(ops_test):
     clean_cmd = ["charmcraft", "clean", "-p", charm_path]
     await ops_test.run(*clean_cmd)
 
-    rules_path = "tests/sample_rule_files/error/alert.rule"
+    rules_path = "tests/resources/alert.rule"
     install_path = "tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule"
     shutil.copyfile(rules_path, install_path)
     charm = await ops_test.build_charm(charm_path)
@@ -128,7 +134,9 @@ async def log_forwarder_tester_charm(ops_test):
     dest_charmlib = testingcharm_path / LOKI_PUSH_API_V1_PATH
     shutil.rmtree(dest_charmlib.parent, ignore_errors=True)
     dest_charmlib.parent.mkdir(parents=True)
-    dest_charmlib.hardlink_to(LOKI_PUSH_API_V1_PATH)
+    # The type: ignore is needed because hardlink_to is available in Python 3.9,
+    # and we're static checking for 3.8
+    dest_charmlib.hardlink_to(LOKI_PUSH_API_V1_PATH)  # type: ignore
 
     charm_path = "tests/integration/log-forwarder-tester"
     clean_cmd = ["charmcraft", "clean", "-p", charm_path]

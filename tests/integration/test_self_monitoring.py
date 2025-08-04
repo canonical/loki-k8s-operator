@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 LOKI = "loki"
 GRAFANA = "grafana"
 PROMETHEUS = "prometheus"
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
     "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
@@ -30,7 +30,7 @@ class AddressNotFoundError(Exception):
 
 
 @pytest.mark.xfail
-async def test_deploy_and_relate_charms(ops_test, loki_charm):
+async def test_deploy_and_relate_charms(ops_test, loki_charm, cos_channel):
     """Test that Prometheus can be related with the Grafana Agent over remote_write."""
     await asyncio.gather(
         ops_test.model.deploy(
@@ -42,13 +42,13 @@ async def test_deploy_and_relate_charms(ops_test, loki_charm):
         ops_test.model.deploy(
             "grafana-k8s",
             application_name=GRAFANA,
-            channel="edge",
+            channel=cos_channel,
             trust=True,
         ),
         ops_test.model.deploy(
             "prometheus-k8s",
             application_name=PROMETHEUS,
-            channel="edge",
+            channel=cos_channel,
             trust=True,
         ),
     )

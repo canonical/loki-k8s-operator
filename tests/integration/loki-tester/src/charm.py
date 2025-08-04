@@ -6,6 +6,7 @@
 
 import logging
 from multiprocessing import Queue
+from typing import Dict, Optional
 
 import logging_loki  # type: ignore
 from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
@@ -39,7 +40,7 @@ class LokiTesterCharm(CharmBase):
         self.topology = JujuTopology.from_charm(self)
         self.unit.status = ActiveStatus()
 
-    def _setup_logging(self, handlers_init: dict = None) -> None:
+    def _setup_logging(self, handlers_init: Optional[Dict] = None) -> None:
         """Ensure logging is configured correctly.
 
         A dict of "wanted" loggers is passed in, and the list of current loggers known to
@@ -67,7 +68,11 @@ class LokiTesterCharm(CharmBase):
         handlers = {v["handler"].name: v["handler"] for v in handlers_init.values()}
 
         # Check against logger.Manager and exclude "useless" values like logging.Placeholder
-        existing_handlers: dict[str, logging.Handler] = {k: v for k, v in logger.manager.loggerDict.items() if not isinstance(v, logging.PlaceHolder) and "loki" not in k}  # type: ignore
+        existing_handlers: dict[str, logging.Handler] = {
+            k: v
+            for k, v in logger.manager.loggerDict.items()
+            if not isinstance(v, logging.PlaceHolder) and "loki" not in k
+        }  # type: ignore
 
         if set(handlers.keys()) == set(existing_handlers.keys()):
             # Nothing to do
@@ -164,6 +169,7 @@ class LokiTesterCharm(CharmBase):
             self.log("debug", "Successfully set Loki Logger")
 
     def log(self, level, msg):
+        """Log something."""
         try:
             getattr(self.logger, level)(msg)
             return True
