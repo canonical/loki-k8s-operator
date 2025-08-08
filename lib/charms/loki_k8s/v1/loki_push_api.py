@@ -543,7 +543,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 18
+LIBPATCH = 19
 
 PYDEPS = ["cosl"]
 
@@ -924,7 +924,14 @@ class AlertRules:
             List of files in `dir_path` that have one of the suffixes specified in `suffixes`.
         """
         all_files_in_dir = dir_path.glob("**/*" if recursive else "*")
-        return list(filter(lambda f: f.is_file() and f.suffix in suffixes, all_files_in_dir))
+        before_filter = {p for p in all_files_in_dir if p.is_file()}
+        filtered = {p for p in before_filter if p.suffix in suffixes}
+        removed = before_filter - filtered
+        if removed:
+            logger.info("Ignoring the following paths, because they do not have the right suffixes"
+                        "({suffixes}): {', '.join([str(p) for p in removed])}")
+
+        return list(filtered)
 
     def _from_dir(self, dir_path: Path, recursive: bool) -> List[dict]:
         """Read all rule files in a directory.
