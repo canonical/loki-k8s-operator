@@ -51,7 +51,6 @@ auth_enabled: false
 chunk_store_config:
   max_look_back_period: 0s
 compactor:
-  shared_store: filesystem
   working_directory: /loki/boltdb-shipper-compactor
 ingester:
   chunk_idle_period: 1h
@@ -96,7 +95,6 @@ storage_config:
     active_index_directory: /loki/boltdb-shipper-active
     cache_location: /loki/boltdb-shipper-cache
     cache_ttl: 24h
-    shared_store: filesystem
   filesystem:
     directory: /loki/chunks
 table_manager:
