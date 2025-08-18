@@ -180,12 +180,10 @@ class ConfigBuilder:
         return {
             "boltdb_shipper": {
                 "active_index_directory": BOLTDB_DIR,
-                "shared_store": "filesystem",
                 "cache_location": BOLTDB_CACHE_DIR,
             },
             "tsdb_shipper": {
                 "active_index_directory": TSDB_DIR,
-                "shared_store": "filesystem",
                 "cache_location": TSDB_CACHE_DIR,
             },
             "filesystem": {"directory": CHUNKS_DIR},
@@ -263,7 +261,6 @@ class ConfigBuilder:
             # Activate custom retention. Default is False.
             "retention_enabled": retention_enabled,
             "working_directory": COMPACTOR_DIR,
-            "shared_store": "filesystem",
         }
 
     @property
