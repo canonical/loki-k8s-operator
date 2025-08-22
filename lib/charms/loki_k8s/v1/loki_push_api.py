@@ -929,8 +929,8 @@ class AlertRules:
         filtered = {p for p in before_filter if p.suffix in suffixes}
         removed = before_filter - filtered
         if removed:
-            logger.info("Ignoring the following paths, because they do not have the right suffixes"
-                        "({suffixes}): {', '.join([str(p) for p in removed])}")
+            logger.info("Ignoring non-rule files (incorrect suffix)"
+                        f"({suffixes}): {', '.join([str(p) for p in removed])}")
 
         return list(filtered)
 
