@@ -133,7 +133,7 @@ resources:
   loki-image:
     type: oci-image
     description: Loki OCI image
-    upstream-source: docker.io/ubuntu/loki:2-22.04
+    upstream-source: docker.io/ubuntu/loki:3-24.04
   node-exporter-image:
     type: oci-image
     description: Node-exporter OCI image
