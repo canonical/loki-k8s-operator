@@ -1615,20 +1615,17 @@ class ConsumerBase(Object):
                 if unit.app == self._charm.app:
                     continue
 
-                endpoint = relation.data[unit].get("endpoint")
-                if endpoint:
-                    deserialized_endpoint = json.loads(endpoint)
-                    url = deserialized_endpoint.get("url")
+                if not (endpoint := relation.data[unit].get("endpoint")):
+                    continue
 
-                    """
-                    # It's necessary to deduplicte the endpoints because if we don't do this, in the event that Loki coordinator is related to Flog and is scaled,
-                    # in the /etc/promtail/promtail_config.yaml of Flog, there will duplicate entries for each unit of the Loki coordinator, which will cause Flog to go into error due to the duplication.
-                    # The deduplication applied here
-                    """
+                deserialized_endpoint = json.loads(endpoint)
+                url = deserialized_endpoint.get("url")
 
-                    if url and url not in seen_urls:
-                        seen_urls.add(url)
-                        endpoints.append({"url": url})
+                if not url or url in seen_urls:
+                    continue
+
+                seen_urls.add(url)
+                endpoints.append({"url": url})
 
         return endpoints
 
