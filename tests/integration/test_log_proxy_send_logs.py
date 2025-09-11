@@ -20,7 +20,7 @@ resources = {
 }
 tester_resources = {
     "workload-image": oci_image(
-        "./tests/integration/log-proxy-tester/metadata.yaml", "workload-image"
+        "./tests/integration/log-proxy-tester/charmcraft.yaml", "workload-image"
     )
 }
 
