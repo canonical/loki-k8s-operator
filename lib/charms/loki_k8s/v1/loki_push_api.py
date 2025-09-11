@@ -1621,15 +1621,21 @@ class ConsumerBase(Object):
                 deserialized_endpoint = json.loads(endpoint)
                 url = deserialized_endpoint.get("url")
 
-                # It's necessary to deduplicte the endpoints because if we don't do this, in the event that Loki coordinator is related to Flog and is scaled,
-                # in the /etc/promtail/promtail_config.yaml of Flog, there will duplicate entries for each unit of the Loki coordinator, which will cause Flog to go into error due to the duplication.
-                # The deduplication applied here
+                # Deduplicate by URL.
+                # With loki-k8s we have ingress-per-unit, so in that case
+                # we do want to collect the URLs of all the units.
+                # With loki-coordinator-k8s, even when the coordinator
+                # is scaled, we only want to advertise only one URL.
+                # Without deduplication, we'd end up with the same
+                # tls config section in the promtail config file, in which
+                # case promtail immediately exits with the following error:
+                # hook failed: log-proxy-relation changed
 
                 if not url or url in seen_urls:
                     continue
 
                 seen_urls.add(url)
-                endpoints.append({"url": url})
+                endpoints.append(deserialized_endpoint)
 
         return endpoints
 
