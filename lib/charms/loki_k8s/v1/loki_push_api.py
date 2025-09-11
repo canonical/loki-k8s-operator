@@ -1625,11 +1625,11 @@ class ConsumerBase(Object):
                 # With loki-k8s we have ingress-per-unit, so in that case
                 # we do want to collect the URLs of all the units.
                 # With loki-coordinator-k8s, even when the coordinator
-                # is scaled, we only want to advertise only one URL.
+                # is scaled, we want to advertise only one URL.
                 # Without deduplication, we'd end up with the same
                 # tls config section in the promtail config file, in which
                 # case promtail immediately exits with the following error:
-                # hook failed: log-proxy-relation changed
+                # [promtail] level=error ts=<timestamp> msg="error creating promtail" error="failed to create client manager: duplicate client configs are not allowed, found duplicate for name: "
 
                 if not url or url in seen_urls:
                     continue
