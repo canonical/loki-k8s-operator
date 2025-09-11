@@ -41,9 +41,9 @@ async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki
             application_name=tester_app_name,
         ),
         ops_test.model.deploy(
-            "ch:alertmanager-k8s",
+            "alertmanager-k8s",
             application_name=alertmanager_app_name,
-            channel="edge",
+            channel="1/edge",
             trust=True,
         ),
     )
@@ -66,8 +66,10 @@ async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki
     )
 
     # Trigger a log message to fire an alert on
-    await ops_test.model.applications[tester_app_name].units[0].run_action(
-        "log-error", message="Error logged!"
+    await (
+        ops_test.model.applications[tester_app_name]
+        .units[0]
+        .run_action("log-error", message="Error logged!")
     )
     alerts = await get_alertmanager_alerts(ops_test, "alertmanager", 0, retries=100)
     assert all(
