@@ -21,9 +21,9 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-V11_APP_NAME = f'v11-{METADATA["name"]}'
-V12_APP_NAME = f'v12-{METADATA["name"]}'
-V13_APP_NAME = f'v13-{METADATA["name"]}'
+V11_APP_NAME = f"v11-{METADATA['name']}"
+V12_APP_NAME = f"v12-{METADATA['name']}"
+V13_APP_NAME = f"v13-{METADATA['name']}"
 LOKI_UPGRADED = "loki-v11-v12-v13"
 
 resources = {
@@ -69,9 +69,9 @@ async def deploy_charm_from_charmhub_v11(ops_test: OpsTest, app_name):
     logger.debug("Deploying charm from Charmhub")
     assert ops_test.model
     await ops_test.model.deploy(
-        "ch:loki-k8s",
+        "loki-k8s",
         application_name=app_name,
-        channel="edge",
+        channel="1/edge",
         revision=140,
         trust=True,
     )
@@ -84,7 +84,7 @@ async def upgrade_charm_from_charmhub_v12(ops_test: OpsTest, app_name, loki_char
     assert ops_test.model
     application = ops_test.model.applications[app_name]
     assert application
-    await application.refresh(channel="stable", revision=151)
+    await application.refresh(channel="1/stable", revision=151)
     await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
 
 

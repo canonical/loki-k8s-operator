@@ -1,41 +1,17 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
-"""## Overview.
+"""# [DEPRECATED] CertHandler Library.
 
-This document explains how to use the `CertHandler` class to
-create and manage TLS certificates through the `tls_certificates` interface.
+The `cert_handler` library is deprecated and will be **removed in October 2025**.
+Please migrate to the `tls_certificates_interface.v4` charm library.
 
-The goal of the CertHandler is to provide a wrapper to the `tls_certificates`
-library functions to make the charm integration smoother.
-
-## Library Usage
-
-This library should be used to create a `CertHandler` object, as per the
-following example:
-
-```python
-self.cert_handler = CertHandler(
-    charm=self,
-    key="my-app-cert-manager",
-    cert_subject="unit_name",  # Optional
-)
-```
-
-You can then observe the library's custom event and make use of the key and cert:
-```python
-self.framework.observe(self.cert_handler.on.cert_changed, self._on_server_cert_changed)
-
-container.push(keypath, self.cert_handler.private_key)
-container.push(certpath, self.cert_handler.server_cert)
-```
-
-Since this library uses [Juju Secrets](https://juju.is/docs/juju/secret) it requires Juju >= 3.0.3.
 """
 import abc
 import hashlib
 import ipaddress
 import json
 import socket
+import warnings
 from itertools import filterfalse
 from typing import Dict, List, Optional, Union
 
@@ -68,10 +44,15 @@ logger = logging.getLogger(__name__)
 
 LIBID = "b5cd5cd580f3428fa5f59a8876dcbe6a"
 LIBAPI = 1
-LIBPATCH = 15
+LIBPATCH = 18
 
 VAULT_SECRET_LABEL = "cert-handler-private-vault"
 
+
+warnings.warn(
+    "The `cert_handler` library is deprecated and will be removed in October 2025. Please migrate to the `tls_certificates_interface.v4` charm library.",
+    DeprecationWarning,
+)
 
 def is_ip_address(value: str) -> bool:
     """Return True if the input value is a valid IPv4 address; False otherwise."""
@@ -80,6 +61,37 @@ def is_ip_address(value: str) -> bool:
         return True
     except ipaddress.AddressValueError:
         return False
+
+
+def split_chain(chain: str) -> List[str]:
+    """Split a chain string in to individual cert strings.
+
+    Args:
+        chain: The chain to split.
+
+    Returns:
+        List[str]: A list of cert strings.
+    """
+    certs = []
+    current_cert = []
+    lines = chain.strip().splitlines()
+
+    in_cert = False
+    for line in lines:
+        line = line.strip()
+        if line == "-----BEGIN CERTIFICATE-----":
+            # The first line of a new cert.
+            in_cert = True
+            current_cert = [line]
+        elif line == "-----END CERTIFICATE-----":
+            # The last line of the cert.
+            current_cert.append(line)
+            certs.append("\n".join(current_cert))
+            in_cert = False
+        elif in_cert:
+            # Somewhere in the middle.
+            current_cert.append(line)
+    return certs
 
 
 class CertChanged(EventBase):
@@ -609,10 +621,19 @@ class CertHandler(Object):
         cert = self.get_cert()
         if not cert:
             return None
-        chain = cert.chain_as_pem()
+        chain = cert.chain_as_pem_string()
         if cert.certificate not in chain:
             # add server cert to chain
             chain = cert.certificate + "\n\n" + chain
+
+        # Needed for backwards compatibility with self-signed-certificates.
+        # See https://github.com/canonical/traefik-k8s-operator/issues/491.
+        # This should be removed when revision 308 of self-signed-certificates is sufficiently old.
+        certs = split_chain(chain)
+        if cert.certificate.strip() != certs[0].strip():
+            certs.reverse()
+            chain = "\n\n".join(certs)
+
         return chain
 
     def _on_certificate_expiring(

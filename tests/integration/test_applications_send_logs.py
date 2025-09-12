@@ -19,7 +19,7 @@ resources = {
 }
 tester_resources = {
     "workload-image": oci_image(
-        "./tests/integration/log-proxy-tester/metadata.yaml", "workload-image"
+        "./tests/integration/log-proxy-tester/charmcraft.yaml", "workload-image"
     )
 }
 
@@ -88,8 +88,10 @@ async def test_scale_up_also_gets_logs(ops_test):
     assert await is_loki_up(ops_test, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on just to ensure we have logs
-    await ops_test.model.applications["loki-tester"].units[0].run_action(
-        "log-error", message="Error logged!"
+    await (
+        ops_test.model.applications["loki-tester"]
+        .units[0]
+        .run_action("log-error", message="Error logged!")
     )
     await ops_test.model.wait_for_idle(
         apps=app_names, status="active", timeout=1000, idle_period=60
