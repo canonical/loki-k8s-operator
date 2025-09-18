@@ -374,6 +374,15 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
+        api_endpoints = {
+            "Instant query": "/loki/api/v1/query",
+            "Query range": "/loki/api/v1/query_range",
+            "Labels": "/loki/api/v1/labels",
+            "Label values": "/loki/api/v1/label/<name>/values",
+            "Prometheus alerts": "/prometheus/api/v1/alerts",
+            "Prometheus rules": "/prometheus/api/v1/alerts",
+            "Format query": "/loki/api/v1/format_query"
+        }
         return CatalogueItem(
             name="Loki",
             icon="math-log",
@@ -384,6 +393,8 @@ class LokiOperatorCharm(CharmBase):
                 "Loki collects, stores and serves logs, "
                 "alongside optional key-value pairs called labels."
             ),
+            api_docs = "https://grafana.com/docs/loki/latest/reference/loki-http-api/",
+            api_endpoints = {key: f"{self.external_url}{path}" for key, path in api_endpoints.items()}
         )
 
     @property
