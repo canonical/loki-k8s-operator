@@ -394,7 +394,7 @@ class LokiOperatorCharm(CharmBase):
                 "alongside optional key-value pairs called labels."
             ),
             api_docs = "https://grafana.com/docs/loki/latest/reference/loki-http-api/",
-            api_endpoints = {key: f"{self.external_url}{path}" for key, path in api_endpoints.items()}
+            api_endpoints = {key: f"{self._external_url}{path}" for key, path in api_endpoints.items()}
         )
 
     @property
