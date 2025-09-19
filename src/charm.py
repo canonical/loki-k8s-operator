@@ -379,8 +379,7 @@ class LokiOperatorCharm(CharmBase):
             "Query range": "/loki/api/v1/query_range",
             "Labels": "/loki/api/v1/labels",
             "Label values": "/loki/api/v1/label/<name>/values",
-            "Prometheus alerts": "/prometheus/api/v1/alerts",
-            "Prometheus rules": "/prometheus/api/v1/alerts",
+            "Alerts": "/prometheus/api/v1/alerts",
             "Format query": "/loki/api/v1/format_query"
         }
         return CatalogueItem(
