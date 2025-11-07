@@ -503,6 +503,7 @@ import json
 import logging
 import os
 import platform
+import ipaddress
 import re
 import socket
 import subprocess
@@ -1301,7 +1302,14 @@ class LokiPushApiProvider(Object):
             only emit one on lifecycle events
         """
         relation.data[self._charm.unit]["public_address"] = socket.getfqdn() or ""
-        self.update_endpoint(relation=relation)
+
+        # If the self.address is set, try use that or fallback.
+        url = self._build_url_from_address()
+        
+        if url:
+            self.update_endpoint(url=url, relation=relation)
+        else:
+            self.update_endpoint(relation=relation)
         return self._should_update_alert_rules(relation)
 
     @property
@@ -1364,6 +1372,45 @@ class LokiPushApiProvider(Object):
         """
         endpoint = "/loki/api/v1/push"
         return {"url": url.rstrip("/") + endpoint}
+
+    def _build_url_from_address(self) -> Optional[str]:
+        """Build a URL using self.address if it is a valid hostname or IP.
+
+        - IPv4 or IPv6 literals are accepted (IPv6 will be wrapped in brackets).
+        - Hostnames must comply with RFC 1035/1123 label rules.
+
+        Returns an URL string if valid, otherwise None.
+        """
+        addr = (self.address or "").strip()
+        if not addr:
+            return None
+
+        # Try IP literal first
+        try:
+            ip_obj = ipaddress.ip_address(addr)
+            host_for_url = f"[{addr}]" if ip_obj.version == 6 else addr
+            return f"{self.scheme}://{host_for_url}:{self.port}"
+        except ValueError:
+            pass
+
+        # Validate hostname
+        if self._is_valid_hostname(addr):
+            return f"{self.scheme}://{addr}:{self.port}"
+
+        return None
+
+    def _is_valid_hostname(self, hostname: str) -> bool:
+        """Validate hostname per RFC 1035/1123 constraints (no DNS lookup)."""
+        if len(hostname) > 253:
+            return False
+        # Allow trailing dot, but ignore it for validation
+        if hostname.endswith("."):
+            hostname = hostname[:-1]
+        labels = hostname.split(".")
+        if any(len(label) == 0 for label in labels):
+            return False
+        label_regex = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+        return all(label_regex.match(label) is not None for label in labels)
 
     @property
     def alerts(self) -> dict:  # noqa: C901
