@@ -1305,7 +1305,7 @@ class LokiPushApiProvider(Object):
 
         # If the self.address is set, try use that or fallback.
         url = self._build_url_from_address()
-        
+
         if url:
             self.update_endpoint(url=url, relation=relation)
         else:
