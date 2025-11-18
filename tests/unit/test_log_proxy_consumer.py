@@ -247,7 +247,7 @@ class TestLogProxyConsumer(unittest.TestCase):
 
         # Set up an initial state with a sum that won't match
         fake_promtail = os.path.join(tmpdir, PROMTAIL_INFO["filename"])
-        fake_content = "dummy_data".encode()
+        fake_content = "sample_data".encode()
         Path(fake_promtail).write_bytes(fake_content)
 
         with self.assertLogs(level="DEBUG") as logger:
