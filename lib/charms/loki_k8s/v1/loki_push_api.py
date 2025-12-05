@@ -1184,7 +1184,7 @@ class LokiPushApiProvider(Object):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
         )
-        
+
         if address != "":
             warnings.warn(
                 "The 'address' parameter is deprecated and will be removed in v2.0. "
@@ -1192,7 +1192,7 @@ class LokiPushApiProvider(Object):
                 DeprecationWarning,
                 stacklevel=2,
             )
-        
+
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
