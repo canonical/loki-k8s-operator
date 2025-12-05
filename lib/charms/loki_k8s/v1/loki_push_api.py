@@ -1166,7 +1166,7 @@ class LokiPushApiProvider(Object):
                 other charms that consume metrics endpoints.
             port: an optional port of the Loki service (default is "3100").
             scheme: an optional scheme of the Loki API URL (default is "http").
-            address: DEPRECATED. This argument is ignored and will be removed in v2.0.
+            address: DEPRECATED. This argument is ignored and will be removed in v2.
                 It is kept for backward compatibility.
                 Use `update_endpoint()` instead.
             path: an optional path of the Loki API URL (default is "loki/api/v1/push")
@@ -1187,7 +1187,7 @@ class LokiPushApiProvider(Object):
 
         if address != "":
             warnings.warn(
-                "The 'address' parameter is deprecated and will be removed in v2.0. "
+                "The 'address' parameter is deprecated and will be removed in v2. "
                 "Use 'update_endpoint()' instead.",
                 DeprecationWarning,
                 stacklevel=2,
