@@ -1150,7 +1150,7 @@ class LokiPushApiProvider(Object):
         *,
         port: Union[str, int] = 3100,
         scheme: str = "http",
-        address: str = "localhost",
+        address: str = "",
         path: str = "loki/api/v1/push",
     ):
         """A Loki service provider.
@@ -1165,7 +1165,9 @@ class LokiPushApiProvider(Object):
                 other charms that consume metrics endpoints.
             port: an optional port of the Loki service (default is "3100").
             scheme: an optional scheme of the Loki API URL (default is "http").
-            address: an optional address of the Loki service (default is "localhost").
+            address: DEPRECATED. This argument is ignored and will be removed in a
+                future version. It is kept for backward compatibility.
+                Use `update_endpoint()` instead.
             path: an optional path of the Loki API URL (default is "loki/api/v1/push")
 
         Raises:
@@ -1187,7 +1189,6 @@ class LokiPushApiProvider(Object):
         self._tool = CosTool(self)
         self.port = int(port)
         self.scheme = scheme
-        self.address = address
         self.path = path
 
         events = self._charm.on[relation_name]
