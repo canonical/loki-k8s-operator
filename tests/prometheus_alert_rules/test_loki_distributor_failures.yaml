@@ -5,19 +5,21 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
-  # Test case 1: Alert should fire when distributor is rejecting logs
+  # Test case 1: Alert should fire when distributor is rejecting logs above threshold
   - interval: 1m
     input_series:
+      # Rate of 0.17/s is above the 0.1/s threshold
+      # Need enough data points for rate[5m] to work and alert to pend for 5m
       - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="context_cancelled"}'
-        values: '0 10 20 30 40 50 60 70 80 90 100 110'
+        values: '0 10 20 30 40 50 60 70 80 90 100 110 120 130 140 150'
 
     alert_rule_test:
-      # Should not fire before 'for' duration passes
-      - eval_time: 4m
+      # Should not fire at exactly 9m (alert becomes pending at ~4m, so fires at ~9m)
+      - eval_time: 8m
         alertname: LokiDistributorRejectingLogs
         exp_alerts: []
       # Should fire after 'for' duration
-      - eval_time: 6m
+      - eval_time: 10m
         alertname: LokiDistributorRejectingLogs
         exp_alerts:
           - exp_labels:
@@ -31,25 +33,40 @@ tests:
   - interval: 1m
     input_series:
       - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="context_cancelled"}'
-        values: '0 0 0 0 0 0 0 0 0 0 0 0'
+        values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'
 
     alert_rule_test:
-      - eval_time: 6m
+      - eval_time: 10m
         alertname: LokiDistributorRejectingLogs
         exp_alerts: []
 
-  # Test case 3: Alert should fire separately for different routes and reasons
+  # Test case 3: Alert should NOT fire for very low rejection rates (below threshold)
   - interval: 1m
     input_series:
+      # Rate of ~0.033/s is below the 0.1/s threshold
       - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="context_cancelled"}'
-        values: '0 5 10 15 20 25 30 35 40 45 50 55'
-      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="rate_limited"}'
-        values: '0 3 6 9 12 15 18 21 24 27 30 33'
-      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="/logproto.Pusher/Push", reason="context_cancelled"}'
-        values: '0 8 16 24 32 40 48 56 64 72 80 88'
+        values: '0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30'
 
     alert_rule_test:
-      - eval_time: 6m
+      - eval_time: 10m
+        alertname: LokiDistributorRejectingLogs
+        exp_alerts: []
+
+  # Test case 4: Alert should fire separately for different routes and reasons
+  - interval: 1m
+    input_series:
+      # Rate of 0.17/s on context_cancelled
+      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="context_cancelled"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100 110 120 130 140 150'
+      # Rate of 0.13/s on rate_limited
+      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="rate_limited"}'
+        values: '0 8 16 24 32 40 48 56 64 72 80 88 96 104 112 120'
+      # Rate of 0.13/s on different route
+      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="/logproto.Pusher/Push", reason="context_cancelled"}'
+        values: '0 8 16 24 32 40 48 56 64 72 80 88 96 104 112 120'
+
+    alert_rule_test:
+      - eval_time: 10m
         alertname: LokiDistributorRejectingLogs
         exp_alerts:
           - exp_labels:
