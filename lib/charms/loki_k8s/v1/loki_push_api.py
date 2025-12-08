@@ -79,7 +79,6 @@ and three optional arguments.
               external_url = urlparse(self._external_url)
               self.loki_provider = LokiPushApiProvider(
                   self,
-                  address=external_url.hostname or self.hostname,
                   port=external_url.port or 80,
                   scheme=external_url.scheme,
                   path=f"{external_url.path}/loki/api/v1/push",
@@ -96,6 +95,7 @@ The `LokiPushApiProvider` object has several responsibilities:
 
 1. Set the URL of the Loki Push API in the relation application data bag; the URL
    must be unique to all instances (e.g. using a load balancer).
+   The default URL is the FQDN, but this can be overridden by calling `update_endpoint()`.
 
 2. Set the Promtail binary URL (`promtail_binary_zip_url`) so clients that use
    `LogProxyConsumer` object could download and configure it.
@@ -545,7 +545,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 21
+LIBPATCH = 22
 
 PYDEPS = ["cosl"]
 
