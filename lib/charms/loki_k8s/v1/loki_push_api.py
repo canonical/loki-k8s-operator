@@ -79,7 +79,6 @@ and three optional arguments.
               external_url = urlparse(self._external_url)
               self.loki_provider = LokiPushApiProvider(
                   self,
-                  address=external_url.hostname or self.hostname,
                   port=external_url.port or 80,
                   scheme=external_url.scheme,
                   path=f"{external_url.path}/loki/api/v1/push",
@@ -96,6 +95,7 @@ The `LokiPushApiProvider` object has several responsibilities:
 
 1. Set the URL of the Loki Push API in the relation application data bag; the URL
    must be unique to all instances (e.g. using a load balancer).
+   The default URL is the FQDN, but this can be overridden by calling `update_endpoint()`.
 
 2. Set the Promtail binary URL (`promtail_binary_zip_url`) so clients that use
    `LogProxyConsumer` object could download and configure it.
@@ -508,6 +508,7 @@ import socket
 import subprocess
 import tempfile
 import typing
+import warnings
 from copy import deepcopy
 from gzip import GzipFile
 from hashlib import sha256
@@ -544,7 +545,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 21
+LIBPATCH = 22
 
 PYDEPS = ["cosl"]
 
@@ -1150,7 +1151,7 @@ class LokiPushApiProvider(Object):
         *,
         port: Union[str, int] = 3100,
         scheme: str = "http",
-        address: str = "localhost",
+        address: str = "",
         path: str = "loki/api/v1/push",
     ):
         """A Loki service provider.
@@ -1165,7 +1166,9 @@ class LokiPushApiProvider(Object):
                 other charms that consume metrics endpoints.
             port: an optional port of the Loki service (default is "3100").
             scheme: an optional scheme of the Loki API URL (default is "http").
-            address: an optional address of the Loki service (default is "localhost").
+            address: DEPRECATED. This argument is ignored and will be removed in v2.
+                It is kept for backward compatibility.
+                Use `update_endpoint()` instead.
             path: an optional path of the Loki API URL (default is "loki/api/v1/push")
 
         Raises:
@@ -1181,13 +1184,21 @@ class LokiPushApiProvider(Object):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
         )
+
+        if address != "":
+            warnings.warn(
+                "The 'address' parameter is deprecated and will be removed in v2. "
+                "Use 'update_endpoint()' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
         self._tool = CosTool(self)
         self.port = int(port)
         self.scheme = scheme
-        self.address = address
         self.path = path
 
         events = self._charm.on[relation_name]
