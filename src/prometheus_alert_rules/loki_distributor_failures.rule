@@ -3,7 +3,7 @@ groups:
 - name: LokiDistributorFailures
   rules:
   - alert: LokiDistributorRejectingLogs
-    expr: sum(rate(loki_distributor_rejected_requests_total[5m])) by (namespace, job, route, reason) > 0
+    expr: sum(rate(loki_distributor_rejected_requests_total[5m])) by (namespace, job, route, reason) > 0.1
     for: 5m
     labels:
       severity: warning
