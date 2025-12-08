@@ -1,0 +1,72 @@
+# Unit tests for LokiDistributorFailures alert rule
+rule_files:
+  - ../../src/prometheus_alert_rules/loki_distributor_failures.rule
+
+evaluation_interval: 1m
+
+tests:
+  # Test case 1: Alert should fire when distributor is rejecting logs
+  - interval: 1m
+    input_series:
+      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="context_cancelled"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100 110'
+
+    alert_rule_test:
+      # Should not fire before 'for' duration passes
+      - eval_time: 4m
+        alertname: LokiDistributorRejectingLogs
+        exp_alerts: []
+      # Should fire after 'for' duration
+      - eval_time: 6m
+        alertname: LokiDistributorRejectingLogs
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: test
+              job: loki
+              route: loki_api_v1_push
+              reason: context_cancelled
+
+  # Test case 2: Alert should NOT fire when there are no rejections
+  - interval: 1m
+    input_series:
+      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="context_cancelled"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0 0'
+
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: LokiDistributorRejectingLogs
+        exp_alerts: []
+
+  # Test case 3: Alert should fire separately for different routes and reasons
+  - interval: 1m
+    input_series:
+      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="context_cancelled"}'
+        values: '0 5 10 15 20 25 30 35 40 45 50 55'
+      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="loki_api_v1_push", reason="rate_limited"}'
+        values: '0 3 6 9 12 15 18 21 24 27 30 33'
+      - series: 'loki_distributor_rejected_requests_total{namespace="test", job="loki", route="/logproto.Pusher/Push", reason="context_cancelled"}'
+        values: '0 8 16 24 32 40 48 56 64 72 80 88'
+
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: LokiDistributorRejectingLogs
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: test
+              job: loki
+              route: loki_api_v1_push
+              reason: context_cancelled
+          - exp_labels:
+              severity: warning
+              namespace: test
+              job: loki
+              route: loki_api_v1_push
+              reason: rate_limited
+          - exp_labels:
+              severity: warning
+              namespace: test
+              job: loki
+              route: /logproto.Pusher/Push
+              reason: context_cancelled
