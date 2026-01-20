@@ -1200,7 +1200,7 @@ class LokiPushApiProvider(Object):
         self.port = int(port)
         self.scheme = scheme
         self.path = path
-        self.custom_url = None
+        self._custom_url = None
 
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
@@ -1352,9 +1352,9 @@ class LokiPushApiProvider(Object):
             relations_list = [relation]
 
         if url:
-            self.custom_url = url
+            self._custom_url = url
 
-        endpoint = self._endpoint(self.custom_url or self._url)
+        endpoint = self._endpoint(self._custom_url or self._url)
 
         for relation in relations_list:
             relation.data[self._charm.unit].update({"endpoint": json.dumps(endpoint)})
