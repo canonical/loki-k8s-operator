@@ -545,7 +545,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 23
+LIBPATCH = 22
 
 PYDEPS = ["cosl"]
 
@@ -1337,6 +1337,11 @@ class LokiPushApiProvider(Object):
         the `logging` relation lifecycle, e.g., in case of a
         host address change because the charmed operator becomes connected to an
         Ingress after the `logging` relation is established.
+
+        To make this library reconciler-friendly, the endpoint URL was made sticky i.e., once the
+        endpoint is updated with a custom URL, using the public method, it cannot be unset. Users
+        of this method should set the "url" arg to an internal URL if the charms ingress is no
+        longer available.
 
         Args:
             url: An optional url value to update relation data.
