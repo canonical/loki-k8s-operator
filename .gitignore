@@ -10,3 +10,5 @@ venv
 tests/integration/loki-tester/lib/charms/loki_k8s
 tests/integration/log-proxy-tester/lib/charms/loki_k8s
 cos-tool*
+prometheus-*.tar.gz
+prometheus-*/

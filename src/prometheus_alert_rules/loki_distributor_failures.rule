@@ -1,0 +1,12 @@
+# Alert for Loki distributor failures (e.g., context cancelled errors)
+groups:
+- name: LokiDistributorFailures
+  rules:
+  - alert: LokiDistributorRejectingLogs
+    expr: sum(rate(loki_distributor_rejected_requests_total[5m])) by (namespace, job, route, reason) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Loki distributor rejecting logs on route {{ $labels.route }} (job {{ $labels.job }})
+      description: "The {{ $labels.job }} distributor is rejecting log entries on route {{ $labels.route }} due to {{ $labels.reason }}\n  Rate = {{ printf \"%.2f\" $value }}/s\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
