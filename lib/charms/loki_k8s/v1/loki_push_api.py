@@ -545,7 +545,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 22
+LIBPATCH = 23
 
 PYDEPS = ["cosl"]
 
@@ -1200,6 +1200,7 @@ class LokiPushApiProvider(Object):
         self.port = int(port)
         self.scheme = scheme
         self.path = path
+        self._custom_url = None
 
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
@@ -1350,7 +1351,10 @@ class LokiPushApiProvider(Object):
         else:
             relations_list = [relation]
 
-        endpoint = self._endpoint(url or self._url)
+        if url:
+            self._custom_url = url
+
+        endpoint = self._endpoint(self._custom_url or self._url)
 
         for relation in relations_list:
             relation.data[self._charm.unit].update({"endpoint": json.dumps(endpoint)})

@@ -1,9 +1,10 @@
+import json
 import logging
 from unittest.mock import patch
 
 import ops.pebble
 import pytest
-from ops.testing import Container, Exec, State
+from ops.testing import Container, Exec, Relation, State
 
 
 @pytest.fixture
@@ -86,3 +87,32 @@ def test_endpoints_on_loki_ready_tls(_, context, loki_emitter):
         if record.filename == __name__ + ".py":  # log emitted by this module
             assert record.msg == "bar"
             assert record.name == "foo"
+
+
+def test_update_endpoints(context, loki_container):
+    # GIVEN a logging relation
+    logging = Relation("logging")
+    state = State(containers=[loki_container], relations=[logging])
+
+    # WHEN the logging relation changes
+    with context(context.on.relation_changed(logging), state) as mgr:
+        charm = mgr.charm
+        state_out = mgr.run()
+        unit_data = state_out.get_relations(logging.endpoint)[0].local_unit_data
+        # THEN the FQDN is in the endpoint
+        assert json.loads(unit_data["endpoint"])["url"] == "http://fqdn:3100/loki/api/v1/push"
+
+        # AND WHEN the endpoint is updated to a False-like value
+        charm.loki_provider.update_endpoint("")
+        # THEN the endpoint still contains the FQDN
+        assert json.loads(unit_data["endpoint"])["url"] == "http://fqdn:3100/loki/api/v1/push"
+
+        # AND WHEN the endpoint is updated to a new host
+        charm.loki_provider.update_endpoint("http://foo")
+        # THEN the endpoint contains this new host
+        assert json.loads(unit_data["endpoint"])["url"] == "http://foo/loki/api/v1/push"
+
+        # AND WHEN the endpoint is updated to a False-like value
+        charm.loki_provider.update_endpoint("")
+        # THEN the endpoint is not updated
+        assert json.loads(unit_data["endpoint"])["url"] == "http://foo/loki/api/v1/push"
