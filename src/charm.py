@@ -279,33 +279,13 @@ class LokiOperatorCharm(CharmBase):
         )
         self.framework.observe(self.on.logging_relation_changed, self._on_logging_relation_changed)
 
-        self.framework.observe(
-            self.on.send_datasource_relation_changed, self._on_grafana_source_changed
-        )
-        self.framework.observe(
-            self.on.send_datasource_relation_departed, self._on_grafana_source_changed
-        )
-        self.framework.observe(
-            self.on.grafana_source_relation_joined, self._on_grafana_source_changed
-        )
-        self.framework.observe(
-            self.on.grafana_source_relation_changed, self._on_grafana_source_changed
-        )
-        self.framework.observe(
-            self.on.grafana_source_relation_created, self._on_grafana_source_changed
-        )
-        self.framework.observe(
-            self.on.grafana_source_relation_departed, self._on_grafana_source_changed
-        )
+        self._reconcile()
 
         self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
     ##############################################
     #           CHARM HOOKS HANDLERS             #
     ##############################################
-
-    def _on_grafana_source_changed(self, _):
-        self._update_datasource_exchange()
 
     def _on_collect_unit_status(self, event: CollectStatusEvent):
         # "Pull" statuses
@@ -547,6 +527,11 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #             UTILITY METHODS                #
     ##############################################
+    def _reconcile(self):
+        # This method contains unconditional update logic, i.e. logic that should be executed
+        # regardless of the event we are processing.
+        self._update_datasource_exchange()
+
     def _configure(self):  # noqa: C901
         """Configure Loki charm."""
         # "is_ready" is a racy check, so we do it once here (instead of in collect-status)
