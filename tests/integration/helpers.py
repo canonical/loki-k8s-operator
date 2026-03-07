@@ -341,7 +341,7 @@ def juju_show_unit(
 
 
 def generate_log_file(
-    model_name: str, app_name: str, unit_num: int, container_name: str, filepath: str
+    model_name: Optional[str], app_name: str, unit_num: int, container_name: str, filepath: str
 ) -> bytes:
     cmd = [
         "juju",
@@ -367,7 +367,7 @@ def generate_log_file(
 
 
 def get_pebble_plan(
-    model_name: str, app_name: str, unit_num: int, container_name: str
+    model_name: Optional[str], app_name: str, unit_num: int, container_name: str
 ) -> str:
     cmd = [
         "juju",
@@ -388,7 +388,7 @@ def get_pebble_plan(
     return res.stdout.decode("utf-8")
 
 
-def delete_pod(model_name: str, app_name: str, unit_num: int) -> bool:
+def delete_pod(model_name: Optional[str], app_name: str, unit_num: int) -> bool:
     cmd = [
         "kubectl",
         "delete",
