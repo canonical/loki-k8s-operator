@@ -41,7 +41,7 @@ def loki_charm(copy_loki_library_into_test_charms):
 def loki_tester_charm(copy_loki_library_into_test_charms):
     """A charm for integration test of the Loki charm."""
     charm_path = "tests/integration/loki-tester"
-    subprocess.run(["charmcraft", "clean", "-p", charm_path], check=True)
+    subprocess.run(["charmcraft", "clean", "--project-dir", charm_path], check=True)
     bad_rule_path = Path("tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule")
     bad_rule_path.unlink(missing_ok=True)
     packed = pytest_jubilant.pack(charm_path)
@@ -54,7 +54,7 @@ def loki_tester_charm(copy_loki_library_into_test_charms):
 def faulty_loki_tester_charm(copy_loki_library_into_test_charms):
     """A faulty tester charm for integration test of the Loki charm."""
     charm_path = "tests/integration/loki-tester"
-    subprocess.run(["charmcraft", "clean", "-p", charm_path], check=True)
+    subprocess.run(["charmcraft", "clean", "--project-dir", charm_path], check=True)
     rules_path = "tests/resources/alert.rule"
     install_path = Path("tests/integration/loki-tester/src/loki_alert_rules/free-standing/error.rule")
     shutil.copyfile(rules_path, install_path)
@@ -71,7 +71,7 @@ def faulty_loki_tester_charm(copy_loki_library_into_test_charms):
 def log_proxy_tester_charm(copy_loki_library_into_test_charms):
     """A charm for integration test of Promtail."""
     charm_path = "tests/integration/log-proxy-tester"
-    subprocess.run(["charmcraft", "clean", "-p", charm_path], check=True)
+    subprocess.run(["charmcraft", "clean", "--project-dir", charm_path], check=True)
     return pytest_jubilant.pack(charm_path)
 
 
@@ -86,7 +86,7 @@ def log_forwarder_tester_charm(copy_loki_library_into_test_charms):
     os.link(LOKI_PUSH_API_V1_PATH, dest_charmlib)
 
     charm_path = "tests/integration/log-forwarder-tester"
-    subprocess.run(["charmcraft", "clean", "-p", charm_path], check=True)
+    subprocess.run(["charmcraft", "clean", "--project-dir", charm_path], check=True)
     packed = pytest_jubilant.pack(charm_path)
 
     shutil.rmtree(dest_charmlib.parent)
