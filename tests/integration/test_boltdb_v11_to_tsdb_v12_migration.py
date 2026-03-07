@@ -11,115 +11,93 @@ Test Scenarios:
 
 import datetime
 import logging
-from pathlib import Path
 
+import jubilant
 import pytest
-import yaml
+import pytest_jubilant
 from helpers import is_loki_up, loki_config
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-V11_APP_NAME = f'v11-{METADATA["name"]}'
-V12_APP_NAME = f'v12-{METADATA["name"]}'
-V13_APP_NAME = f'v13-{METADATA["name"]}'
+resources = pytest_jubilant.get_resources()
+
+V11_APP_NAME = "v11-loki-k8s"
+V12_APP_NAME = "v12-loki-k8s"
+V13_APP_NAME = "v13-loki-k8s"
 LOKI_UPGRADED = "loki-v11-v12-v13"
 
-resources = {
-    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
-    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
-}
 
-
-async def test_setup_env(ops_test: OpsTest):
-    assert ops_test.model
-    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
+def test_setup_env(juju: jubilant.Juju):
+    juju.model_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
 @pytest.mark.xfail
 @pytest.mark.abort_on_fail
-async def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(ops_test: OpsTest, loki_charm, cos_channel):
+def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(juju: jubilant.Juju, loki_charm, cos_channel):
     """Deploy from Charmhub (v11 schema) and upgrade to v12."""
-    await deploy_charm_from_charmhub_v11(ops_test, LOKI_UPGRADED, cos_channel)
-    await upgrade_charm_from_charmhub_v12(ops_test, LOKI_UPGRADED, loki_charm, cos_channel)
-    await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v12")
+    deploy_charm_from_charmhub_v11(juju, LOKI_UPGRADED, cos_channel)
+    upgrade_charm_from_charmhub_v12(juju, LOKI_UPGRADED, loki_charm, cos_channel)
+    verify_upgrade_success(juju, LOKI_UPGRADED, False, "v12")
 
     # Here we upgrade again to ensure config is persisted and won't be overwritten with any weird values
-    await upgrade_charm_from_charmhub_v12(ops_test, LOKI_UPGRADED, loki_charm, cos_channel)
-    await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v12")
+    upgrade_charm_from_charmhub_v12(juju, LOKI_UPGRADED, loki_charm, cos_channel)
+    verify_upgrade_success(juju, LOKI_UPGRADED, False, "v12")
 
-    await upgrade_charm_with_local_charm_v13(ops_test, LOKI_UPGRADED, loki_charm)
-    await verify_upgrade_success(ops_test, LOKI_UPGRADED, False, "v13", True)
+    upgrade_charm_with_local_charm_v13(juju, LOKI_UPGRADED, loki_charm)
+    verify_upgrade_success(juju, LOKI_UPGRADED, False, "v13", True)
 
 
 @pytest.mark.xfail
 @pytest.mark.abort_on_fail
-async def test_deploy_and_upgrade_v13_locally(ops_test: OpsTest, loki_charm):
+def test_deploy_and_upgrade_v13_locally(juju: jubilant.Juju, loki_charm):
     """Deploy from a local charm (v13 schema) and upgrade locally."""
-    await deploy_local_charm_v13(ops_test, V13_APP_NAME, loki_charm)
-    await upgrade_charm_with_local_charm_v13(ops_test, V13_APP_NAME, loki_charm)
-    await verify_upgrade_success(ops_test, V13_APP_NAME, True, "v13")
+    deploy_local_charm_v13(juju, V13_APP_NAME, loki_charm)
+    upgrade_charm_with_local_charm_v13(juju, V13_APP_NAME, loki_charm)
+    verify_upgrade_success(juju, V13_APP_NAME, True, "v13")
 
     # Here we upgrade again to ensure config is persisted and won't be overwritten with any weird values
-    await upgrade_charm_with_local_charm_v13(ops_test, V13_APP_NAME, loki_charm)
-    await verify_upgrade_success(ops_test, V13_APP_NAME, True, "v13")
+    upgrade_charm_with_local_charm_v13(juju, V13_APP_NAME, loki_charm)
+    verify_upgrade_success(juju, V13_APP_NAME, True, "v13")
 
 
-async def deploy_charm_from_charmhub_v11(ops_test: OpsTest, app_name, cos_channel):
+def deploy_charm_from_charmhub_v11(juju: jubilant.Juju, app_name, cos_channel):
     """Deploy the charm from Charmhub."""
     logger.debug("Deploying charm from Charmhub")
-    assert ops_test.model
-    await ops_test.model.deploy(
-        "ch:loki-k8s",
-        application_name=app_name,
-        channel=cos_channel,
-        revision=140,
-        trust=True,
-    )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    juju.deploy("ch:loki-k8s", app_name, channel=cos_channel, revision=140, trust=True)
+    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
 
 
-async def upgrade_charm_from_charmhub_v12(ops_test: OpsTest, app_name, loki_charm, cos_channel):
+def upgrade_charm_from_charmhub_v12(juju: jubilant.Juju, app_name, loki_charm, cos_channel):
     """Upgrade the deployed charm with the local charm."""
     logger.debug("Upgrading deployed charm with local charm %s", loki_charm)
-    assert ops_test.model
-    application = ops_test.model.applications[app_name]
-    assert application
-    await application.refresh(channel=cos_channel)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    juju.refresh(app_name, channel=cos_channel)
+    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
 
 
-async def deploy_local_charm_v13(ops_test: OpsTest, app_name, loki_charm):
+def deploy_local_charm_v13(juju: jubilant.Juju, app_name, loki_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
-    assert ops_test.model
-    await ops_test.model.deploy(
-        loki_charm, application_name=app_name, resources=resources, trust=True
-    )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    juju.deploy(loki_charm, app_name, resources=resources, trust=True)
+    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
 
 
-async def upgrade_charm_with_local_charm_v13(ops_test: OpsTest, app_name, loki_charm):
+def upgrade_charm_with_local_charm_v13(juju: jubilant.Juju, app_name, loki_charm):
     """Upgrade the deployed charm with the local charm."""
     logger.debug("Upgrading deployed charm with local charm %s", loki_charm)
-    assert ops_test.model
-    application = ops_test.model.applications[app_name]
-    assert application
-    await application.refresh(path=loki_charm, resources=resources)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    juju.refresh(app_name, path=loki_charm, resources=resources)
+    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
 
 
-async def verify_upgrade_success(
-    ops_test: OpsTest,
+def verify_upgrade_success(
+    juju: jubilant.Juju,
     app_name,
     is_fresh_installation: bool,
     version: str = "v13",
     after_tomorrow: bool = False,
 ):
     """Verify that the upgrade was successful."""
-    assert await is_loki_up(ops_test, app_name)
-    post_upgrade_config = await loki_config(ops_test, app_name)
+    assert is_loki_up(juju, app_name)
+    post_upgrade_config = loki_config(juju, app_name)
     tsdb_schema_configs = post_upgrade_config["schema_config"]["configs"]
     days = 2 if after_tomorrow else 1
     expected_from = (

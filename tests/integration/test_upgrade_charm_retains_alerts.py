@@ -2,70 +2,52 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import logging
-from pathlib import Path
 
+import jubilant
 import pytest
-import yaml
+import pytest_jubilant
 from helpers import is_loki_up, loki_rules
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-app_name = METADATA["name"]
-resources = {
-    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
-    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
-}
+resources = pytest_jubilant.get_resources()
+app_name = "loki-k8s"
 rules_app = "loki-tester"
 
 
 @pytest.mark.abort_on_fail
-async def test_deploy_charms(ops_test, loki_charm, loki_tester_charm):
+def test_deploy_charms(juju: jubilant.Juju, loki_charm, loki_tester_charm):
     """Deploy Loki.
 
     Assert on the unit status before any relations/configurations take place.
     """
-    await ops_test.model.deploy(
-        loki_charm,
-        resources=resources,
-        application_name=app_name,
-        trust=True,
-    )
+    juju.deploy(loki_charm, app_name, resources=resources, trust=True)
+    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    assert juju.status().apps[app_name].units[f"{app_name}/0"].workload_status.current == "active"
 
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-    assert ops_test.model.applications[app_name].units[0].workload_status == "active"
+    assert is_loki_up(juju, app_name)
 
-    assert await is_loki_up(ops_test, app_name)
-
-    await asyncio.gather(
-        ops_test.model.deploy(
-            loki_tester_charm,
-            application_name=rules_app,
-        ),
-    )
+    juju.deploy(loki_tester_charm, rules_app)
 
     # form a relation between loki and the app that provides rules
-    await ops_test.model.add_relation(app_name, rules_app)
+    juju.integrate(app_name, rules_app)
 
-    await ops_test.model.wait_for_idle(apps=[app_name, rules_app], status="active", timeout=1000)
+    juju.wait(lambda s: jubilant.all_active(s, app_name, rules_app), timeout=1000)
 
     # verify setup is complete and as expected
-    rules = await loki_rules(ops_test, app_name)
+    rules = loki_rules(juju, app_name)
     assert bool(rules)
 
 
-async def test_rule_files_are_retained_after_pod_upgraded(ops_test, loki_charm):
+def test_rule_files_are_retained_after_pod_upgraded(juju: jubilant.Juju, loki_charm):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
-    rules_before_upgrade = await loki_rules(ops_test, app_name)
+    rules_before_upgrade = loki_rules(juju, app_name)
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
-    await ops_test.model.applications[app_name].refresh(path=loki_charm, resources=resources)
+    juju.refresh(app_name, path=loki_charm, resources=resources)
 
-    await ops_test.model.wait_for_idle(
-        apps=[app_name], status="active", timeout=1000, idle_period=60
-    )
+    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
 
-    assert await is_loki_up(ops_test, app_name)
-    rules_after_upgrade = await loki_rules(ops_test, app_name)
+    assert is_loki_up(juju, app_name)
+    rules_after_upgrade = loki_rules(juju, app_name)
     assert rules_after_upgrade == rules_before_upgrade

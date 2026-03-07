@@ -2,58 +2,35 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import logging
-from pathlib import Path
 
+import jubilant
 import pytest
-import yaml
+import pytest_jubilant
 from helpers import is_loki_up, juju_show_unit, loki_alerts
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-resources = {
-    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
-    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
-}
+resources = pytest_jubilant.get_resources()
 
 
 @pytest.mark.abort_on_fail
-async def test_alert_rules_do_fire(ops_test, loki_charm, loki_tester_charm):
+def test_alert_rules_do_fire(juju: jubilant.Juju, loki_charm, loki_tester_charm):
     """Test basic functionality of Loki push API relation interface."""
     loki_app_name = "loki"
     tester_app_name = "loki-tester"
     app_names = [loki_app_name, tester_app_name]
 
-    await asyncio.gather(
-        ops_test.model.deploy(
-            loki_charm,
-            resources=resources,
-            application_name=loki_app_name,
-            trust=True,
-        ),
-        ops_test.model.deploy(
-            loki_tester_charm,
-            application_name=tester_app_name,
-        ),
-    )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
+    juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
+    juju.deploy(loki_tester_charm, tester_app_name)
+    juju.wait(lambda s: jubilant.all_active(s, *app_names))
 
-    await ops_test.model.block_until(
-        lambda: (
-            len(ops_test.model.applications[loki_app_name].units) > 0
-            and len(ops_test.model.applications[tester_app_name].units) > 0
-        )
-    )
-    await ops_test.model.add_relation(loki_app_name, tester_app_name)
-    await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
+    juju.integrate(loki_app_name, tester_app_name)
+    juju.wait(lambda s: jubilant.all_active(s, *app_names))
 
     # Trigger a log message to fire an alert on
-    await ops_test.model.applications[tester_app_name].units[0].run_action(
-        "log-error", message="Error logged!"
-    )
-    alerts = await loki_alerts(ops_test, "loki")
+    juju.run(f"{tester_app_name}/0", "log-error", params={"message": "Error logged!"})
+    alerts = loki_alerts(juju, "loki")
     assert all(
         key in alert["labels"].keys()
         for key in ["juju_application", "juju_model", "juju_model_uuid"]
@@ -62,31 +39,24 @@ async def test_alert_rules_do_fire(ops_test, loki_charm, loki_tester_charm):
 
 
 @pytest.mark.abort_on_fail
-async def test_loki_scales_up(ops_test):
+def test_loki_scales_up(juju: jubilant.Juju):
     """Make sure Loki endpoints propagate on scaling."""
     loki_app_name = "loki"
     tester_app_name = "loki-tester"
     app_names = [loki_app_name, tester_app_name]
 
-    await ops_test.model.applications[loki_app_name].scale(scale=3)
-    await ops_test.model.wait_for_idle(
-        apps=[loki_app_name], status="active", wait_for_exact_units=3
+    juju.cli("scale-application", loki_app_name, "3")
+    juju.wait(
+        lambda s: jubilant.all_active(s, loki_app_name) and len(s.get_units(loki_app_name)) == 3
     )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
-    assert await is_loki_up(ops_test, loki_app_name, num_units=3)
+    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    assert is_loki_up(juju, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on
-    await ops_test.model.applications[tester_app_name].units[0].run_action(
-        "log-error", message="Error logged!"
-    )
+    juju.run(f"{tester_app_name}/0", "log-error", params={"message": "Error logged!"})
 
-    alerts_per_unit = await asyncio.gather(
-        loki_alerts(ops_test, "loki", unit_num=0),
-        loki_alerts(ops_test, "loki", unit_num=1),
-        loki_alerts(ops_test, "loki", unit_num=2),
-    )
-
-    for unit_alerts in alerts_per_unit:
+    for unit_num in range(3):
+        unit_alerts = loki_alerts(juju, "loki", unit_num=unit_num)
         assert all(
             key in alert["labels"].keys()
             for key in ["juju_application", "juju_model", "juju_model_uuid"]
@@ -95,22 +65,19 @@ async def test_loki_scales_up(ops_test):
 
 
 @pytest.mark.skip(reason="xfail")
-async def test_scale_down_to_zero_units(ops_test):
+def test_scale_down_to_zero_units(juju: jubilant.Juju):
     loki_app_name = "loki"
-    await ops_test.model.applications[loki_app_name].scale(scale=0)
-    await ops_test.model.wait_for_idle(
-        apps=[loki_app_name], status="active", timeout=600, wait_for_exact_units=0
+    juju.cli("scale-application", loki_app_name, "0")
+    juju.wait(
+        lambda s: jubilant.all_active(s, loki_app_name) and len(s.get_units(loki_app_name)) == 0,
+        timeout=600,
     )
 
-    loki_data_on_requirer_side = await juju_show_unit(
-        ops_test,
+    loki_data_on_requirer_side = juju_show_unit(
+        juju,
         "loki-tester/0",
         endpoint="logging",
         app_data_only=True,
     )
 
     assert "related-units" not in loki_data_on_requirer_side["relation-info"][0]
-
-    # FIXME: move the following test to the bundle and end the file here once merged and we can
-    # Clean up the model so the next test can run
-    await ops_test.model.reset()

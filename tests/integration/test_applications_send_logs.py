@@ -2,21 +2,16 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import logging
-from pathlib import Path
 
+import jubilant
 import pytest
-import yaml
+import pytest_jubilant
 from helpers import is_loki_up, loki_api_query, oci_image
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-resources = {
-    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
-    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
-}
+resources = pytest_jubilant.get_resources()
 tester_resources = {
     "workload-image": oci_image(
         "./tests/integration/log-proxy-tester/charmcraft.yaml", "workload-image"
@@ -41,114 +36,80 @@ app_names = [loki_app_name] + tester_app_names
 
 
 @pytest.mark.abort_on_fail
-async def test_loki_api_client_logs(
-    ops_test, loki_charm, loki_tester_charm, log_proxy_tester_charm
-):
+def test_loki_api_client_logs(juju: jubilant.Juju, loki_charm, loki_tester_charm, log_proxy_tester_charm):
     """Test basic functionality of Loki push API relation interface."""
-    await asyncio.gather(
-        ops_test.model.deploy(
-            loki_charm,
-            resources=resources,
-            application_name=loki_app_name,
-            trust=True,
-        ),
-        ops_test.model.deploy(loki_tester_charm, application_name="loki-tester"),
-        ops_test.model.deploy(
-            log_proxy_tester_charm,
-            resources=tester_resources,
-            application_name="log-proxy-tester-file",
-        ),
-        ops_test.model.deploy(
-            log_proxy_tester_charm,
-            resources=tester_resources,
-            application_name="log-proxy-tester-syslog",
-            config={"syslog": "true", "file_forwarding": "false"},
-        ),
+    juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
+    juju.deploy(loki_tester_charm, "loki-tester")
+    juju.deploy(log_proxy_tester_charm, "log-proxy-tester-file", resources=tester_resources)
+    juju.deploy(
+        log_proxy_tester_charm,
+        "log-proxy-tester-syslog",
+        resources=tester_resources,
+        config={"syslog": "true", "file_forwarding": "false"},
     )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
+    juju.wait(lambda s: jubilant.all_active(s, *app_names))
 
-    await asyncio.gather(
-        *[ops_test.model.add_relation(loki_app_name, t) for t in tester_app_names]
-    )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
+    for tester in tester_app_names:
+        juju.integrate(loki_app_name, tester)
+    juju.wait(lambda s: jubilant.all_active(s, *app_names))
 
     for query in tester_apps.values():
-        logs_per_unit = await asyncio.gather(
-            loki_api_query(ops_test, loki_app_name, query, unit_num=0),
-        )
-        assert all(len(logs[0]["values"]) > 0 for logs in logs_per_unit)
+        logs = loki_api_query(juju, loki_app_name, query, unit_num=0)
+        assert len(logs[0]["values"]) > 0
 
 
 @pytest.mark.abort_on_fail
-async def test_scale_up_also_gets_logs(ops_test):
-    await ops_test.model.applications[loki_app_name].scale(scale=3)
-    await ops_test.model.wait_for_idle(
-        apps=[loki_app_name], status="active", timeout=600, wait_for_exact_units=3
+def test_scale_up_also_gets_logs(juju: jubilant.Juju):
+    juju.cli("scale-application", loki_app_name, "3")
+    juju.wait(
+        lambda s: jubilant.all_active(s, loki_app_name) and len(s.get_units(loki_app_name)) == 3,
+        timeout=600,
     )
-    assert await is_loki_up(ops_test, loki_app_name, num_units=3)
+    assert is_loki_up(juju, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on just to ensure we have logs
-    await ops_test.model.applications["loki-tester"].units[0].run_action(
-        "log-error", message="Error logged!"
-    )
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=60
-    )
+    juju.run("loki-tester/0", "log-error", params={"message": "Error logged!"})
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
-    assert await is_loki_up(ops_test, loki_app_name, num_units=3)
+    assert is_loki_up(juju, loki_app_name, num_units=3)
 
     for query in tester_apps.values():
-        logs_per_unit = await asyncio.gather(
-            loki_api_query(ops_test, loki_app_name, query, unit_num=0),
-            loki_api_query(ops_test, loki_app_name, query, unit_num=1),
-            loki_api_query(ops_test, loki_app_name, query, unit_num=2),
-        )
-        assert all(len(logs[0]["values"]) > 0 for logs in logs_per_unit)
+        for unit_num in range(3):
+            logs = loki_api_query(juju, loki_app_name, query, unit_num=unit_num)
+            assert len(logs[0]["values"]) > 0
 
 
 @pytest.mark.abort_on_fail
-async def test_logs_persist_after_upgrade(ops_test, loki_charm):
+def test_logs_persist_after_upgrade(juju: jubilant.Juju, loki_charm):
     counts_before_upgrade = {}
     for tester, query in tester_apps.items():
-        query = f"count_over_time({query}[30m])"
-        counts_before_upgrade[tester] = await asyncio.gather(
-            loki_api_query(ops_test, loki_app_name, query, unit_num=0),
-            loki_api_query(ops_test, loki_app_name, query, unit_num=1),
-            loki_api_query(ops_test, loki_app_name, query, unit_num=2),
-        )
+        count_query = f"count_over_time({query}[30m])"
+        counts_before_upgrade[tester] = [
+            loki_api_query(juju, loki_app_name, count_query, unit_num=i) for i in range(3)
+        ]
 
     # Refresh from path
-    await ops_test.model.applications[loki_app_name].refresh(path=loki_charm, resources=resources)
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=60
-    )
-    assert await is_loki_up(ops_test, loki_app_name, num_units=3)
+    juju.refresh(loki_app_name, path=loki_charm, resources=resources)
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    assert is_loki_up(juju, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on just to ensure we have logs
-    action = (
-        await ops_test.model.applications["loki-tester"]
-        .units[0]
-        .run_action("log-error", message="Error logged!")
-    )
-    (await action.wait()).results["message"]
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=15
-    )
+    task = juju.run("loki-tester/0", "log-error", params={"message": "Error logged!"})
+    task.results["message"]
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     counts_after_upgrade = {}
     for tester, query in tester_apps.items():
-        query = f"count_over_time({query}[30m])"
-        counts_after_upgrade[tester] = await asyncio.gather(
-            loki_api_query(ops_test, loki_app_name, query, unit_num=0),
-            loki_api_query(ops_test, loki_app_name, query, unit_num=1),
-            loki_api_query(ops_test, loki_app_name, query, unit_num=2),
-        )
+        count_query = f"count_over_time({query}[30m])"
+        counts_after_upgrade[tester] = [
+            loki_api_query(juju, loki_app_name, count_query, unit_num=i) for i in range(3)
+        ]
 
     values_before_upgrade = return_last_value_from_loki_count(counts_before_upgrade)
     values_after_upgrade = return_last_value_from_loki_count(counts_after_upgrade)
 
     for client, values in values_after_upgrade.items():
-        # If any of the log counts are higher, we are continuiting. Don't depend on
+        # If any of the log counts are higher, we are continuing. Don't depend on
         # timing the log entries
         assert any(
             values_after_upgrade[client][idx] > values_before_upgrade[client][idx]
