@@ -83,7 +83,7 @@ def log_forwarder_tester_charm(copy_loki_library_into_test_charms):
     dest_charmlib = testingcharm_path / LOKI_PUSH_API_V1_PATH
     shutil.rmtree(dest_charmlib.parent, ignore_errors=True)
     dest_charmlib.parent.mkdir(parents=True)
-    dest_charmlib.hardlink_to(LOKI_PUSH_API_V1_PATH)
+    os.link(LOKI_PUSH_API_V1_PATH, dest_charmlib)
 
     charm_path = "tests/integration/log-forwarder-tester"
     subprocess.run(["charmcraft", "clean", "-p", charm_path], check=True)
