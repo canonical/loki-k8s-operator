@@ -50,3 +50,4 @@ def loki_container():
         layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
         service_statuses={"loki": ops.pebble.ServiceStatus.INACTIVE},
     )
+
