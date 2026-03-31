@@ -10,3 +10,4 @@ venv
 tests/integration/loki-tester/lib/charms/loki_k8s
 tests/integration/log-proxy-tester/lib/charms/loki_k8s
 cos-tool*
+src/loki_k8s.egg-info

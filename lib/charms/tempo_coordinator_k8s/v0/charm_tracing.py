@@ -350,7 +350,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 11
+LIBPATCH = 12
 
 PYDEPS = ["opentelemetry-exporter-otlp-proto-http==1.21.0"]
 
@@ -429,7 +429,7 @@ class _Buffer:
         overflow = len(queue) - self._max_event_history_length
         if overflow > 0:
             n_dropped_spans += overflow
-            logger.warning(
+            logger.debug(
                 "charm tracing buffer exceeds max history length (%d events)",
                 self._max_event_history_length,
             )
@@ -446,7 +446,7 @@ class _Buffer:
 
             # only do this once
             if not logged_drop:
-                logger.warning(
+                logger.debug(
                     "charm tracing buffer exceeds size limit (%dMiB).",
                     self._max_buffer_size_mib,
                 )
