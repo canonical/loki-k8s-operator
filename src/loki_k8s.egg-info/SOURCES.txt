@@ -1,0 +1,10 @@
+LICENSE
+README.md
+pyproject.toml
+src/charm.py
+src/config_builder.py
+src/loki_k8s.egg-info/PKG-INFO
+src/loki_k8s.egg-info/SOURCES.txt
+src/loki_k8s.egg-info/dependency_links.txt
+src/loki_k8s.egg-info/requires.txt
+src/loki_k8s.egg-info/top_level.txt

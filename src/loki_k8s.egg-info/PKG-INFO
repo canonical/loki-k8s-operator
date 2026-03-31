@@ -1,0 +1,38 @@
+Metadata-Version: 2.4
+Name: loki-k8s
+Version: 0.0
+Requires-Python: ~=3.8
+License-File: LICENSE
+Requires-Dist: ops
+Requires-Dist: cosl
+Requires-Dist: kubernetes
+Requires-Dist: requests
+Requires-Dist: pyyaml
+Requires-Dist: lightkube
+Requires-Dist: lightkube-models
+Requires-Dist: aiohttp!=3.11.13
+Requires-Dist: jsonschema
+Requires-Dist: cryptography
+Requires-Dist: pydantic>=2.9.0
+Requires-Dist: importlib-metadata==6.0.0
+Requires-Dist: opentelemetry-api==1.21.0
+Requires-Dist: opentelemetry-exporter-otlp-proto-common==1.21.0
+Requires-Dist: opentelemetry-exporter-otlp-proto-http==1.21.0
+Requires-Dist: opentelemetry-proto==1.21.0
+Requires-Dist: opentelemetry-sdk==1.21.0
+Requires-Dist: opentelemetry-semantic-conventions==0.42b0
+Provides-Extra: dev
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: codespell; extra == "dev"
+Requires-Dist: pyright; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: coverage[toml]; extra == "dev"
+Requires-Dist: ops[testing]; extra == "dev"
+Requires-Dist: responses; extra == "dev"
+Requires-Dist: fs; extra == "dev"
+Requires-Dist: pytest-interface-tester; extra == "dev"
+Requires-Dist: juju; extra == "dev"
+Requires-Dist: pytest-operator; extra == "dev"
+Requires-Dist: minio; extra == "dev"
+Requires-Dist: sh; extra == "dev"
+Dynamic: license-file
