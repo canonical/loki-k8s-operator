@@ -17,7 +17,7 @@ resources = pytest_jubilant.get_resources()
 app_name = "loki-k8s"
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.setup
 def test_deploy_from_local_path(juju: jubilant.Juju, loki_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
@@ -27,7 +27,7 @@ def test_deploy_from_local_path(juju: jubilant.Juju, loki_charm):
     is_loki_up(juju, app_name)
 
 
-@pytest.mark.abort_on_fail
+
 def test_config_values_are_retained_after_pod_deleted_and_restarted(juju: jubilant.Juju):
     pod_name = f"{app_name}-0"
 

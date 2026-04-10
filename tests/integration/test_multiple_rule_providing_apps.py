@@ -20,7 +20,7 @@ rules_app3 = "loki-tester3"
 rules_after_relation = None
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.setup
 def test_deploy(juju: jubilant.Juju, loki_charm):
     """Deploy Loki and ensure it doesn't have any rules yet.
 
@@ -36,7 +36,7 @@ def test_deploy(juju: jubilant.Juju, loki_charm):
     assert len(rules_before_relation) == 0
 
 
-@pytest.mark.abort_on_fail
+
 def test_first_relation_one_alert_rule(juju: jubilant.Juju, loki_tester_charm):
     juju.deploy(loki_tester_charm, rules_app)
 
@@ -49,7 +49,7 @@ def test_first_relation_one_alert_rule(juju: jubilant.Juju, loki_tester_charm):
     assert len(rules_after_relation) == 1
 
 
-@pytest.mark.abort_on_fail
+
 def test_second_relation_second_alert_rule(juju: jubilant.Juju, loki_tester_charm):
     juju.deploy(loki_tester_charm, rules_app2)
 
@@ -62,7 +62,7 @@ def test_second_relation_second_alert_rule(juju: jubilant.Juju, loki_tester_char
     assert len(rules_after_relation2) == 2
 
 
-@pytest.mark.abort_on_fail
+
 def test_wrong_alert_rule(juju: jubilant.Juju, faulty_loki_tester_charm):
     juju.deploy(faulty_loki_tester_charm, rules_app3)
 

@@ -15,7 +15,7 @@ resources = pytest_jubilant.get_resources()
 app_name = "loki-k8s"
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.setup
 def test_services_running(juju: jubilant.Juju, loki_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
@@ -28,7 +28,6 @@ def test_services_running(juju: jubilant.Juju, loki_charm):
     assert all(status == "Running" for status in services.values()), "Not all services are running"
 
 
-@pytest.mark.abort_on_fail
 def test_retention_configs(juju: jubilant.Juju):
     default_configs = loki_config(juju, app_name)
     assert all(

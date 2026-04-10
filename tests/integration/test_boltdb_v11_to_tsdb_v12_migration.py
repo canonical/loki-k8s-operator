@@ -27,12 +27,12 @@ V13_APP_NAME = "v13-loki-k8s"
 LOKI_UPGRADED = "loki-v11-v12-v13"
 
 
+@pytest.mark.setup
 def test_setup_env(juju: jubilant.Juju):
     juju.model_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
 @pytest.mark.xfail
-@pytest.mark.abort_on_fail
 def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(juju: jubilant.Juju, loki_charm, cos_channel):
     """Deploy from Charmhub (v11 schema) and upgrade to v12."""
     deploy_charm_from_charmhub_v11(juju, LOKI_UPGRADED, cos_channel)
@@ -48,7 +48,6 @@ def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(juju: jubilant.Juju,
 
 
 @pytest.mark.xfail
-@pytest.mark.abort_on_fail
 def test_deploy_and_upgrade_v13_locally(juju: jubilant.Juju, loki_charm):
     """Deploy from a local charm (v13 schema) and upgrade locally."""
     deploy_local_charm_v13(juju, V13_APP_NAME, loki_charm)

@@ -35,7 +35,7 @@ tester_app_names = list(tester_apps.keys())
 app_names = [loki_app_name] + tester_app_names
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.setup
 def test_loki_api_client_logs(juju: jubilant.Juju, loki_charm, loki_tester_charm, log_proxy_tester_charm):
     """Test basic functionality of Loki push API relation interface."""
     juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
@@ -58,7 +58,7 @@ def test_loki_api_client_logs(juju: jubilant.Juju, loki_charm, loki_tester_charm
         assert len(logs[0]["values"]) > 0
 
 
-@pytest.mark.abort_on_fail
+
 def test_scale_up_also_gets_logs(juju: jubilant.Juju):
     juju.cli("scale-application", loki_app_name, "3")
     juju.wait(
@@ -79,7 +79,7 @@ def test_scale_up_also_gets_logs(juju: jubilant.Juju):
             assert len(logs[0]["values"]) > 0
 
 
-@pytest.mark.abort_on_fail
+
 def test_logs_persist_after_upgrade(juju: jubilant.Juju, loki_charm):
     counts_before_upgrade = {}
     for tester, query in tester_apps.items():

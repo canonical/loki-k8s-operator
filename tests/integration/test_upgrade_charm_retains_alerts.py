@@ -16,7 +16,7 @@ app_name = "loki-k8s"
 rules_app = "loki-tester"
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.setup
 def test_deploy_charms(juju: jubilant.Juju, loki_charm, loki_tester_charm):
     """Deploy Loki.
 

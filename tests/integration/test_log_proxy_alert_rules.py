@@ -19,7 +19,7 @@ tester_resources = {
 }
 
 
-@pytest.mark.abort_on_fail
+
 def test_alert_rules_do_fire_from_log_proxy(juju: jubilant.Juju, loki_charm, log_proxy_tester_charm):
     """Test basic functionality of Log Proxy."""
     loki_app_name = "loki"

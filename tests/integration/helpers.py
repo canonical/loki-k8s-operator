@@ -135,32 +135,28 @@ def loki_config(juju: jubilant.Juju, app_name: str) -> dict:
         return {}
 
 
+@retry(stop=stop_after_attempt(10), wait=wait_exponential(multiplier=1, min=4, max=10))
 def loki_endpoint_request(juju: jubilant.Juju, app_name: str, endpoint: str, unit_num: int = 0):
     address = get_unit_address(juju, app_name, unit_num)
     url = urljoin(f"http://{address}:3100/", endpoint)
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.text
-        return ""
-    except requests.exceptions.RequestException:
-        return ""
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.text
 
 
+@retry(stop=stop_after_attempt(10), wait=wait_exponential(multiplier=1, min=4, max=10))
 def loki_api_query(juju: jubilant.Juju, app_name, query: str, unit_num: int = 0):
     address = get_unit_address(juju, app_name, unit_num)
     url = f"http://{address}:3100/loki/api/v1/query_range"
     params = {"query": query}
-    try:
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            return response.json()["data"]["result"]
-        return {}
-    except requests.exceptions.RequestException:
-        return {}
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    result = response.json()["data"]["result"]
+    assert result, f"Empty result for query: {query}"
+    return result
 
 
-def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0, retries: int = 3) -> dict:
+def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0, retries: int = 30) -> dict:
     r"""Get a list of alerts from a Prometheus-compatible endpoint.
 
     Results look like:
@@ -217,16 +213,17 @@ def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0, retries: 
     url = f"http://{address}:3100/prometheus/api/v1/alerts"
 
     # Retry since the endpoint may not _immediately_ return valid data
-    while not (
-        alerts := json.loads(urllib.request.urlopen(url, data=None, timeout=2).read())["data"][
-            "alerts"
-        ]
-    ):
+    alerts = []
+    while retries > 0:
         retries -= 1
-        if retries > 0:
-            time.sleep(2)
-        else:
-            break
+        try:
+            response = json.loads(urllib.request.urlopen(url, data=None, timeout=2).read())
+            alerts = response["data"]["alerts"]
+            if alerts:
+                break
+        except Exception:
+            pass
+        time.sleep(2)
 
     return alerts
 
@@ -258,12 +255,16 @@ def get_alertmanager_alerts(juju: jubilant.Juju, unit_name, unit_num, retries=3)
     """
     address = get_unit_address(juju, unit_name, unit_num)
     url = f"http://{address}:9093/api/v2/alerts"
-    while not (alerts := json.loads(urllib.request.urlopen(url, data=None, timeout=2).read())):
+    alerts = []
+    while retries > 0:
         retries -= 1
-        if retries > 0:
-            time.sleep(2)
-        else:
-            break
+        try:
+            alerts = json.loads(urllib.request.urlopen(url, data=None, timeout=2).read())
+            if alerts:
+                break
+        except Exception:
+            pass
+        time.sleep(2)
 
     return alerts
 

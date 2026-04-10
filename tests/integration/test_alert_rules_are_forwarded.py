@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 resources = pytest_jubilant.get_resources()
 
 
-@pytest.mark.abort_on_fail
 def test_alert_rules_do_forward_to_alertmanager(juju: jubilant.Juju, loki_charm, loki_tester_charm, cos_channel):
     """Test basic functionality of Loki push API relation interface."""
     loki_app_name = "loki"

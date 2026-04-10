@@ -24,11 +24,11 @@ resources = pytest_jubilant.get_resources()
 app_name = "loki-k8s"
 
 
+@pytest.mark.setup
 def test_setup_env(juju: jubilant.Juju):
     juju.model_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
-@pytest.mark.abort_on_fail
 def test_upgrade_edge_with_local_in_isolation(juju: jubilant.Juju, loki_charm, cos_channel):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
@@ -41,7 +41,7 @@ def test_upgrade_edge_with_local_in_isolation(juju: jubilant.Juju, loki_charm, c
     assert is_loki_up(juju, app_name)
 
 
-@pytest.mark.abort_on_fail
+
 def test_upgrade_local_with_local_with_relations(juju: jubilant.Juju, loki_charm, cos_channel):
     # Deploy related apps
     juju.deploy("alertmanager-k8s", "am", channel=cos_channel, trust=True)
@@ -59,7 +59,7 @@ def test_upgrade_local_with_local_with_relations(juju: jubilant.Juju, loki_charm
     assert is_loki_up(juju, app_name)
 
 
-@pytest.mark.abort_on_fail
+
 def test_upgrade_with_multiple_units(juju: jubilant.Juju, loki_charm):
     app_names = [app_name, "am", "grafana"]
     status = juju.status()
