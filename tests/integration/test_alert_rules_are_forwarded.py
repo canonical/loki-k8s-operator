@@ -5,7 +5,6 @@
 import logging
 
 import jubilant
-import pytest
 import pytest_jubilant
 from helpers import get_alertmanager_alerts
 

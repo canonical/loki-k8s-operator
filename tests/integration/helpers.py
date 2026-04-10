@@ -156,7 +156,7 @@ def loki_api_query(juju: jubilant.Juju, app_name, query: str, unit_num: int = 0)
     return result
 
 
-def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0, retries: int = 30) -> dict:
+def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0, retries: int = 30) -> list:
     r"""Get a list of alerts from a Prometheus-compatible endpoint.
 
     Results look like:

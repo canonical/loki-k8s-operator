@@ -5,7 +5,6 @@
 import logging
 
 import jubilant
-import pytest
 import pytest_jubilant
 from helpers import loki_alerts, oci_image
 
@@ -17,7 +16,6 @@ tester_resources = {
         "./tests/integration/log-proxy-tester/charmcraft.yaml", "workload-image"
     )
 }
-
 
 
 def test_alert_rules_do_fire_from_log_proxy(juju: jubilant.Juju, loki_charm, log_proxy_tester_charm):
