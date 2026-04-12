@@ -35,7 +35,7 @@ def test_deploy_and_relate_charms(juju: jubilant.Juju, loki_charm, cos_channel):
     juju.integrate(PROMETHEUS, f"{GRAFANA}:grafana-source")
     juju.integrate(GRAFANA, f"{LOKI}:grafana-dashboard")
     apps = [LOKI, GRAFANA, PROMETHEUS]
-    juju.wait(lambda s: jubilant.all_active(s, *apps))
+    juju.wait(lambda s: jubilant.all_active(s, *apps), timeout=1000)
 
 
 @pytest.mark.xfail

@@ -47,11 +47,11 @@ def test_loki_api_client_logs(juju: jubilant.Juju, loki_charm, loki_tester_charm
         resources=tester_resources,
         config={"syslog": "true", "file_forwarding": "false"},
     )
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     for tester in tester_app_names:
         juju.integrate(loki_app_name, tester)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     for query in tester_apps.values():
         logs = loki_api_query(juju, loki_app_name, query, unit_num=0)

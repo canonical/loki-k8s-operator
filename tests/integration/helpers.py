@@ -20,16 +20,16 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 logger = logging.getLogger(__name__)
 
 
+@retry(stop=stop_after_attempt(30), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_unit_address(juju: jubilant.Juju, app_name: str, unit_num: int) -> str:
     status = juju.status()
-    return status.apps[app_name].units[f"{app_name}/{unit_num}"].public_address
+    address = status.apps[app_name].units[f"{app_name}/{unit_num}"].public_address
+    assert address, f"No address for {app_name}/{unit_num}"
+    return address
 
 
 def is_loki_up(juju: jubilant.Juju, app_name, num_units=1) -> bool:
-    # Sometimes get_unit_address returns empty, so loop until it's not
-    addresses = [""] * num_units
-    while not all(addresses):
-        addresses = [get_unit_address(juju, app_name, i) for i in range(num_units)]
+    addresses = [get_unit_address(juju, app_name, i) for i in range(num_units)]
 
     def get(url) -> bool:
         try:

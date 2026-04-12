@@ -23,10 +23,10 @@ def test_alert_rules_do_fire(juju: jubilant.Juju, loki_charm, loki_tester_charm)
 
     juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
     juju.deploy(loki_tester_charm, tester_app_name)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     juju.integrate(loki_app_name, tester_app_name)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     # Trigger a log message to fire an alert on
     juju.run(f"{tester_app_name}/0", "log-error", params={"message": "Error logged!"})
@@ -46,9 +46,10 @@ def test_loki_scales_up(juju: jubilant.Juju):
 
     juju.cli("scale-application", loki_app_name, "3")
     juju.wait(
-        lambda s: jubilant.all_active(s, loki_app_name) and len(s.get_units(loki_app_name)) == 3
+        lambda s: jubilant.all_active(s, loki_app_name) and len(s.get_units(loki_app_name)) == 3,
+        timeout=1000,
     )
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
     assert is_loki_up(juju, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on

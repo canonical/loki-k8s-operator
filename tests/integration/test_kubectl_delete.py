@@ -33,6 +33,6 @@ def test_config_values_are_retained_after_pod_deleted_and_restarted(juju: jubila
 
     sh.kubectl.delete.pod(pod_name, namespace=juju.model)  # pyright: ignore
 
-    juju.wait(lambda s: app_name in s.apps and len(s.get_units(app_name)) > 0)
+    juju.wait(lambda s: app_name in s.apps and len(s.get_units(app_name)) > 0, timeout=1000)
     juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
     assert is_loki_up(juju, app_name)

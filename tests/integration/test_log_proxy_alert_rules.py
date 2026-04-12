@@ -26,10 +26,10 @@ def test_alert_rules_do_fire_from_log_proxy(juju: jubilant.Juju, loki_charm, log
 
     juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
     juju.deploy(log_proxy_tester_charm, tester_app_name, resources=tester_resources)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     juju.integrate(loki_app_name, tester_app_name)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     # Trigger a log message to fire an alert on
     juju.config(tester_app_name, {"rate": "5"})

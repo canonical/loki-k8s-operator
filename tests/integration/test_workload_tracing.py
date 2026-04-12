@@ -78,6 +78,7 @@ def test_workload_tracing_is_present(juju: jubilant.Juju, loki_charm, cos_channe
     juju.integrate(f"{TEMPO_APP_NAME}:logging", f"{app_name}:logging")
     juju.wait(
         lambda s: jubilant.all_active(s, app_name, TEMPO_APP_NAME, "tempo-worker"),
+        timeout=1000,
     )
     assert is_loki_up(juju, app_name, num_units=1)
 

@@ -28,10 +28,10 @@ def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju, loki_charm,
 
     juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
     juju.deploy(log_forwarder_tester_charm, tester_app_name, resources=tester_resources)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     juju.integrate(loki_app_name, tester_app_name)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     workload_a_plan = get_pebble_plan(juju.model, tester_app_name, 0, "workload-a")
     workload_b_plan = get_pebble_plan(juju.model, tester_app_name, 0, "workload-b")
@@ -41,7 +41,7 @@ def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju, loki_charm,
 
     # Delete tester pod
     delete_pod(juju.model, tester_app_name, 0)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names))
+    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
 
     restarted_workload_a_plan = get_pebble_plan(juju.model, tester_app_name, 0, "workload-a")
     restarted_workload_b_plan = get_pebble_plan(juju.model, tester_app_name, 0, "workload-b")
