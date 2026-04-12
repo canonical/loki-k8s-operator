@@ -15,7 +15,11 @@ LOKI_PUSH_API_V1_PATH = Path("lib/charms/loki_k8s/v1/loki_push_api.py")
 
 
 def _pack_charm(charm_path: str) -> Path:
-    """Pack a charm, working around pytest_jubilant.pack() using charmcraft's removed -p flag."""
+    """Pack a charm.
+
+    pytest-jubilant no longer includes a pack() method, recommending packing
+    outside of the test code.
+    """
     orig_dir = os.getcwd()
     try:
         os.chdir(charm_path)
