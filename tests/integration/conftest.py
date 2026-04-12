@@ -18,7 +18,6 @@ def _pack_charm(charm_path: str) -> Path:
     """Pack a charm.
 
     Copied from pytest-jubilant 1.x, which no longer provides pack() in 2.0.
-    The -p flag was also removed from charmcraft, so we chdir instead.
     """
     orig_dir = os.getcwd()
     try:
