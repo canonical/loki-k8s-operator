@@ -43,7 +43,7 @@ dev = [
   "pytest-interface-tester",
   # Integration
   "jubilant",
-  "pytest-jubilant",
+  "pytest-jubilant~=2.0",
   "tenacity",
   "minio",
   "sh",
