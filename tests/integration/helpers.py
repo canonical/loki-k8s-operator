@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @retry(stop=stop_after_attempt(30), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_unit_address(juju: jubilant.Juju, app_name: str, unit_num: int) -> str:
     status = juju.status()
-    address = status.apps[app_name].units[f"{app_name}/{unit_num}"].public_address
+    address = status.apps[app_name].units[f"{app_name}/{unit_num}"].address
     assert address, f"No address for {app_name}/{unit_num}"
     return address
 
