@@ -8,7 +8,7 @@ import jubilant
 import pytest
 import pytest_jubilant
 import requests
-from helpers import get_unit_address, loki_endpoint_request
+from helpers import all_active_idle, get_unit_address, loki_endpoint_request
 from requests.auth import HTTPBasicAuth
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def test_deploy_and_relate_charms(juju: jubilant.Juju, loki_charm, cos_channel):
     juju.integrate(PROMETHEUS, f"{GRAFANA}:grafana-source")
     juju.integrate(GRAFANA, f"{LOKI}:grafana-dashboard")
     apps = [LOKI, GRAFANA, PROMETHEUS]
-    juju.wait(lambda s: jubilant.all_active(s, *apps), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *apps), timeout=1000)
 
 
 @pytest.mark.xfail

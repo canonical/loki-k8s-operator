@@ -8,7 +8,7 @@ import logging
 import jubilant
 import pytest
 import pytest_jubilant
-from helpers import is_loki_up, loki_rules
+from helpers import all_active_idle, is_loki_up, loki_rules
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,7 @@ def test_deploy(juju: jubilant.Juju, loki_charm):
     Assert on the unit status before any relations/configurations take place.
     """
     juju.deploy(loki_charm, app_name, resources=resources, trust=True)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
-    assert juju.status().apps[app_name].units[f"{app_name}/0"].workload_status.current == "active"
-
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
     assert is_loki_up(juju, app_name)
 
     rules_before_relation = loki_rules(juju, app_name)
@@ -43,7 +41,7 @@ def test_first_relation_one_alert_rule(juju: jubilant.Juju, loki_tester_charm):
     # form a relation between loki and the app that provides rules
     juju.integrate(app_name, rules_app)
 
-    juju.wait(lambda s: jubilant.all_active(s, app_name, rules_app), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name, rules_app), timeout=1000)
     global rules_after_relation
     rules_after_relation = loki_rules(juju, app_name)
     assert len(rules_after_relation) == 1
@@ -56,7 +54,7 @@ def test_second_relation_second_alert_rule(juju: jubilant.Juju, loki_tester_char
     # form a relation between loki and the app that provides rules
     juju.integrate(app_name, rules_app2)
 
-    juju.wait(lambda s: jubilant.all_active(s, app_name, rules_app2), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name, rules_app2), timeout=1000)
 
     rules_after_relation2 = loki_rules(juju, app_name)
     assert len(rules_after_relation2) == 2

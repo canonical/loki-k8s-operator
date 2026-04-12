@@ -8,7 +8,7 @@ import logging
 import jubilant
 import pytest
 import pytest_jubilant
-from helpers import generate_log_file, loki_endpoint_request, oci_image
+from helpers import all_active_idle, generate_log_file, loki_endpoint_request, oci_image
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def test_setup(juju: jubilant.Juju, loki_charm, log_proxy_tester_charm):
 
     juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
     juju.deploy(log_proxy_tester_charm, tester_app_name, resources=tester_resources)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     # Generate log files in the containers
     generate_log_file(juju.model, tester_app_name, 0, "workload-a", "/tmp/worload-a-1.log")
@@ -37,7 +37,7 @@ def test_setup(juju: jubilant.Juju, loki_charm, log_proxy_tester_charm):
     generate_log_file(juju.model, tester_app_name, 0, "workload-b", "/tmp/worload-b.log")
 
     juju.integrate(loki_app_name, tester_app_name)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
 
 @pytest.mark.work

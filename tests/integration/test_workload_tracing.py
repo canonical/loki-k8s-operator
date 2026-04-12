@@ -8,6 +8,7 @@ import jubilant
 import pytest
 import pytest_jubilant
 from helpers import (
+    all_active_idle,
     get_application_ip,
     get_traces_patiently,
     get_unit_address,
@@ -45,7 +46,7 @@ def test_workload_tracing_is_present(juju: jubilant.Juju, loki_charm, cos_channe
     )
     juju.deploy("s3-integrator", "s3-tempo", channel="edge")
 
-    juju.wait(lambda s: jubilant.all_active(s, "minio-tempo"), timeout=2000)
+    juju.wait(lambda s: all_active_idle(s, "minio-tempo"), timeout=2000)
     minio_addr = get_unit_address(juju, "minio-tempo", 0)
     mc_client = Minio(
         f"{minio_addr}:9000",
@@ -70,14 +71,14 @@ def test_workload_tracing_is_present(juju: jubilant.Juju, loki_charm, cos_channe
 
     logger.info("deploying local charm")
     juju.deploy(loki_charm, app_name, resources=loki_resources, trust=True)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=300)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=300)
 
     # we relate _only_ workload tracing not to confuse with charm traces
     juju.integrate(f"{app_name}:workload-tracing", f"{TEMPO_APP_NAME}:tracing")
     # but we also need anything to come in to loki so that loki generates traces
     juju.integrate(f"{TEMPO_APP_NAME}:logging", f"{app_name}:logging")
     juju.wait(
-        lambda s: jubilant.all_active(s, app_name, TEMPO_APP_NAME, "tempo-worker"),
+        lambda s: all_active_idle(s, app_name, TEMPO_APP_NAME, "tempo-worker"),
         timeout=1000,
     )
     assert is_loki_up(juju, app_name, num_units=1)

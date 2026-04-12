@@ -7,7 +7,7 @@ import logging
 import jubilant
 import pytest
 import pytest_jubilant
-from helpers import is_loki_up, loki_api_query, oci_image
+from helpers import all_active_idle, is_loki_up, loki_api_query, oci_image
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +47,11 @@ def test_loki_api_client_logs(juju: jubilant.Juju, loki_charm, loki_tester_charm
         resources=tester_resources,
         config={"syslog": "true", "file_forwarding": "false"},
     )
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     for tester in tester_app_names:
         juju.integrate(loki_app_name, tester)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     for query in tester_apps.values():
         logs = loki_api_query(juju, loki_app_name, query, unit_num=0)
@@ -62,14 +62,14 @@ def test_loki_api_client_logs(juju: jubilant.Juju, loki_charm, loki_tester_charm
 def test_scale_up_also_gets_logs(juju: jubilant.Juju):
     juju.cli("scale-application", loki_app_name, "3")
     juju.wait(
-        lambda s: jubilant.all_active(s, loki_app_name) and len(s.get_units(loki_app_name)) == 3,
+        lambda s: all_active_idle(s, loki_app_name) and len(s.get_units(loki_app_name)) == 3,
         timeout=600,
     )
     assert is_loki_up(juju, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on just to ensure we have logs
     juju.run("loki-tester/0", "log-error", params={"message": "Error logged!"})
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     assert is_loki_up(juju, loki_app_name, num_units=3)
 
@@ -90,13 +90,13 @@ def test_logs_persist_after_upgrade(juju: jubilant.Juju, loki_charm):
 
     # Refresh from path
     juju.refresh(loki_app_name, path=loki_charm, resources=resources)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
     assert is_loki_up(juju, loki_app_name, num_units=3)
 
     # Trigger a log message to fire an alert on just to ensure we have logs
     task = juju.run("loki-tester/0", "log-error", params={"message": "Error logged!"})
     task.results["message"]
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     counts_after_upgrade = {}
     for tester, query in tester_apps.items():

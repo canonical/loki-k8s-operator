@@ -15,7 +15,7 @@ import logging
 import jubilant
 import pytest
 import pytest_jubilant
-from helpers import is_loki_up, loki_config
+from helpers import all_active_idle, is_loki_up, loki_config
 
 logger = logging.getLogger(__name__)
 
@@ -63,28 +63,28 @@ def deploy_charm_from_charmhub_v11(juju: jubilant.Juju, app_name, cos_channel):
     """Deploy the charm from Charmhub."""
     logger.debug("Deploying charm from Charmhub")
     juju.deploy("ch:loki-k8s", app_name, channel=cos_channel, revision=140, trust=True)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
 
 
 def upgrade_charm_from_charmhub_v12(juju: jubilant.Juju, app_name, loki_charm, cos_channel):
     """Upgrade the deployed charm with the local charm."""
     logger.debug("Upgrading deployed charm with local charm %s", loki_charm)
     juju.refresh(app_name, channel=cos_channel)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
 
 
 def deploy_local_charm_v13(juju: jubilant.Juju, app_name, loki_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
     juju.deploy(loki_charm, app_name, resources=resources, trust=True)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
 
 
 def upgrade_charm_with_local_charm_v13(juju: jubilant.Juju, app_name, loki_charm):
     """Upgrade the deployed charm with the local charm."""
     logger.debug("Upgrading deployed charm with local charm %s", loki_charm)
     juju.refresh(app_name, path=loki_charm, resources=resources)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
 
 
 def verify_upgrade_success(

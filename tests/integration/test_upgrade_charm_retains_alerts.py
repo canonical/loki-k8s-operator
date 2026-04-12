@@ -7,7 +7,7 @@ import logging
 import jubilant
 import pytest
 import pytest_jubilant
-from helpers import is_loki_up, loki_rules
+from helpers import all_active_idle, is_loki_up, loki_rules
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,7 @@ def test_deploy_charms(juju: jubilant.Juju, loki_charm, loki_tester_charm):
     Assert on the unit status before any relations/configurations take place.
     """
     juju.deploy(loki_charm, app_name, resources=resources, trust=True)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
-    assert juju.status().apps[app_name].units[f"{app_name}/0"].workload_status.current == "active"
-
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
     assert is_loki_up(juju, app_name)
 
     juju.deploy(loki_tester_charm, rules_app)
@@ -33,7 +31,7 @@ def test_deploy_charms(juju: jubilant.Juju, loki_charm, loki_tester_charm):
     # form a relation between loki and the app that provides rules
     juju.integrate(app_name, rules_app)
 
-    juju.wait(lambda s: jubilant.all_active(s, app_name, rules_app), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name, rules_app), timeout=1000)
 
     # verify setup is complete and as expected
     rules = loki_rules(juju, app_name)
@@ -46,7 +44,7 @@ def test_rule_files_are_retained_after_pod_upgraded(juju: jubilant.Juju, loki_ch
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
     juju.refresh(app_name, path=loki_charm, resources=resources)
 
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
 
     assert is_loki_up(juju, app_name)
     rules_after_upgrade = loki_rules(juju, app_name)

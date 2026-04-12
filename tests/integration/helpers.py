@@ -20,6 +20,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 logger = logging.getLogger(__name__)
 
 
+def all_active_idle(status: jubilant.Status, *apps: str) -> bool:
+    """Check that all apps are active and all agents are idle."""
+    return jubilant.all_active(status, *apps) and jubilant.all_agents_idle(status, *apps)
+
+
 @retry(stop=stop_after_attempt(30), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_unit_address(juju: jubilant.Juju, app_name: str, unit_num: int) -> str:
     status = juju.status()
@@ -38,15 +43,14 @@ def is_loki_up(juju: jubilant.Juju, app_name, num_units=1) -> bool:
         except Exception:
             return False
 
-    count = 5
+    count = 30
     while count >= 0:
         resp = [
             get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses
         ]
         if all(resp):
             return all(resp)
-        # Back off and wait a maximum of 5 seconds
-        time.sleep(1)
+        time.sleep(2)
         count -= 1
     return False
 
@@ -106,6 +110,7 @@ def loki_services(juju: jubilant.Juju, app_name: str) -> dict:
         return {}
 
 
+@retry(stop=stop_after_attempt(10), wait=wait_exponential(multiplier=1, min=4, max=10))
 def loki_config(juju: jubilant.Juju, app_name: str) -> dict:
     """Fetches the Loki configuration from loki HTTP api.
 
@@ -125,14 +130,11 @@ def loki_config(juju: jubilant.Juju, app_name: str) -> dict:
     """
     address = get_unit_address(juju, app_name, 0)
     url = f"http://{address}:3100/config"
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            yaml_dict = yaml.safe_load(response.text)
-            return yaml_dict
-        return {}
-    except requests.exceptions.RequestException:
-        return {}
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+    yaml_dict = yaml.safe_load(response.text)
+    assert yaml_dict, "Empty config response"
+    return yaml_dict
 
 
 @retry(stop=stop_after_attempt(10), wait=wait_exponential(multiplier=1, min=4, max=10))

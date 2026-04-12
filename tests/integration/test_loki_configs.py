@@ -7,7 +7,7 @@ import logging
 import jubilant
 import pytest
 import pytest_jubilant
-from helpers import is_loki_up, loki_config, loki_services
+from helpers import all_active_idle, is_loki_up, loki_config, loki_services
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def test_services_running(juju: jubilant.Juju, loki_charm):
     logger.debug("deploy local charm")
 
     juju.deploy(loki_charm, app_name, resources=resources, trust=True)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
     assert is_loki_up(juju, app_name)
 
     services = loki_services(juju, app_name)
@@ -38,7 +38,7 @@ def test_retention_configs(juju: jubilant.Juju):
     )
 
     juju.config(app_name, {"retention-period": "3"})
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
 
     configs_with_retention = loki_config(juju, app_name)
     assert all(

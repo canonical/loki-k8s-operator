@@ -16,7 +16,7 @@ import logging
 import jubilant
 import pytest
 import pytest_jubilant
-from helpers import is_loki_up
+from helpers import all_active_idle, is_loki_up
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +33,11 @@ def test_upgrade_edge_with_local_in_isolation(juju: jubilant.Juju, loki_charm, c
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
     juju.deploy(app_name, app_name, channel=cos_channel, trust=True)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
     juju.refresh(app_name, path=loki_charm)
-    juju.wait(lambda s: jubilant.all_active(s, app_name), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
     assert is_loki_up(juju, app_name)
 
 
@@ -51,11 +51,11 @@ def test_upgrade_local_with_local_with_relations(juju: jubilant.Juju, loki_charm
     # Relate apps
     juju.integrate(app_name, "am")
     juju.integrate(app_name, "grafana:grafana-source")
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     # Refresh from path
     juju.refresh(app_name, path=loki_charm)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
     assert is_loki_up(juju, app_name)
 
 
@@ -66,10 +66,10 @@ def test_upgrade_with_multiple_units(juju: jubilant.Juju, loki_charm):
     current_units = len(status.get_units(app_name))
     # Add unit
     juju.cli("scale-application", app_name, str(current_units + 1))
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     # Refresh from path
     juju.refresh(app_name, path=loki_charm)
-    juju.wait(lambda s: jubilant.all_active(s, *app_names), timeout=1000)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     assert is_loki_up(juju, app_name, num_units=current_units + 1)
