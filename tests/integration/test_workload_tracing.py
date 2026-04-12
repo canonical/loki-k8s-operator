@@ -3,10 +3,11 @@
 # See LICENSE file for licensing details.
 
 import logging
+from pathlib import Path
 
 import jubilant
 import pytest
-import pytest_jubilant
+import yaml
 from helpers import (
     all_active_idle,
     get_application_ip,
@@ -18,9 +19,13 @@ from minio import Minio
 
 logger = logging.getLogger(__name__)
 
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 app_name = "loki"
 TEMPO_APP_NAME = "tempo"
-loki_resources = pytest_jubilant.get_resources()
+loki_resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 
 
 def test_setup_env(juju: jubilant.Juju):

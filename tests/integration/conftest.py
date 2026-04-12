@@ -2,12 +2,12 @@
 # See LICENSE file for licensing details.
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
-import pytest_jubilant
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +17,36 @@ LOKI_PUSH_API_V1_PATH = Path("lib/charms/loki_k8s/v1/loki_push_api.py")
 def _pack_charm(charm_path: str) -> Path:
     """Pack a charm.
 
-    pytest-jubilant no longer includes a pack() method, recommending packing
-    outside of the test code.
+    Copied from pytest-jubilant 1.x, which no longer provides pack() in 2.0.
+    The -p flag was also removed from charmcraft, so we chdir instead.
     """
     orig_dir = os.getcwd()
     try:
         os.chdir(charm_path)
-        return pytest_jubilant.pack(".")
+        cmd = "charmcraft pack"
+        proc = subprocess.run(
+            shlex.split(cmd),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        # Don't ask me why this goes to stderr.
+        output = proc.stderr
+        packed_charms = []
+        for line in output.strip().splitlines():
+            if line.startswith("Packed"):
+                packed_charms.append(line.split()[1])
+        if not packed_charms:
+            raise ValueError(
+                f"unable to get packed charm(s) ({cmd!r} completed with "
+                f"{proc.returncode=}, {proc.stdout=}, {proc.stderr=})"
+            )
+        if len(packed_charms) > 1:
+            raise ValueError(
+                "This charm supports multiple platforms. "
+                "Pass a `platform` argument to control which charm you're getting instead."
+            )
+        return Path(packed_charms[0]).resolve()
     finally:
         os.chdir(orig_dir)
 
@@ -48,7 +71,7 @@ def loki_charm(copy_loki_library_into_test_charms):
     """Loki charm used for integration testing."""
     if charm_file := os.environ.get("CHARM_PATH"):
         return Path(charm_file)
-    return pytest_jubilant.pack(".")
+    return _pack_charm(".")
 
 
 @pytest.fixture(scope="session")

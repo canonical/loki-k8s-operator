@@ -3,20 +3,25 @@
 # See LICENSE file for licensing details.
 
 import logging
+from pathlib import Path
 
 import jubilant
 import pytest
-import pytest_jubilant
 import requests
+import yaml
 from helpers import all_active_idle, get_unit_address, loki_endpoint_request
 from requests.auth import HTTPBasicAuth
 
 logger = logging.getLogger(__name__)
 
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 LOKI = "loki"
 GRAFANA = "grafana"
 PROMETHEUS = "prometheus"
-resources = pytest_jubilant.get_resources()
+resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 
 
 class AddressNotFoundError(Exception):

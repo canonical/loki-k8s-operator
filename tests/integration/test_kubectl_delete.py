@@ -4,16 +4,21 @@
 
 
 import logging
+from pathlib import Path
 
 import jubilant
 import pytest
-import pytest_jubilant
 import sh
+import yaml
 from helpers import all_active_idle, is_loki_up
 
 logger = logging.getLogger(__name__)
 
-resources = pytest_jubilant.get_resources()
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
+resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 app_name = "loki-k8s"
 
 

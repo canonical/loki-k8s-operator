@@ -3,14 +3,19 @@
 # See LICENSE file for licensing details.
 
 import logging
+from pathlib import Path
 
 import jubilant
-import pytest_jubilant
+import yaml
 from helpers import all_active_idle, get_alertmanager_alerts
 
 logger = logging.getLogger(__name__)
 
-resources = pytest_jubilant.get_resources()
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
+resources = {
+    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
+    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
+}
 
 
 def test_alert_rules_do_forward_to_alertmanager(juju: jubilant.Juju, loki_charm, loki_tester_charm, cos_channel):
