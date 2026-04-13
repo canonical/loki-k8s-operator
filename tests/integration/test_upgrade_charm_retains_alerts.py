@@ -21,7 +21,7 @@ app_name = "loki-k8s"
 rules_app = "loki-tester"
 
 
-@pytest.mark.setup
+@pytest.mark.juju_setup
 def test_deploy_charms(juju: jubilant.Juju, loki_charm, loki_tester_charm):
     """Deploy Loki.
 

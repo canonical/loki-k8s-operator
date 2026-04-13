@@ -25,7 +25,7 @@ rules_app3 = "loki-tester3"
 rules_after_relation = None
 
 
-@pytest.mark.setup
+@pytest.mark.juju_setup
 def test_deploy(juju: jubilant.Juju, loki_charm):
     """Deploy Loki and ensure it doesn't have any rules yet.
 

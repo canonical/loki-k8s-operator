@@ -19,7 +19,7 @@ resources = {
 }
 
 
-@pytest.mark.setup
+@pytest.mark.juju_setup
 def test_alert_rules_do_fire(juju: jubilant.Juju, loki_charm, loki_tester_charm):
     """Test basic functionality of Loki push API relation interface."""
     loki_app_name = "loki"

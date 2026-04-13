@@ -32,7 +32,7 @@ V13_APP_NAME = "v13-loki-k8s"
 LOKI_UPGRADED = "loki-v11-v12-v13"
 
 
-@pytest.mark.setup
+@pytest.mark.juju_setup
 def test_setup_env(juju: jubilant.Juju):
     juju.model_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 

@@ -40,7 +40,7 @@ tester_app_names = list(tester_apps.keys())
 app_names = [loki_app_name] + tester_app_names
 
 
-@pytest.mark.setup
+@pytest.mark.juju_setup
 def test_loki_api_client_logs(juju: jubilant.Juju, loki_charm, loki_tester_charm, log_proxy_tester_charm):
     """Test basic functionality of Loki push API relation interface."""
     juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)

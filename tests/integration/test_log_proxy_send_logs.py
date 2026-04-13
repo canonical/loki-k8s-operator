@@ -28,7 +28,7 @@ loki_app_name = "loki"
 tester_app_name = "log-proxy-tester"
 
 
-@pytest.mark.setup
+@pytest.mark.juju_setup
 def test_setup(juju: jubilant.Juju, loki_charm, log_proxy_tester_charm):
     app_names = [loki_app_name, tester_app_name]
 

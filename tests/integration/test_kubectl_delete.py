@@ -22,7 +22,7 @@ resources = {
 app_name = "loki-k8s"
 
 
-@pytest.mark.setup
+@pytest.mark.juju_setup
 def test_deploy_from_local_path(juju: jubilant.Juju, loki_charm):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")

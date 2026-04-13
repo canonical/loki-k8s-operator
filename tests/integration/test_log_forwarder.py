@@ -24,7 +24,7 @@ tester_resources = {
 }
 
 
-@pytest.mark.setup
+@pytest.mark.juju_setup
 def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju, loki_charm, log_forwarder_tester_charm):
     loki_app_name = "loki"
     tester_app_name = "log-forwarder-tester"
