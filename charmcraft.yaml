@@ -133,8 +133,7 @@ resources:
   loki-image:
     type: oci-image
     description: Loki OCI image
-    #upstream-source: docker.io/ubuntu/loki@sha256:c1cf06a25176ea7c9574b53df272c2cc56c3f797a2a0c574c8e6ad923b0657b4  # renovate: oci-image tag: 3.x-24.04
-    upstream-source: ghcr.io/canonical/loki:dev
+    upstream-source: docker.io/ubuntu/loki@sha256:dfdf5a4db1116a9111e5222910a8d7b30a44f83a4a1f2d99d97af14c77c43ac8  # renovate: oci-image tag: 3.7-24.04
   node-exporter-image:
     type: oci-image
     description: Node-exporter OCI image
