@@ -87,6 +87,8 @@ curl -v -H "Content-Type: application/json" -XPOST -s "http://$loki_ip:3100/loki
 
 #### Example 3 - Send logs entries to Loki with Promtail:
 
+> **Deprecated:** Promtail is deprecated by Grafana. Consider using [the OpenTelemetry Collector snap](https://snapcraft.io/opentelemetry-collector) as a replacement log shipping agent.
+
 [Promtail](https://grafana.com/docs/loki/latest/clients/promtail/) is an agent which ships the contents of local logs to Loki. It is usually deployed to every machine that has applications needed to be monitored.
 
 It primarily:
@@ -103,7 +105,6 @@ To set up a Promtail instance to work with Loki Charmed Operator please refer to
 clients:
   - url: http://<LOKI_ADDRESS>:3100/loki/api/v1/push
 ```
-
 
 
 ## Relations

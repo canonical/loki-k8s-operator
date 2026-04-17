@@ -1,6 +1,10 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+# Deprecated: This test module covers LogProxyConsumer, which relies on Promtail.
+# Promtail is deprecated by Grafana. New integrations should use LokiPushApiConsumer
+# with OpenTelemetry Collector instead of LogProxyConsumer.
+
 import json
 import os
 import textwrap

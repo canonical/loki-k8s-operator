@@ -396,6 +396,9 @@ class TestAppRelationData(unittest.TestCase):
     """Feature: Loki advertises common global info over app relation data.
 
     Background: Consumer charms need to have a URL for downloading promtail.
+
+    Deprecated: The promtail_binary_zip_url relation data field is deprecated along with Promtail.
+    New integrations should use LokiPushApiConsumer with OpenTelemetry Collector instead.
     """
 
     @k8s_resource_multipatch
@@ -427,6 +430,7 @@ class TestAppRelationData(unittest.TestCase):
         self.assertTrue(endpoint["url"].startswith("http"))
 
     def test_promtail_url(self):
+        # Deprecated: promtail_binary_zip_url is part of the deprecated LogProxyConsumer/Promtail flow.
         rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
 
         # Relation data must include a "promtail_binary_zip_url" key
