@@ -3,8 +3,28 @@
 name: loki-k8s
 type: "charm"
 summary: Loki is a log aggregation system inspired by Prometheus.
-description: >
-  Loki is a set of components that can be composed into a fully featured logging stack.
+description: |
+  Loki K8s is a Juju charm that deploys and manages Grafana Loki in monolithic mode on
+  Kubernetes, designed for small to medium-sized deployments. It is a core component of
+  COS Lite, the lightweight version of the Canonical Observability Stack (COS):
+  https://documentation.ubuntu.com/observability
+
+  Any charm that supports the loki_push_api relation can send logs to Loki automatically.
+  Collected logs can then be explored through Grafana and used to trigger alerts via
+  Alertmanager.
+
+  Key features:
+
+  - Automatic log ingestion from related charms via the Loki Push API relation.
+  - Seamless integration with Grafana, Prometheus, and Alertmanager through Juju relations.
+  - Built-in Grafana dashboards and Prometheus alert rules for self-monitoring.
+  - Configurable ingestion rate limits, burst sizes, and log retention periods.
+  - Per-unit ingress support for cross-model log collection through reverse proxies such as
+    Traefik.
+  - TLS support via the certificates relation.
+  - Distributed tracing support via integration with Tempo.
+  - Persistent storage for log index and chunks across container restarts.
+  - Configurable Kubernetes resource limits for CPU and memory.
 
 links:
   documentation: https://discourse.charmhub.io/t/loki-k8s-docs-index/5228
