@@ -26,6 +26,13 @@ description: |
   - Persistent storage for log index and chunks across container restarts.
   - Configurable Kubernetes resource limits for CPU and memory.
 
+  Known limitations:
+
+  - Each unit runs as an independent Loki instance with its own local storage and no data
+    replication. Ingress is per unit, and each unit registers as a separate Grafana
+    datasource. For horizontally scalable, highly available log aggregation, consider the
+    Loki Coordinator and Loki Worker charms.
+
 links:
   documentation: https://discourse.charmhub.io/t/loki-k8s-docs-index/5228
   website: https://charmhub.io/loki-k8s
