@@ -551,7 +551,11 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         self.check_alert_rules_patcher.stop()
 
     def test_fresh_install_no_backup_uses_today(self):
-        """On a truly fresh install (no backup), v13 date should be today."""
+        """GIVEN a fresh install with no backup config and no stored v13 date.
+
+        WHEN _tsdb_versions_migration_dates is accessed
+        THEN the v13 date should be today.
+        """
         charm = self.harness.charm
         charm._stored.fresh_install = True  # type: ignore
         charm._stored.v13_migration_date = ""  # type: ignore
@@ -570,7 +574,11 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], expected)
 
     def test_fresh_install_with_backup_preserves_date(self):
-        """On a fresh install pod churn, backup date must take precedence over today."""
+        """GIVEN a fresh install where the backup config already has a v13 date.
+
+        WHEN _tsdb_versions_migration_dates is accessed after a pod churn
+        THEN the backup date takes precedence over today.
+        """
         charm = self.harness.charm
         charm._stored.fresh_install = True  # type: ignore
         original_date = "2026-01-15"
@@ -589,7 +597,11 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], original_date)
 
     def test_upgrade_with_backup_preserves_date(self):
-        """On upgrade, if backup has v13, the persisted date must be used."""
+        """GIVEN an upgrade where the backup config already has a v13 date.
+
+        WHEN _tsdb_versions_migration_dates is accessed
+        THEN the persisted backup date must be used.
+        """
         charm = self.harness.charm
         charm._stored.fresh_install = False  # type: ignore
         original_date = "2026-01-15"
@@ -608,7 +620,11 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], original_date)
 
     def test_upgrade_no_backup_uses_tomorrow(self):
-        """On upgrade from v11-only (no v13 in backup or stored state), v13 date should be tomorrow."""
+        """GIVEN an upgrade from v11-only with no v13 in backup or stored state.
+
+        WHEN _tsdb_versions_migration_dates is accessed
+        THEN the v13 date should be tomorrow to preserve today's v11/v12 logs.
+        """
         charm = self.harness.charm
         charm._stored.fresh_install = False  # type: ignore
         charm._stored.v13_migration_date = ""  # type: ignore
@@ -629,7 +645,11 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], expected)
 
     def test_stored_state_fallback_when_backup_unavailable(self):
-        """When the backup file is unavailable, stored state must prevent date drift."""
+        """GIVEN a v13 date persisted in stored state but the backup file is unavailable.
+
+        WHEN _tsdb_versions_migration_dates is accessed (e.g. PVC not yet remounted)
+        THEN the stored state date is returned, preventing date drift.
+        """
         charm = self.harness.charm
         charm._stored.fresh_install = False  # type: ignore
         original_date = "2026-01-15"
@@ -647,7 +667,11 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], original_date)
 
     def test_backup_syncs_to_stored_state(self):
-        """Reading v13 from backup must also persist the date in stored state."""
+        """GIVEN a v13 date in the backup config but not yet in stored state.
+
+        WHEN _tsdb_versions_migration_dates is accessed
+        THEN the backup date is also persisted into stored state for future fallback.
+        """
         charm = self.harness.charm
         charm._stored.v13_migration_date = ""  # type: ignore
         original_date = "2026-01-15"
@@ -664,7 +688,11 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(charm._stored.v13_migration_date, original_date)  # type: ignore
 
     def test_v13_date_stable_across_config_changed_events(self):
-        """The v13 date must not drift when config-changed fires on a later day."""
+        """GIVEN a fully configured Loki with a v13 date already pushed.
+
+        WHEN config-changed fires again (e.g. pod churn on a later day)
+        THEN the v13 date in the pushed config must remain unchanged.
+        """
         charm = self.harness.charm
         container = charm.unit.get_container("loki")
 

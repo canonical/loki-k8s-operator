@@ -320,11 +320,15 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_upgrade_charm(self, _):
-        # Mark as upgrade so that the initial v13 schema date (if not yet persisted in the
-        # backup config) is set to tomorrow rather than today, preserving today's logs that
-        # were written under the previous v11/v12 schema.
-        # The backup config on persistent storage is the primary safeguard against date drift;
-        # this flag only matters on the very first config generation after an upgrade.
+        """Handle upgrade-charm by marking this unit as an upgrade (not fresh install).
+
+        This ensures that the initial v13 schema date (if not yet persisted in the backup
+        config) is set to tomorrow rather than today, preserving today's logs that were
+        written under the previous v11/v12 schema.
+
+        The backup config on persistent storage is the primary safeguard against date drift;
+        this flag only matters on the very first config generation after an upgrade.
+        """
         self._stored.fresh_install = False
         self._configure()
 
@@ -898,19 +902,21 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def _tsdb_versions_migration_dates(self) -> List[Dict[str, str]]:
-        # Always read migration dates from the persisted backup config first.
-        # The backup (on persistent storage) is the source of truth — this ensures
-        # idempotency across pod churns, upgrades, and any event that triggers _configure().
-        #
-        # Stored state (Juju controller DB) is used as a secondary fallback, because
-        # the backup file may be temporarily unavailable during pod recreation (e.g. PVC
-        # not yet remounted when pebble is already connectable).
-        #
-        # The v13 date is computed only once (when neither backup nor stored state has it):
-        # - Fresh install: today (no pre-existing logs)
-        # - Upgrade from older charm (v11/v12 only): tomorrow (preserves today's logs
-        #   written under the previous schema)
+        """Return the schema version migration dates for the Loki TSDB config.
 
+        Always reads migration dates from the persisted backup config first.
+        The backup (on persistent storage) is the source of truth — this ensures
+        idempotency across pod churns, upgrades, and any event that triggers _configure().
+
+        Stored state (Juju controller DB) is used as a secondary fallback, because
+        the backup file may be temporarily unavailable during pod recreation (e.g. PVC
+        not yet remounted when pebble is already connectable).
+
+        The v13 date is computed only once (when neither backup nor stored state has it):
+        - Fresh install: today (no pre-existing logs)
+        - Upgrade from older charm (v11/v12 only): tomorrow (preserves today's logs
+          written under the previous schema)
+        """
         date_format = "%Y-%m-%d"
         today = datetime.datetime.now(datetime.timezone.utc)
 
