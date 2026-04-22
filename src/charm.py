@@ -149,6 +149,7 @@ class LokiOperatorCharm(CharmBase):
                 retention=to_tuple(ActiveStatus()),
             ),
             fresh_install=True,
+            v13_migration_date="",
         )
 
         self._loki_container = self.unit.get_container(self._name)
@@ -901,7 +902,11 @@ class LokiOperatorCharm(CharmBase):
         # The backup (on persistent storage) is the source of truth — this ensures
         # idempotency across pod churns, upgrades, and any event that triggers _configure().
         #
-        # The v13 date is computed only once (when no backup exists yet):
+        # Stored state (Juju controller DB) is used as a secondary fallback, because
+        # the backup file may be temporarily unavailable during pod recreation (e.g. PVC
+        # not yet remounted when pebble is already connectable).
+        #
+        # The v13 date is computed only once (when neither backup nor stored state has it):
         # - Fresh install: today (no pre-existing logs)
         # - Upgrade from older charm (v11/v12 only): tomorrow (preserves today's logs
         #   written under the previous schema)
@@ -917,20 +922,28 @@ class LokiOperatorCharm(CharmBase):
 
         v13_migration_date = self._get_schema_config_version_migration_date_from_backup("v13")
         if v13_migration_date:
+            self._stored.v13_migration_date = v13_migration_date
             ret.append({"version": "v13", "date": v13_migration_date})
             return ret
 
-        # No v13 in backup — first time determining the date.
+        # Backup unavailable or has no v13 — fall back to stored state.
+        if self._stored.v13_migration_date:
+            ret.append({"version": "v13", "date": self._stored.v13_migration_date})
+            return ret
+
+        # No v13 anywhere — first time determining the date.
         if self._stored.fresh_install:
-            ret.append({"version": "v13", "date": today.strftime(date_format)})
+            v13_date = today.strftime(date_format)
         else:
             tomorrow = today + datetime.timedelta(days=1)
             if v12_migration_date and tomorrow.strftime(date_format) == v12_migration_date:
                 after_tomorrow = tomorrow + datetime.timedelta(days=1)
-                ret.append({"version": "v13", "date": after_tomorrow.strftime(date_format)})
+                v13_date = after_tomorrow.strftime(date_format)
             else:
-                ret.append({"version": "v13", "date": tomorrow.strftime(date_format)})
+                v13_date = tomorrow.strftime(date_format)
 
+        self._stored.v13_migration_date = v13_date
+        ret.append({"version": "v13", "date": v13_date})
         return ret
 
     def _update_datasource_exchange(self) -> None:

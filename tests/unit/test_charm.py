@@ -526,7 +526,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
 
 
 class TestTsdbVersionsMigrationDates(unittest.TestCase):
-    """Feature: The v13 schema 'from' date must be computed once and then frozen in the backup."""
+    """Feature: The v13 schema 'from' date must be computed once and then frozen."""
 
     @patch("socket.getfqdn", new=lambda *args: "fqdn")
     @k8s_resource_multipatch
@@ -554,6 +554,7 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         """On a truly fresh install (no backup), v13 date should be today."""
         charm = self.harness.charm
         charm._stored.fresh_install = True  # type: ignore
+        charm._stored.v13_migration_date = ""  # type: ignore
 
         with patch.object(
             type(charm),
@@ -607,9 +608,10 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], original_date)
 
     def test_upgrade_no_backup_uses_tomorrow(self):
-        """On upgrade from v11-only (no v13 in backup), v13 date should be tomorrow."""
+        """On upgrade from v11-only (no v13 in backup or stored state), v13 date should be tomorrow."""
         charm = self.harness.charm
         charm._stored.fresh_install = False  # type: ignore
+        charm._stored.v13_migration_date = ""  # type: ignore
 
         with patch.object(
             type(charm),
@@ -625,6 +627,41 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
                 datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
             ).strftime("%Y-%m-%d")
             self.assertEqual(v13_entries[0]["date"], expected)
+
+    def test_stored_state_fallback_when_backup_unavailable(self):
+        """When the backup file is unavailable, stored state must prevent date drift."""
+        charm = self.harness.charm
+        charm._stored.fresh_install = False  # type: ignore
+        original_date = "2026-01-15"
+        charm._stored.v13_migration_date = original_date  # type: ignore
+
+        # Backup returns "" (e.g. PVC not yet remounted after pod recreation)
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            return_value="",
+        ):
+            dates = charm._tsdb_versions_migration_dates  # type: ignore
+            v13_entries = [d for d in dates if d["version"] == "v13"]
+            self.assertEqual(len(v13_entries), 1)
+            self.assertEqual(v13_entries[0]["date"], original_date)
+
+    def test_backup_syncs_to_stored_state(self):
+        """Reading v13 from backup must also persist the date in stored state."""
+        charm = self.harness.charm
+        charm._stored.v13_migration_date = ""  # type: ignore
+        original_date = "2026-01-15"
+
+        def mock_backup(self_inner, sc_version):
+            return {"v13": original_date, "v12": ""}.get(sc_version, "")
+
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            mock_backup,
+        ):
+            charm._tsdb_versions_migration_dates  # type: ignore
+            self.assertEqual(charm._stored.v13_migration_date, original_date)  # type: ignore
 
     def test_v13_date_stable_across_config_changed_events(self):
         """The v13 date must not drift when config-changed fires on a later day."""
