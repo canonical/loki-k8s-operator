@@ -523,3 +523,133 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.harness.charm.on.config_changed.emit()
         self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+
+
+class TestTsdbVersionsMigrationDates(unittest.TestCase):
+    """Feature: The v13 schema 'from' date must be computed once and then frozen in the backup."""
+
+    @patch("socket.getfqdn", new=lambda *args: "fqdn")
+    @k8s_resource_multipatch
+    @patch("lightkube.core.client.GenericSyncClient")
+    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
+    def setUp(self, *_):
+        os.environ["JUJU_VERSION"] = "3.0.3"
+        self.check_alert_rules_patcher = patch(
+            "charm.LokiOperatorCharm._check_alert_rules",
+            new=lambda x: True,
+        )
+        self.check_alert_rules_patcher.start()
+
+        self.harness = Harness(LokiOperatorCharm)
+        self.addCleanup(self.harness.cleanup)
+        self.harness.set_leader(True)
+        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
+        self.harness.begin_with_initial_hooks()
+        self.harness.container_pebble_ready("loki")
+
+    def tearDown(self):
+        self.check_alert_rules_patcher.stop()
+
+    def test_fresh_install_no_backup_uses_today(self):
+        """On a truly fresh install (no backup), v13 date should be today."""
+        charm = self.harness.charm
+        charm._stored.fresh_install = True  # type: ignore
+
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            return_value="",
+        ):
+            dates = charm._tsdb_versions_migration_dates  # type: ignore
+            v13_entries = [d for d in dates if d["version"] == "v13"]
+            self.assertEqual(len(v13_entries), 1)
+            import datetime
+
+            expected = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+            self.assertEqual(v13_entries[0]["date"], expected)
+
+    def test_fresh_install_with_backup_preserves_date(self):
+        """On a fresh install pod churn, backup date must take precedence over today."""
+        charm = self.harness.charm
+        charm._stored.fresh_install = True  # type: ignore
+        original_date = "2026-01-15"
+
+        def mock_backup(self_inner, sc_version):
+            return {"v13": original_date, "v12": ""}.get(sc_version, "")
+
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            mock_backup,
+        ):
+            dates = charm._tsdb_versions_migration_dates  # type: ignore
+            v13_entries = [d for d in dates if d["version"] == "v13"]
+            self.assertEqual(len(v13_entries), 1)
+            self.assertEqual(v13_entries[0]["date"], original_date)
+
+    def test_upgrade_with_backup_preserves_date(self):
+        """On upgrade, if backup has v13, the persisted date must be used."""
+        charm = self.harness.charm
+        charm._stored.fresh_install = False  # type: ignore
+        original_date = "2026-01-15"
+
+        def mock_backup(self_inner, sc_version):
+            return {"v13": original_date, "v12": ""}.get(sc_version, "")
+
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            mock_backup,
+        ):
+            dates = charm._tsdb_versions_migration_dates  # type: ignore
+            v13_entries = [d for d in dates if d["version"] == "v13"]
+            self.assertEqual(len(v13_entries), 1)
+            self.assertEqual(v13_entries[0]["date"], original_date)
+
+    def test_upgrade_no_backup_uses_tomorrow(self):
+        """On upgrade from v11-only (no v13 in backup), v13 date should be tomorrow."""
+        charm = self.harness.charm
+        charm._stored.fresh_install = False  # type: ignore
+
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            return_value="",
+        ):
+            dates = charm._tsdb_versions_migration_dates  # type: ignore
+            v13_entries = [d for d in dates if d["version"] == "v13"]
+            self.assertEqual(len(v13_entries), 1)
+            import datetime
+
+            expected = (
+                datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+            ).strftime("%Y-%m-%d")
+            self.assertEqual(v13_entries[0]["date"], expected)
+
+    def test_v13_date_stable_across_config_changed_events(self):
+        """The v13 date must not drift when config-changed fires on a later day."""
+        charm = self.harness.charm
+        container = charm.unit.get_container("loki")
+
+        # After setUp, a config with v13 has already been pushed.
+        # Read the v13 date from the generated config.
+        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
+        original_v13_date = None
+        for sc in config["schema_config"]["configs"]:
+            if sc.get("schema") == "v13":
+                original_v13_date = sc["from"]
+                break
+        self.assertIsNotNone(original_v13_date, "v13 schema should be present after setUp")
+
+        # Simulate a config-changed event (e.g., pod churn on a later day).
+        # The backup file should ensure the date is preserved.
+        self.harness.charm.on.config_changed.emit()
+
+        config_after = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
+        v13_date_after = None
+        for sc in config_after["schema_config"]["configs"]:
+            if sc.get("schema") == "v13":
+                v13_date_after = sc["from"]
+                break
+        self.assertEqual(original_v13_date, v13_date_after)
+

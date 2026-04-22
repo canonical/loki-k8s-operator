@@ -319,12 +319,11 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_upgrade_charm(self, _):
-        # Note: If the pod is rescheduled during startup (e.g., by manual kubectl delete
-        # or resource limit patch), the `upgrade-charm` event might trigger prematurely,
-        # This could incorrectly set the TSDB date to the upgrade day, instead of the following day,
-        # potentially corrupting logs received on that day. Subsequent logs should be healthy.
-        # Documenting for troubleshooting; automatic handling may not be necessary due to the complexity
-        # of guarding against this rare edge case.
+        # Mark as upgrade so that the initial v13 schema date (if not yet persisted in the
+        # backup config) is set to tomorrow rather than today, preserving today's logs that
+        # were written under the previous v11/v12 schema.
+        # The backup config on persistent storage is the primary safeguard against date drift;
+        # this flag only matters on the very first config generation after an upgrade.
         self._stored.fresh_install = False
         self._configure()
 
@@ -898,41 +897,40 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def _tsdb_versions_migration_dates(self) -> List[Dict[str, str]]:
-        # If v13_migration_date isn't set (due to missing or failed retrieval),
-        # we determine the migration date for v13 schema. This occurs once
-        # during initial setup, as subsequent hooks will get the value from the persisted backup config.
-
-        # If it's a fresh Loki installation, it's safe to set the v13 schema date to today.
-        # This ensures that logs are correctly managed in v13 from the beginning of Loki's operation.
-        # If it's an upgrade scenario, we set the date to tomorrow to accommodate today's logs
-        # that might have been written in the previous v11/v12 schema formats.
-
-        # By default, we assume it's a fresh installation unless state explicitly set to False
-        # by the upgrade hook, indicating an upgrade
+        # Always read migration dates from the persisted backup config first.
+        # The backup (on persistent storage) is the source of truth — this ensures
+        # idempotency across pod churns, upgrades, and any event that triggers _configure().
+        #
+        # The v13 date is computed only once (when no backup exists yet):
+        # - Fresh install: today (no pre-existing logs)
+        # - Upgrade from older charm (v11/v12 only): tomorrow (preserves today's logs
+        #   written under the previous schema)
 
         date_format = "%Y-%m-%d"
         today = datetime.datetime.now(datetime.timezone.utc)
 
-        if self._stored.fresh_install:
-            return [{"version": "v13", "date": today.strftime(date_format)}]
-
         ret = []
 
-        if v12_migration_date := self._get_schema_config_version_migration_date_from_backup("v12"):
+        v12_migration_date = self._get_schema_config_version_migration_date_from_backup("v12")
+        if v12_migration_date:
             ret.append({"version": "v12", "date": v12_migration_date})
 
-        if v13_migration_date := self._get_schema_config_version_migration_date_from_backup("v13"):
+        v13_migration_date = self._get_schema_config_version_migration_date_from_backup("v13")
+        if v13_migration_date:
             ret.append({"version": "v13", "date": v13_migration_date})
             return ret
 
-        tomorrow = today + datetime.timedelta(days=1)
+        # No v13 in backup — first time determining the date.
+        if self._stored.fresh_install:
+            ret.append({"version": "v13", "date": today.strftime(date_format)})
+        else:
+            tomorrow = today + datetime.timedelta(days=1)
+            if v12_migration_date and tomorrow.strftime(date_format) == v12_migration_date:
+                after_tomorrow = tomorrow + datetime.timedelta(days=1)
+                ret.append({"version": "v13", "date": after_tomorrow.strftime(date_format)})
+            else:
+                ret.append({"version": "v13", "date": tomorrow.strftime(date_format)})
 
-        if tomorrow.strftime(date_format) == v12_migration_date:
-            after_tomorrow = tomorrow + datetime.timedelta(days=1)
-            ret.append({"version": "v13", "date": after_tomorrow.strftime(date_format)})
-            return ret
-
-        ret.append({"version": "v13", "date": tomorrow.strftime(date_format)})
         return ret
 
     def _update_datasource_exchange(self) -> None:
