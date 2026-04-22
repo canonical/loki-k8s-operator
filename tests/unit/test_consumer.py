@@ -5,9 +5,10 @@ import json
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
-from charms.loki_k8s.v0.loki_push_api import AlertRules, LokiPushApiConsumer
+from charms.loki_k8s.v0.loki_push_api import AlertRules, CosTool, LokiPushApiConsumer
 from cosl import JujuTopology
 from fs.tempfs import TempFS
 from ops.charm import CharmBase
@@ -341,6 +342,17 @@ class TestAlertRuleFormat(unittest.TestCase):
     def setUp(self):
         self.sandbox = TempFS("consumer_rule_files", auto_clean=True)
         self.addCleanup(self.sandbox.close)
+
+        # CosTool uses platform.processor() to locate the cos-tool binary.
+        # On some systems (containers, CI) this returns "" instead of "x86_64",
+        # so the binary isn't found and label injection is silently skipped.
+        # Reset the class-level cache and mock the processor to ensure the
+        # binary is discovered.
+        CosTool._path = None  # type: ignore
+        CosTool._disabled = False  # type: ignore
+        self.processor_patcher = patch("platform.processor", return_value="x86_64")
+        self.processor_patcher.start()
+        self.addCleanup(self.processor_patcher.stop)
 
         alert_rules_path = self.sandbox.getsyspath("/")
 
