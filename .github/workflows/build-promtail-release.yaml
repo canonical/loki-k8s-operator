@@ -54,7 +54,7 @@ jobs:
           ldd clients/cmd/promtail/promtail
           file clients/cmd/promtail/promtail
       - name: Attach promtail-dynamic-${{matrix.config.arch}} artifact to run
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: promtail-dynamic-${{matrix.config.arch}}
           path: ./loki-upstream/clients/cmd/promtail/promtail
@@ -78,7 +78,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Download the promtail-dynamic-${{matrix.config.arch}} artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: promtail-dynamic-${{matrix.config.arch}}
           path: ./dist/
@@ -134,7 +134,7 @@ jobs:
           CGO_ENABLED=0 GOHOSTOS=linux GOARCH=${{matrix.arch}} make clients/cmd/promtail/promtail
           file clients/cmd/promtail/promtail
       - name: Attach promtail-static-${{matrix.arch}} artifact to run
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: promtail-static-${{matrix.arch}}
           path: ./loki-upstream/clients/cmd/promtail/promtail
@@ -157,7 +157,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Download the promtail-static-${{matrix.config.arch}} artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: promtail-static-${{matrix.config.arch}}
           path: ./dist/
@@ -253,7 +253,7 @@ jobs:
     needs: tag
     steps:
       - name: Download the artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
       - name: List artifacts

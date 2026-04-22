@@ -15,8 +15,8 @@ from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
 from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
 from ops.testing import Harness
 
-from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
-from charm import LokiOperatorCharm
+from charm import LOKI_CONFIG as LOKI_CONFIG_PATH  # type: ignore
+from charm import LokiOperatorCharm  # type: ignore
 
 METADATA = {
     "model": "consumer-model",
@@ -122,22 +122,23 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(self.harness.cleanup)
         self.addCleanup(version_patcher.stop)
         self.harness.set_leader(True)
+        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
     def test__alerting_config(self):
-        self.harness.charm.alertmanager_consumer = Mock()
+        self.harness.charm.alertmanager_consumer = Mock()  # type: ignore
         mock_cluster = {"http://10.1.2.52", "http://10.1.3.52"}
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = mock_cluster
+        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = mock_cluster  # type: ignore
         expected_value = "http://10.1.2.52,http://10.1.3.52"
-        self.assertEqual(mock_cluster, set(self.harness.charm._alerting_config().split(",")))
+        self.assertEqual(mock_cluster, set(self.harness.charm._alerting_config().split(",")))  # type: ignore
 
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = set()
+        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = set()  # type: ignore
         expected_value = ""
-        self.assertEqual(self.harness.charm._alerting_config(), expected_value)
+        self.assertEqual(self.harness.charm._alerting_config(), expected_value)  # type: ignore
 
         with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._alerting_config()
+            self.harness.charm._alerting_config()  # type: ignore
             searched_message = "DEBUG:charm:No alertmanagers available"
             any_matches = any(searched_message in log_message for log_message in logger.output)
             self.assertTrue(any_matches)
@@ -189,7 +190,7 @@ class TestConfigFile(unittest.TestCase):
 
         # GIVEN this unit is the leader
         self.harness.set_leader(True)
-
+        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
@@ -453,6 +454,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.harness = Harness(LokiOperatorCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.set_leader(True)
+        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
         self.harness.begin_with_initial_hooks()
         self.harness.container_pebble_ready("loki")
 
@@ -499,7 +501,7 @@ class TestAlertRuleBlockedStatus(unittest.TestCase):
         self.mock_request.side_effect = None
         self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
 
-        self.harness.charm._loki_push_api_alert_rules_changed(None)
+        self.harness.charm._loki_push_api_alert_rules_changed(None)  # type: ignore
         self.harness.evaluate_status()
         self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
 

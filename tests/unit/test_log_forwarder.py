@@ -51,7 +51,7 @@ class TestLogForwarding(unittest.TestCase):
                 loki_unit,
                 {"endpoint": data},
             )
-        relation_obj = self.harness.model.relations.get("logging")[0]
+        relation_obj = self.harness.model.relations["logging"][0]
         expected_endpoints = {
             "loki/0": "http://loki-0:3100/loki/api/v1/push",
             "loki/1": "http://loki-1:3100/loki/api/v1/push",

@@ -8,14 +8,12 @@ import logging
 import subprocess
 import urllib.request
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+from urllib.error import HTTPError
 from urllib.parse import urljoin
 
 import requests
 import yaml
-from juju.application import Application
-from juju.unit import Unit
-from minio import Minio
 from pytest_operator.plugin import OpsTest
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -62,7 +60,7 @@ async def loki_rules(ops_test, app_name) -> dict:
         if response.code == 200:
             return yaml.safe_load(response.read())
         return {}
-    except urllib.error.HTTPError:
+    except HTTPError:
         return {}
 
 
@@ -285,6 +283,7 @@ class ModelConfigChange:
 
     async def __aenter__(self):
         """On entry, the config is set to the user provided custom values."""
+        assert self.ops_test.model
         config = await self.ops_test.model.get_config()
         self.revert_to = {k: config[k] for k in self.change_to.keys()}
         await self.ops_test.model.set_config(self.change_to)
@@ -292,24 +291,25 @@ class ModelConfigChange:
 
     async def __aexit__(self, exc_type, exc_value, exc_traceback):
         """On exit, the modified config options are reverted to their original values."""
+        assert self.ops_test.model
         await self.ops_test.model.set_config(self.revert_to)
 
 
-def oci_image(metadata_file: str, image_name: str) -> str:
+def oci_image(charmcraft_file: str, image_name: str) -> str:
     """Find upstream source for a container image.
 
     Args:
-        metadata_file: string path of metadata YAML file relative
+        charmcraft_file: string path of charmcraft YAML file relative
             to top level charm directory
         image_name: OCI container image string name as defined in
-            metadata.yaml file
+            charmcraft.yaml file
     Returns:
         upstream image source
     Raises:
-        FileNotFoundError: if metadata_file path is invalid
+        FileNotFoundError: if charmcraft_file path is invalid
         ValueError: if upstream source for image name can not be found
     """
-    metadata = yaml.safe_load(Path(metadata_file).read_text())
+    metadata = yaml.safe_load(Path(charmcraft_file).read_text())
 
     resources = metadata.get("resources", {})
     if not resources:
@@ -340,8 +340,8 @@ async def juju_show_unit(
     ops_test: OpsTest,
     unit_name: str,
     *,
-    endpoint: str = None,
-    related_unit: str = None,
+    endpoint: Optional[str] = None,
+    related_unit: Optional[str] = None,
     app_data_only: bool = False,
 ) -> dict:
     """Helper function for obtaining output of `juju show-unit`.
@@ -474,76 +474,6 @@ async def delete_pod(model_name: str, app_name: str, unit_num: int) -> bool:
         raise e
 
 
-async def deploy_and_configure_minio(ops_test: OpsTest) -> None:
-    """Deploy and set up minio and s3-integrator needed for s3-like storage backend in the HA charms."""
-    config = {
-        "access-key": "accesskey",
-        "secret-key": "secretkey",
-    }
-    await ops_test.model.deploy("minio", channel="edge", trust=True, config=config)
-    await ops_test.model.wait_for_idle(apps=["minio"], status="active", timeout=2000)
-    minio_addr = await get_unit_address(ops_test, "minio", 0)
-
-    mc_client = Minio(
-        f"{minio_addr}:9000",
-        access_key="accesskey",
-        secret_key="secretkey",
-        secure=False,
-    )
-
-    # create tempo bucket
-    found = mc_client.bucket_exists("tempo")
-    if not found:
-        mc_client.make_bucket("tempo")
-
-    # configure s3-integrator
-    s3_integrator_app: Application = ops_test.model.applications["s3-integrator"]
-    s3_integrator_leader: Unit = s3_integrator_app.units[0]
-
-    await s3_integrator_app.set_config(
-        {
-            "endpoint": f"minio-0.minio-endpoints.{ops_test.model.name}.svc.cluster.local:9000",
-            "bucket": "tempo",
-        }
-    )
-
-    action = await s3_integrator_leader.run_action("sync-s3-credentials", **config)
-    action_result = await action.wait()
-    assert action_result.status == "completed"
-
-
-async def deploy_tempo_cluster(ops_test: OpsTest):
-    """Deploys tempo in its HA version together with minio and s3-integrator."""
-    tempo_app = "tempo"
-    worker_app = "tempo-worker"
-    tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", "edge"
-    tempo_coordinator_charm_url, coordinator_channel = "tempo-coordinator-k8s", "edge"
-    await ops_test.model.deploy(
-        tempo_worker_charm_url, application_name=worker_app, channel=worker_channel, trust=True
-    )
-    await ops_test.model.deploy(
-        tempo_coordinator_charm_url,
-        application_name=tempo_app,
-        channel=coordinator_channel,
-        trust=True,
-    )
-    await ops_test.model.deploy("s3-integrator", channel="edge")
-
-    await ops_test.model.integrate(tempo_app + ":s3", "s3-integrator" + ":s3-credentials")
-    await ops_test.model.integrate(tempo_app + ":tempo-cluster", worker_app + ":tempo-cluster")
-
-    await deploy_and_configure_minio(ops_test)
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=[tempo_app, worker_app, "s3-integrator"],
-            status="active",
-            timeout=2000,
-            idle_period=30,
-            # TODO: remove when https://github.com/canonical/tempo-coordinator-k8s-operator/issues/90 is fixed
-            raise_on_error=False,
-        )
-
-
 def get_traces(tempo_host: str, service_name="tracegen-otlp_http", tls=True):
     """Get traces directly from Tempo REST API."""
     url = f"{'https' if tls else 'http'}://{tempo_host}:3200/api/search?tags=service.name={service_name}"
@@ -570,6 +500,7 @@ async def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tl
 
 async def get_application_ip(ops_test: OpsTest, app_name: str) -> str:
     """Get the application IP address."""
+    assert ops_test.model
     status = await ops_test.model.get_status()
     app = status["applications"][app_name]
     return app.public_address

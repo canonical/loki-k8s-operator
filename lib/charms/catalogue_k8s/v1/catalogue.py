@@ -1,19 +1,69 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Charm for providing services catalogues to bundles or sets of charms."""
+"""Charm for providing services catalogues to bundles or sets of charms.
+
+This charm library contains two classes (CatalogueProvider and CatalogueConsumer) that handle
+both sides of the `catalogue` relation interface.
+
+### CatalogueConsumer
+
+The Consumer allows sending catalogue items to a Catalogue charm.
+
+Adding it to your charm is very simple:
+
+    ```
+    from charms.catalogue_k8s.v1.catalogue import (
+        CatalogueConsumer,
+        CatalogueItem,
+    )
+
+    ...
+        self.catalogue = CatalogueConsumer(
+            charm=self,
+            relation_name="catalogue",  # optional
+            item=CatalogueItem(
+                name="myapp",
+                url=myapp_url,
+                icon="rainbow",
+                description="This is a rainbow app!"
+            )
+        )
+    ```
+
+    The relevant events listeners are already registered by the CatalogueConsumer object.
+
+### CatalogueProvider
+
+The Provider helps you receive catalogue items from other charms to display them however you like.
+
+To implement this in your charm:
+
+    ```
+    from charms.catalogue_k8s.v1.catalogue import CatalogueProvider
+
+    ...
+        self.catalogue = CatalogueProvider(
+            charm=self,
+            relation_name="catalogue",  # optional
+        )
+    ```
+
+
+    The relevant events listeners are already registered by the CatalogueProvider object.
+"""
 
 import ipaddress
+import json
 import logging
-import socket
-from typing import Optional
+from typing import Dict, Optional
 
 from ops.charm import CharmBase
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 
 LIBID = "fa28b361293b46668bcd1f209ada6983"
 LIBAPI = 1
-LIBPATCH = 0
+LIBPATCH = 3
 
 DEFAULT_RELATION_NAME = "catalogue"
 
@@ -23,14 +73,23 @@ logger = logging.getLogger(__name__)
 class CatalogueItem:
     """`CatalogueItem` represents an application entry sent to a catalogue.
 
-    The icon is an iconify mdi string; see https://icon-sets.iconify.design/mdi.
+    icon (str): An Iconify Material Design Icon (MDI) string.
+        (See: https://icon-sets.iconify.design/mdi for more details).
+    api_docs (str): A URL to the docs relevant to this item (upstream or otherwise).
+    api_endpoints (dict): A dictionary containing API information, where:
+        - The key is a description or name of the endpoint (e.g., "Alerts").
+        - The value is the actual address of the endpoint (e.g., "'http://1.2.3.4:1234/api/v1/targets/metadata'").
+        - Example for setting the api_endpoints attr:
+            api_endpoints={"Alerts": f"{self.external_url}/api/v1/alerts"}
     """
 
-    def __init__(self, name: str, url: str, icon: str, description: str = ""):
+    def __init__(self, name: str, url: str, icon: str, description: str = "", api_docs: str = "", api_endpoints: Optional[Dict[str,str]] = None):
         self.name = name
         self.url = url
         self.icon = icon
         self.description = description
+        self.api_docs = api_docs
+        self.api_endpoints = api_endpoints
 
 
 class CatalogueConsumer(Object):
@@ -69,6 +128,8 @@ class CatalogueConsumer(Object):
             relation.data[self._charm.model.app]["description"] = self._item.description
             relation.data[self._charm.model.app]["url"] = self.unit_address(relation)
             relation.data[self._charm.model.app]["icon"] = self._item.icon
+            relation.data[self._charm.model.app]["api_docs"] = self._item.api_docs
+            relation.data[self._charm.model.app]["api_endpoints"] = json.dumps(self._item.api_endpoints)
 
     def update_item(self, item: CatalogueItem):
         """Update the catalogue item."""
@@ -76,18 +137,13 @@ class CatalogueConsumer(Object):
         self._update_relation_data()
 
     def unit_address(self, relation):
-        """The unit address of the consumer, on which it is reachable.
+        """Return the unit address of the consumer, on which it is reachable.
 
         Requires ingress to be connected for it to be routable.
         """
         if self._item and self._item.url:
             return self._item.url
-
-        unit_ip = str(self._charm.model.get_binding(relation).network.bind_address)
-        if self._is_valid_unit_address(unit_ip):
-            return unit_ip
-
-        return socket.getfqdn()
+        return ""
 
     def _is_valid_unit_address(self, address: str) -> bool:
         """Validate a unit address.
@@ -97,6 +153,7 @@ class CatalogueConsumer(Object):
 
         Args:
             address: a string representing a unit address
+
         """
         try:
             _ = ipaddress.ip_address(address)
@@ -158,6 +215,8 @@ class CatalogueProvider(Object):
                 "url": relation.data[relation.app].get("url", ""),
                 "icon": relation.data[relation.app].get("icon", ""),
                 "description": relation.data[relation.app].get("description", ""),
+                "api_docs": relation.data[relation.app].get("api_docs", ""),
+                "api_endpoints": json.loads(relation.data[relation.app].get("api_endpoints", "{}")),
             }
             for relation in self._charm.model.relations[self._relation_name]
             if relation.app and relation.units

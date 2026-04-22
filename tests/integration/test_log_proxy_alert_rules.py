@@ -12,14 +12,14 @@ from helpers import loki_alerts, oci_image
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
     "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
 }
 tester_resources = {
     "workload-image": oci_image(
-        "./tests/integration/log-proxy-tester/metadata.yaml", "workload-image"
+        "./tests/integration/log-proxy-tester/charmcraft.yaml", "workload-image"
     )
 }
 

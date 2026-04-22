@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 import subprocess
-import unittest
+import unittest.mock
 from pathlib import PosixPath
 
 from charms.loki_k8s.v0.loki_push_api import CosTool

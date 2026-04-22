@@ -44,7 +44,7 @@ class FakeConsumerCharm(CharmBase):
 
     @property
     def _loki_push_api(self) -> str:
-        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"
+        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"  # type: ignore
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
@@ -214,6 +214,7 @@ class TestReloadAlertRules(unittest.TestCase):
         """Scenario: The reload method is called when the alerts dir is still empty."""
         # GIVEN relation data contains no alerts
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
         # WHEN no rule files are present
@@ -223,12 +224,14 @@ class TestReloadAlertRules(unittest.TestCase):
 
         # THEN relation data is unchanged
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
     def test_reload_after_dir_is_populated_updates_relation_data(self):
         """Scenario: The reload method is called after some alert files are added."""
         # GIVEN relation data contains no alerts
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
         # WHEN some rule files are added to the alerts dir
@@ -239,6 +242,7 @@ class TestReloadAlertRules(unittest.TestCase):
 
         # THEN relation data is updated
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertNotEqual(
             relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS
         )
@@ -249,8 +253,9 @@ class TestReloadAlertRules(unittest.TestCase):
         self.sandbox.writetext("alert.rule", self.ALERT)
         self.harness.charm.loki_consumer._reinitialize_alert_rules()
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertEqual(
-            json.loads(relation.data[self.harness.charm.app].get("alert_rules")),
+            json.loads(relation.data[self.harness.charm.app].get("alert_rules", "")),
             self.RENDERED_ALERT_WITHOUT_LABELS,
         )
 
@@ -262,6 +267,7 @@ class TestReloadAlertRules(unittest.TestCase):
 
         # THEN relation data is empty again
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
     def test_reload_after_dir_itself_removed_updates_relation_data(self):
@@ -270,6 +276,7 @@ class TestReloadAlertRules(unittest.TestCase):
         self.sandbox.writetext("alert.rule", self.ALERT)
         self.harness.charm.loki_consumer._reinitialize_alert_rules()
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertNotEqual(
             relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS
         )
@@ -282,6 +289,7 @@ class TestReloadAlertRules(unittest.TestCase):
 
         # THEN relation data is empty again
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
 
@@ -380,6 +388,7 @@ class TestAlertRuleFormat(unittest.TestCase):
 
         # THEN relation data is empty (empty rule files do not get forwarded in any way)
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
         # AND an error message is recorded for every empty file
@@ -401,6 +410,7 @@ class TestAlertRuleFormat(unittest.TestCase):
 
         # THEN relation data is empty (invalid rule files do not get forwarded in any way)
         relation = self.harness.charm.model.get_relation("logging")
+        assert relation
         self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
 
         # AND an error message is recorded for every invalid file
@@ -430,7 +440,8 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.sandbox.writetext("error.rules", yaml.dump(unlabeled_rule))
         self.harness.begin_with_initial_hooks()
         relation = self.harness.charm.model.get_relation("logging")
-        rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules"))
+        assert relation
+        rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules", ""))
         expr = rules["groups"][0]["rules"][0]["expr"]
         self.assertIn("juju_model", expr)
         self.assertIn("juju_model_uuid", expr)
@@ -465,7 +476,8 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.sandbox.writetext("error.rules", yaml.dump(unlabeled_rule))
         self.harness.begin_with_initial_hooks()
         relation = self.harness.charm.model.get_relation("logging")
-        rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules"))
+        assert relation
+        rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules", ""))
         expr = rules["groups"][0]["rules"][0]["expr"]
         self.assertIn("juju_model", expr)
         self.assertIn("juju_model_uuid", expr)

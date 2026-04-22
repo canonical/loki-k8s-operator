@@ -1,7 +1,0 @@
-log-error:
-  description: Log an error message.
-  params:
-    message:
-      description: Error message to be logged.
-      type: string
-      default: ""

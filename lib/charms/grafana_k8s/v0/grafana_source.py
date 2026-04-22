@@ -131,8 +131,10 @@ import json
 import logging
 import re
 import socket
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
+from cosl.types import type_convert_stored
 from ops.charm import (
     CharmBase,
     CharmEvents,
@@ -148,8 +150,6 @@ from ops.framework import (
     EventSource,
     Object,
     ObjectEvents,
-    StoredDict,
-    StoredList,
     StoredState,
 )
 from ops.model import Relation
@@ -162,7 +162,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 24
+LIBPATCH = 29
 
 logger = logging.getLogger(__name__)
 
@@ -171,16 +171,20 @@ DEFAULT_PEER_NAME = "grafana"
 RELATION_INTERFACE_NAME = "grafana_datasource"
 
 
-def _type_convert_stored(obj) -> Union[dict, list]:
-    """Convert Stored* to their appropriate types, recursively."""
-    if isinstance(obj, StoredList):
-        return list(map(_type_convert_stored, obj))
-    if isinstance(obj, StoredDict):
-        rdict = {}
-        for k in obj.keys():
-            rdict[k] = _type_convert_stored(obj[k])
-        return rdict
-    return obj
+@dataclass
+class GrafanaSourceData:
+    """This class represents the data Grafana provides others about itself."""
+
+    datasource_uids: Dict[str, str]
+    external_url: Optional[str]
+
+    def get_unit_uid(self, unit: str):
+        """Return the UID for a given unit."""
+        if unit in self.datasource_uids:
+            datasource_uid = self.datasource_uids[unit]
+        else:
+            datasource_uid = ""
+        return datasource_uid
 
 
 class RelationNotFoundError(Exception):
@@ -206,8 +210,7 @@ class RelationInterfaceMismatchError(Exception):
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
         self.message = (
-            "The '{}' relation has '{}' as "
-            "interface rather than the expected '{}'".format(
+            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
                 relation_name, actual_relation_interface, expected_relation_interface
             )
         )
@@ -327,6 +330,7 @@ class GrafanaSourceProvider(Object):
         relation_name: str = DEFAULT_RELATION_NAME,
         extra_fields: Optional[dict] = None,
         secure_extra_fields: Optional[dict] = None,
+        is_ingress_per_app: bool = False,
     ) -> None:
         """Construct a Grafana charm client.
 
@@ -369,6 +373,9 @@ class GrafanaSourceProvider(Object):
                 for some datasources in the `jsonData` field
             secure_extra_fields: a :dict: which is used for additional information required
                 for some datasources in the `secureJsonData`
+            is_ingress_per_app: whether this application is behind an ingress, specifically ingress-per-app. If set to True, then only
+                the leader unit will be listed as a datasource in grafana. If False, each
+                follower unit will show up as a datasource as well.
         """
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.provides
@@ -405,9 +412,17 @@ class GrafanaSourceProvider(Object):
             )
 
         self._source_port = source_port
+
+        # If there's no ingress, then each unit is a datasource.
+        # If there is an ingress, then only the leader is a datasource.
+        self._this_unit_is_datasource = (not is_ingress_per_app) or charm.unit.is_leader()
+
         self._source_url = self._sanitize_source_url(source_url)
 
         self.framework.observe(events.relation_joined, self._set_sources_from_event)
+        self.framework.observe(events.relation_changed, self._set_sources_from_event)
+        self.framework.observe(events.relation_departed, self._set_sources_from_event)
+        self.framework.observe(events.relation_broken, self._set_sources_from_event)
         for ev in refresh_event:
             self.framework.observe(ev, self._set_unit_details)
 
@@ -429,12 +444,12 @@ class GrafanaSourceProvider(Object):
                 continue
             self._set_sources(rel)
 
-    def get_source_uids(self) -> Dict[str, Dict[str, str]]:
-        """Get the datasource UID(s) assigned by the remote end(s) to this datasource.
+    def get_source_data(self) -> Dict[str, GrafanaSourceData]:
+        """Get the Grafana data assigned by the remote end(s) to this datasource.
 
-        Returns a mapping from remote application UIDs to unit names to datasource uids.
+        Returns a mapping from remote application UIDs to GrafanaSourceData.
         """
-        uids = {}
+        data = {}
         for rel in self._charm.model.relations.get(self._relation_name, []):
             if not rel:
                 continue
@@ -446,9 +461,21 @@ class GrafanaSourceProvider(Object):
                     "`grafana_uid` field not found."
                 )
                 continue
+            grafana_data = GrafanaSourceData(
+                datasource_uids=json.loads(app_databag.get("datasource_uids", "{}")),
+                external_url=app_databag.get("grafana_base_url"),
+            )
+            data[grafana_uid] = grafana_data
+        return data
 
-            uids[grafana_uid] = json.loads(app_databag.get("datasource_uids", "{}"))
-        return uids
+    def get_source_uids(self) -> Dict[str, Dict[str, str]]:
+        """Get the datasource UID(s) assigned by the remote end(s) to this datasource.
+
+        DEPRECATED: This method is deprecated. Use the `get_source_data` instead.
+        Returns a mapping from remote application UIDs to unit names to datasource uids.
+        """
+        data = self.get_source_data()
+        return {grafana_uid: data[grafana_uid].datasource_uids for grafana_uid in data}
 
     def _set_sources_from_event(self, event: RelationJoinedEvent) -> None:
         """Get a `Relation` object from the event to pass on."""
@@ -488,11 +515,15 @@ class GrafanaSourceProvider(Object):
         unit relation data for the Prometheus consumer.
         """
         for relation in self._charm.model.relations[self._relation_name]:
-            url = self._source_url or "http://{}:{}".format(socket.getfqdn(), self._source_port)
-            if self._source_type == "mimir":
-                url = f"{url}/prometheus"
-
-            relation.data[self._charm.unit]["grafana_source_host"] = url
+            if self._this_unit_is_datasource:
+                url = self._source_url or "http://{}:{}".format(
+                    socket.getfqdn(), self._source_port
+                )
+                if self._source_type == "mimir":
+                    url = f"{url}/prometheus"
+                relation.data[self._charm.unit]["grafana_source_host"] = url
+            else:
+                relation.data[self._charm.unit]["grafana_source_host"] = ""
 
 
 class GrafanaSourceConsumer(Object):
@@ -504,6 +535,8 @@ class GrafanaSourceConsumer(Object):
     def __init__(
         self,
         charm: CharmBase,
+        grafana_uid: str,
+        grafana_base_url: str,
         relation_name: str = DEFAULT_RELATION_NAME,
     ) -> None:
         """A Grafana based Monitoring service consumer, i.e., the charm that uses a datasource.
@@ -511,6 +544,8 @@ class GrafanaSourceConsumer(Object):
         Args:
             charm: a :class:`CharmBase` instance that manages this
                 instance of the Grafana source service.
+            grafana_uid: an unique identifier for this grafana-k8s application.
+            grafana_base_url: the base URL (potentially ingressed) for this grafana-k8s application.
             relation_name: string name of the relation that is provides the
                 Grafana source service. It is strongly advised not to change
                 the default, so that people deploying your charm will have a
@@ -524,6 +559,8 @@ class GrafanaSourceConsumer(Object):
         super().__init__(charm, relation_name)
         self._relation_name = relation_name
         self._charm = charm
+        self._grafana_uid = grafana_uid
+        self._grafana_base_url = grafana_base_url
         events = self._charm.on[relation_name]
 
         # We're stuck with this forever now so upgrades work, or until such point as we can
@@ -561,9 +598,40 @@ class GrafanaSourceConsumer(Object):
                 if source:
                     sources[rel.id] = source
 
+            to_delete = self._sources_to_delete(sources)
             self.set_peer_data("sources", sources)
-
+            self.set_peer_data("sources_to_delete", to_delete)
         self.on.sources_changed.emit()  # pyright: ignore
+
+    def _sources_to_delete(self, new_sources: Dict) -> List:
+        """Return a list of sources to delete.
+
+        To ensure the Grafana datastore is updated when stale datasources exist, we compare the old
+        sources to the new ones. Any old sources which do not exist in the new sources are
+        scheduled for deletion in addition to any other sources already scheduled for deletion.
+        """
+        old_sources = self.get_peer_data("sources")
+        old_to_delete = self.get_peer_data("sources_to_delete")
+        new_to_delete = []
+        if old_to_delete:
+            new_to_delete.extend(old_to_delete)
+
+        if not old_sources:
+            return new_to_delete
+
+        for rel_id in new_sources:
+            old_source_names = (
+                [something["source_name"] for something in old_sources[str(rel_id)]]
+                if str(rel_id) in old_sources
+                else []
+            )
+            new_source_names = [something["source_name"] for something in new_sources[rel_id]]
+            new_to_delete_for_rel = [
+                name for name in old_source_names if name not in new_source_names
+            ]
+            new_to_delete.extend(new_to_delete_for_rel)
+
+        return new_to_delete
 
     def _on_grafana_peer_changed(self, _: RelationChangedEvent) -> None:
         """Emit source events on peer events so secondary charm data updates."""
@@ -577,15 +645,9 @@ class GrafanaSourceConsumer(Object):
 
         Assumes only leader unit will call this method
         """
-        unique_grafana_name = "juju_{}_{}_{}_{}".format(
-            self._charm.model.name,
-            self._charm.model.uuid,
-            self._charm.model.app.name,
-            self._charm.model.unit.name.split("/")[1],  # type: ignore
-        )
-
-        rel.data[self._charm.app]["grafana_uid"] = unique_grafana_name
+        rel.data[self._charm.app]["grafana_uid"] = self._grafana_uid
         rel.data[self._charm.app]["datasource_uids"] = json.dumps(uids)
+        rel.data[self._charm.app]["grafana_base_url"] = self._grafana_base_url
 
     def _get_source_config(self, rel: Relation):
         """Generate configuration from data stored in relation data by providers."""
@@ -717,7 +779,7 @@ class GrafanaSourceConsumer(Object):
             return
 
         self._set_default_data()
-        sources: dict = _type_convert_stored(self._stored.sources)  # pyright: ignore
+        sources: dict = type_convert_stored(self._stored.sources)  # pyright: ignore
         for rel_id in sources.keys():
             for i in range(len(sources[rel_id])):
                 sources[rel_id][i].update(
@@ -732,14 +794,12 @@ class GrafanaSourceConsumer(Object):
             self.set_peer_data("sources", sources)
 
         if self._stored.sources_to_delete:  # type: ignore
-            old_sources_to_delete = _type_convert_stored(
+            old_sources_to_delete = type_convert_stored(
                 self._stored.sources_to_delete  # pyright: ignore
             )
             self._stored.sources_to_delete = set()
             peer_sources_to_delete = set(self.get_peer_data("sources_to_delete"))
-            sources_to_delete = set.union(
-                old_sources_to_delete, peer_sources_to_delete  # pyright: ignore
-            )
+            sources_to_delete = set.union(old_sources_to_delete, peer_sources_to_delete)  # pyright: ignore
             self.set_peer_data("sources_to_delete", sources_to_delete)
 
     def update_sources(self, relation: Optional[Relation] = None) -> None:
@@ -762,7 +822,7 @@ class GrafanaSourceConsumer(Object):
         sources = []
         stored_sources = self.get_peer_data("sources")
         for source in stored_sources.values():
-            sources.extend(list(_type_convert_stored(source)))
+            sources.extend(list(type_convert_stored(source)))
 
         return sources
 
@@ -781,7 +841,7 @@ class GrafanaSourceConsumer(Object):
     def set_peer_data(self, key: str, data: Any) -> None:
         """Put information into the peer data bucket instead of `StoredState`."""
         peers = self._charm.peers  # type: ignore[attr-defined]
-        if not peers:
+        if not peers or not peers.data:
             # https://bugs.launchpad.net/juju/+bug/1998282
             logger.info("set_peer_data: no peer relation. Is the charm being installed/removed?")
             return
@@ -791,12 +851,11 @@ class GrafanaSourceConsumer(Object):
     def get_peer_data(self, key: str) -> Any:
         """Retrieve information from the peer data bucket instead of `StoredState`."""
         peers = self._charm.peers  # type: ignore[attr-defined]
-        if not peers:
+        if not peers or not peers.data:
             # https://bugs.launchpad.net/juju/+bug/1998282
             logger.warning(
                 "get_peer_data: no peer relation. Is the charm being installed/removed?"
             )
             return {}
-
-        data = self._charm.peers.data[self._charm.app].get(key, "")  # type: ignore[attr-defined]
+        data = peers.data[self._charm.app].get(key, "")  # type: ignore[attr-defined]
         return json.loads(data) if data else {}
