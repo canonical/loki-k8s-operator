@@ -4,11 +4,7 @@
 #
 # Learn more at: https://juju.is/docs/sdk
 
-"""Log proxy test driver.
-
-Deprecated: This charm uses LogProxyConsumer, which relies on Promtail. Promtail is deprecated
-by Grafana. New integrations should use LokiPushApiConsumer with OpenTelemetry Collector instead.
-"""
+"""Log proxy test driver."""
 
 import logging
 
