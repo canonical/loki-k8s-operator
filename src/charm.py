@@ -64,10 +64,11 @@ from ops.model import (
     StatusBase,
     WaitingStatus,
 )
-from ops.pebble import Error, Layer, PathError, ProtocolError
+from ops.pebble import APIError, Error, Layer, PathError, ProtocolError
 
 from config_builder import (
     CERT_FILE,
+    CHUNKS_DIR,
     HTTP_LISTEN_PORT,
     KEY_FILE,
     LOKI_CONFIG,
@@ -148,7 +149,6 @@ class LokiOperatorCharm(CharmBase):
                 rules=to_tuple(ActiveStatus()),
                 retention=to_tuple(ActiveStatus()),
             ),
-            fresh_install=True,
         )
 
         self._loki_container = self.unit.get_container(self._name)
@@ -319,13 +319,6 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_upgrade_charm(self, _):
-        # Note: If the pod is rescheduled during startup (e.g., by manual kubectl delete
-        # or resource limit patch), the `upgrade-charm` event might trigger prematurely,
-        # This could incorrectly set the TSDB date to the upgrade day, instead of the following day,
-        # potentially corrupting logs received on that day. Subsequent logs should be healthy.
-        # Documenting for troubleshooting; automatic handling may not be necessary due to the complexity
-        # of guarding against this rare edge case.
-        self._stored.fresh_install = False
         self._configure()
 
     def _on_certificate_available(self, _):
@@ -806,6 +799,22 @@ class LokiOperatorCharm(CharmBase):
         for f in files:
             self._loki_container.remove_path(f.path)
 
+    def _chunks_non_empty(self) -> bool:
+        """Return True if Loki has written any log chunks to the filesystem.
+
+        In single-tenant mode, Loki stores chunks exclusively under CHUNKS_DIR/fake/.
+        Other files (e.g. the backup config) live at the top level of CHUNKS_DIR and
+        are not chunks, so we check the tenant subdirectory directly.
+        Ref: https://grafana.com/docs/loki/latest/operations/storage/filesystem/
+        """
+        # "fake" is the fixed tenant ID used when auth_enabled=False (single-tenant mode).
+        tenant_chunks_dir = os.path.join(CHUNKS_DIR, "fake")
+        try:
+            files = self._loki_container.list_files(tenant_chunks_dir)
+            return len(files) > 0
+        except (PathError, FileNotFoundError, APIError):
+            return False
+
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the loki api server."""
@@ -898,40 +907,53 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def _tsdb_versions_migration_dates(self) -> List[Dict[str, str]]:
-        # If v13_migration_date isn't set (due to missing or failed retrieval),
-        # we determine the migration date for v13 schema. This occurs once
-        # during initial setup, as subsequent hooks will get the value from the persisted backup config.
-
-        # If it's a fresh Loki installation, it's safe to set the v13 schema date to today.
-        # This ensures that logs are correctly managed in v13 from the beginning of Loki's operation.
-        # If it's an upgrade scenario, we set the date to tomorrow to accommodate today's logs
-        # that might have been written in the previous v11/v12 schema formats.
-
-        # By default, we assume it's a fresh installation unless state explicitly set to False
-        # by the upgrade hook, indicating an upgrade
+        # Migration date selection is driven by whether Loki has already stored log chunks:
+        #
+        # No chunks  → v13 = value from backup config if present, else today
+        # Chunks exist → v13 from backup config if present;
+        #                else v13 = v12 + 1 day if v12 known;
+        #                else v13 = tomorrow
 
         date_format = "%Y-%m-%d"
         today = datetime.datetime.now(datetime.timezone.utc)
+        tomorrow = today + datetime.timedelta(days=1)
 
-        if self._stored.fresh_install:
-            return [{"version": "v13", "date": today.strftime(date_format)}]
+        chunks_non_empty = self._chunks_non_empty()
+
+        v12_migration_date = self._get_schema_config_version_migration_date_from_backup("v12")
+        v13_migration_date = self._get_schema_config_version_migration_date_from_backup("v13")
 
         ret = []
-
-        if v12_migration_date := self._get_schema_config_version_migration_date_from_backup("v12"):
+        if v12_migration_date:
             ret.append({"version": "v12", "date": v12_migration_date})
 
-        if v13_migration_date := self._get_schema_config_version_migration_date_from_backup("v13"):
+        if not chunks_non_empty:
+            # [Config does not exist, Chunks empty] OR [Config exists, Chunks empty]
+            # Use v13 from config when available, otherwise today (safe for fresh installs
+            # and re-installs that haven't yet ingested any data).
+            ret.append(
+                {"version": "v13", "date": v13_migration_date or today.strftime(date_format)}
+            )
+            return ret
+
+        # Chunks are non-empty from here on.
+        # [Config does not exist, Chunks non-empty] is blocked in _configure; not reached here.
+        # [Config exists, Chunks non-empty]:
+        if v13_migration_date:
+            # v13 already established — leave it untouched.
             ret.append({"version": "v13", "date": v13_migration_date})
             return ret
 
-        tomorrow = today + datetime.timedelta(days=1)
-
-        if tomorrow.strftime(date_format) == v12_migration_date:
-            after_tomorrow = tomorrow + datetime.timedelta(days=1)
-            ret.append({"version": "v13", "date": after_tomorrow.strftime(date_format)})
+        if v12_migration_date:
+            # Advance v13 one day past v12 to avoid overlapping schema periods.
+            v12_date = datetime.datetime.strptime(v12_migration_date, date_format).replace(
+                tzinfo=datetime.timezone.utc
+            )
+            v13_date = v12_date + datetime.timedelta(days=1)
+            ret.append({"version": "v13", "date": v13_date.strftime(date_format)})
             return ret
 
+        # No schema history at all: use tomorrow so today's chunks remain readable.
         ret.append({"version": "v13", "date": tomorrow.strftime(date_format)})
         return ret
 
