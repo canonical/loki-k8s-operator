@@ -3,7 +3,6 @@
 """Scenario tests for the TSDB schema migration date logic."""
 
 import datetime
-from pathlib import Path
 from unittest.mock import patch
 
 import yaml
