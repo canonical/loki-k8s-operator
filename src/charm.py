@@ -61,6 +61,7 @@ from ops.model import (
     BlockedStatus,
     MaintenanceStatus,
     Port,
+    Relation,
     StatusBase,
     WaitingStatus,
 )
@@ -364,6 +365,29 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #                 PROPERTIES                 #
     ##############################################
+
+    @property
+    def _peers(self) -> Optional[Relation]:
+        """Return the peer relation, or None if not yet available."""
+        return self.model.get_relation("replicas")
+
+    def _peer_data_get(self, key: str) -> str:
+        """Returns the value of a given key from the peer data or empty string if the peer relation is unavailable or the key is absent."""
+        if (peers := self._peers) is None:
+            return ""
+        return peers.data[self.app].get(key, "")
+
+    def _peer_data_set(self, key: str, value: str) -> None:
+        """Write a value to the peer relation app databag.
+
+        No-op if the peer relation is not yet available or this unit is not the leader
+        (only the leader can write to the app databag).
+        """
+        if (peers := self._peers) is None:
+            return
+        if not self.unit.is_leader():
+            return
+        peers.data[self.app][key] = value
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -720,6 +744,15 @@ class LokiOperatorCharm(CharmBase):
                 self._loki_container.pull(LOKI_CONFIG_BACKUP, encoding="utf-8").read()
             )
         except PathError:
+            try:
+                entries = self._loki_container.list_files(CHUNKS_DIR)
+                if any(e.name != "loki-local-config.yaml.bak" for e in entries):
+                    logger.warning(
+                        "Backup config missing but chunks directory has data. "
+                        "Schema dates may be inaccurate if the backup was deleted manually."
+                    )
+            except Error:
+                pass
             return ""
         except yaml.YAMLError as e:
             raise ValueError("Error parsing Loki backup config.") from e
@@ -942,6 +975,7 @@ class LokiOperatorCharm(CharmBase):
         if v13_migration_date:
             # v13 already established — leave it untouched.
             ret.append({"version": "v13", "date": v13_migration_date})
+            logger.info("Schema migration dates (from backup): %s", ret)
             return ret
 
         if v12_migration_date:
