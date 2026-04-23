@@ -550,15 +550,29 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
     def tearDown(self):
         self.check_alert_rules_patcher.stop()
 
+    def _set_peer_data(self, key, value):
+        """Write a value into the peer relation app databag."""
+        charm = self.harness.charm
+        peer_rel = charm.model.get_relation("replicas")
+        assert peer_rel is not None
+        peer_rel.data[charm.app][key] = value
+
+    def _get_peer_data(self, key):
+        """Read a value from the peer relation app databag."""
+        charm = self.harness.charm
+        peer_rel = charm.model.get_relation("replicas")
+        assert peer_rel is not None
+        return peer_rel.data[charm.app].get(key, "")
+
     def test_fresh_install_no_backup_uses_today(self):
-        """GIVEN a fresh install with no backup config and no stored v13 date.
+        """GIVEN a fresh install with no backup config and no peer v13 date.
 
         WHEN _tsdb_versions_migration_dates is accessed
         THEN the v13 date should be today.
         """
         charm = self.harness.charm
-        charm._stored.fresh_install = True  # type: ignore
-        charm._stored.v13_migration_date = ""  # type: ignore
+        # Clear any v13 date that may have been set during setUp hooks.
+        self._set_peer_data("v13_migration_date", "")
 
         with patch.object(
             type(charm),
@@ -580,7 +594,6 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         THEN the backup date takes precedence over today.
         """
         charm = self.harness.charm
-        charm._stored.fresh_install = True  # type: ignore
         original_date = "2026-01-15"
 
         def mock_backup(self_inner, sc_version):
@@ -603,7 +616,7 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         THEN the persisted backup date must be used.
         """
         charm = self.harness.charm
-        charm._stored.fresh_install = False  # type: ignore
+        self._set_peer_data("fresh_install", "false")
         original_date = "2026-01-15"
 
         def mock_backup(self_inner, sc_version):
@@ -620,14 +633,15 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], original_date)
 
     def test_upgrade_no_backup_uses_tomorrow(self):
-        """GIVEN an upgrade from v11-only with no v13 in backup or stored state.
+        """GIVEN an upgrade from v11-only with no v13 in backup or peer data.
 
         WHEN _tsdb_versions_migration_dates is accessed
         THEN the v13 date should be tomorrow to preserve today's v11/v12 logs.
         """
         charm = self.harness.charm
-        charm._stored.fresh_install = False  # type: ignore
-        charm._stored.v13_migration_date = ""  # type: ignore
+        self._set_peer_data("fresh_install", "false")
+        # Clear any v13 date that may have been set during setUp hooks.
+        self._set_peer_data("v13_migration_date", "")
 
         with patch.object(
             type(charm),
@@ -644,18 +658,17 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             ).strftime("%Y-%m-%d")
             self.assertEqual(v13_entries[0]["date"], expected)
 
-    def test_stored_state_fallback_when_backup_unavailable(self):
-        """GIVEN a v13 date persisted in stored state but the backup file is unavailable.
+    def test_peer_databag_fallback_when_backup_unavailable(self):
+        """GIVEN a v13 date persisted in peer databag but the backup file is unavailable.
 
-        WHEN _tsdb_versions_migration_dates is accessed (e.g. PVC not yet remounted)
-        THEN the stored state date is returned, preventing date drift.
+        WHEN _tsdb_versions_migration_dates is accessed (e.g. PathError)
+        THEN the peer databag date is returned, preventing date drift.
         """
         charm = self.harness.charm
-        charm._stored.fresh_install = False  # type: ignore
         original_date = "2026-01-15"
-        charm._stored.v13_migration_date = original_date  # type: ignore
+        self._set_peer_data("v13_migration_date", original_date)
 
-        # Backup returns "" (e.g. PVC not yet remounted after pod recreation)
+        # Backup returns "" (e.g. PathError during pod recreation)
         with patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
@@ -666,14 +679,13 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(len(v13_entries), 1)
             self.assertEqual(v13_entries[0]["date"], original_date)
 
-    def test_backup_syncs_to_stored_state(self):
-        """GIVEN a v13 date in the backup config but not yet in stored state.
+    def test_backup_syncs_to_peer_databag(self):
+        """GIVEN a v13 date in the backup config but not yet in peer databag.
 
         WHEN _tsdb_versions_migration_dates is accessed
-        THEN the backup date is also persisted into stored state for future fallback.
+        THEN the backup date is also persisted into the peer databag for future fallback.
         """
         charm = self.harness.charm
-        charm._stored.v13_migration_date = ""  # type: ignore
         original_date = "2026-01-15"
 
         def mock_backup(self_inner, sc_version):
@@ -685,7 +697,7 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             mock_backup,
         ):
             charm._tsdb_versions_migration_dates  # type: ignore
-            self.assertEqual(charm._stored.v13_migration_date, original_date)  # type: ignore
+            self.assertEqual(self._get_peer_data("v13_migration_date"), original_date)
 
     def test_v13_date_stable_across_config_changed_events(self):
         """GIVEN a fully configured Loki with a v13 date already pushed.
@@ -717,4 +729,46 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
                 v13_date_after = sc["from"]
                 break
         self.assertEqual(original_v13_date, v13_date_after)
+
+    def test_v12_in_backup_signals_upgrade_even_without_peer_data(self):
+        """GIVEN no peer data for fresh_install, but backup has a v12 entry.
+
+        WHEN _tsdb_versions_migration_dates is accessed
+        THEN v12 presence signals an upgrade → v13 = tomorrow (not today).
+        """
+        charm = self.harness.charm
+        # Clear any v13 date that may have been set during setUp hooks.
+        self._set_peer_data("v13_migration_date", "")
+
+        def mock_backup(self_inner, sc_version):
+            return {"v12": "2025-06-01", "v13": ""}.get(sc_version, "")
+
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            mock_backup,
+        ):
+            dates = charm._tsdb_versions_migration_dates  # type: ignore
+            v13_entries = [d for d in dates if d["version"] == "v13"]
+            self.assertEqual(len(v13_entries), 1)
+            import datetime
+
+            expected = (
+                datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+            ).strftime("%Y-%m-%d")
+            self.assertEqual(v13_entries[0]["date"], expected)
+
+    def test_upgrade_charm_sets_peer_databag_flag(self):
+        """GIVEN a running charm.
+
+        WHEN upgrade-charm fires
+        THEN fresh_install is set to 'false' in the peer databag.
+        """
+        charm = self.harness.charm
+        # Verify fresh_install is not set before upgrade
+        self.assertEqual(self._get_peer_data("fresh_install"), "")
+
+        charm.on.upgrade_charm.emit()
+
+        self.assertEqual(self._get_peer_data("fresh_install"), "false")
 

@@ -61,6 +61,7 @@ from ops.model import (
     BlockedStatus,
     MaintenanceStatus,
     Port,
+    Relation,
     StatusBase,
     WaitingStatus,
 )
@@ -68,6 +69,7 @@ from ops.pebble import Error, Layer, PathError, ProtocolError
 
 from config_builder import (
     CERT_FILE,
+    CHUNKS_DIR,
     HTTP_LISTEN_PORT,
     KEY_FILE,
     LOKI_CONFIG,
@@ -148,8 +150,6 @@ class LokiOperatorCharm(CharmBase):
                 rules=to_tuple(ActiveStatus()),
                 retention=to_tuple(ActiveStatus()),
             ),
-            fresh_install=True,
-            v13_migration_date="",
         )
 
         self._loki_container = self.unit.get_container(self._name)
@@ -326,10 +326,11 @@ class LokiOperatorCharm(CharmBase):
         config) is set to tomorrow rather than today, preserving today's logs that were
         written under the previous v11/v12 schema.
 
+        The flag is stored in the peer relation app databag so it survives pod churns.
         The backup config on persistent storage is the primary safeguard against date drift;
         this flag only matters on the very first config generation after an upgrade.
         """
-        self._stored.fresh_install = False
+        self._peer_data_set("fresh_install", "false")
         self._configure()
 
     def _on_certificate_available(self, _):
@@ -375,6 +376,32 @@ class LokiOperatorCharm(CharmBase):
     ##############################################
     #                 PROPERTIES                 #
     ##############################################
+
+    @property
+    def _peers(self) -> Optional[Relation]:
+        """Return the peer relation, or None if not yet available."""
+        return self.model.get_relation("replicas")
+
+    def _peer_data_get(self, key: str) -> str:
+        """Read a value from the peer relation app databag.
+
+        Returns empty string if the peer relation is unavailable or the key is absent.
+        """
+        if (peers := self._peers) is None:
+            return ""
+        return peers.data[self.app].get(key, "")
+
+    def _peer_data_set(self, key: str, value: str) -> None:
+        """Write a value to the peer relation app databag.
+
+        No-op if the peer relation is not yet available or this unit is not the leader
+        (only the leader can write to the app databag).
+        """
+        if (peers := self._peers) is None:
+            return
+        if not self.unit.is_leader():
+            return
+        peers.data[self.app][key] = value
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -731,6 +758,15 @@ class LokiOperatorCharm(CharmBase):
                 self._loki_container.pull(LOKI_CONFIG_BACKUP, encoding="utf-8").read()
             )
         except PathError:
+            try:
+                entries = self._loki_container.list_files(CHUNKS_DIR)
+                if any(e.name != "loki-local-config.yaml.bak" for e in entries):
+                    logger.warning(
+                        "Backup config missing but chunks directory has data. "
+                        "Schema dates may be inaccurate if the backup was deleted manually."
+                    )
+            except Error:
+                pass
             return ""
         except yaml.YAMLError as e:
             raise ValueError("Error parsing Loki backup config.") from e
@@ -908,14 +944,19 @@ class LokiOperatorCharm(CharmBase):
         The backup (on persistent storage) is the source of truth — this ensures
         idempotency across pod churns, upgrades, and any event that triggers _configure().
 
-        Stored state (Juju controller DB) is used as a secondary fallback, because
-        the backup file may be temporarily unavailable during pod recreation (e.g. PVC
-        not yet remounted when pebble is already connectable).
+        The peer relation app databag is used as a secondary fallback, because
+        the backup file may be temporarily unavailable (e.g. PathError during pod
+        recreation). Unlike StoredState, the peer databag persists for the lifetime
+        of the application and survives pod churns.
 
-        The v13 date is computed only once (when neither backup nor stored state has it):
+        The v13 date is computed only once (when neither backup nor peer data has it):
         - Fresh install: today (no pre-existing logs)
         - Upgrade from older charm (v11/v12 only): tomorrow (preserves today's logs
           written under the previous schema)
+
+        Fresh-vs-upgrade is determined by the peer databag 'fresh_install' key (set to
+        'false' by _on_upgrade_charm), with v12 presence in the backup as a secondary
+        signal (if v12 exists in backup, it's definitely not a fresh install).
         """
         date_format = "%Y-%m-%d"
         today = datetime.datetime.now(datetime.timezone.utc)
@@ -928,17 +969,26 @@ class LokiOperatorCharm(CharmBase):
 
         v13_migration_date = self._get_schema_config_version_migration_date_from_backup("v13")
         if v13_migration_date:
-            self._stored.v13_migration_date = v13_migration_date
+            self._peer_data_set("v13_migration_date", v13_migration_date)
             ret.append({"version": "v13", "date": v13_migration_date})
+            logger.info("Schema migration dates (from backup): %s", ret)
             return ret
 
-        # Backup unavailable or has no v13 — fall back to stored state.
-        if self._stored.v13_migration_date:
-            ret.append({"version": "v13", "date": self._stored.v13_migration_date})
+        # Backup unavailable or has no v13 — fall back to peer relation databag.
+        peer_v13 = self._peer_data_get("v13_migration_date")
+        if peer_v13:
+            ret.append({"version": "v13", "date": peer_v13})
+            logger.info("Schema migration dates (from peer data): %s", ret)
             return ret
 
         # No v13 anywhere — first time determining the date.
-        if self._stored.fresh_install:
+        # Determine fresh install vs upgrade:
+        #   - peer databag: absent key or "true" means fresh (default)
+        #   - v12 in backup: if present, it's definitely not fresh
+        peer_fresh = self._peer_data_get("fresh_install")
+        is_fresh = peer_fresh != "false" and not v12_migration_date
+
+        if is_fresh:
             v13_date = today.strftime(date_format)
         else:
             tomorrow = today + datetime.timedelta(days=1)
@@ -948,8 +998,9 @@ class LokiOperatorCharm(CharmBase):
             else:
                 v13_date = tomorrow.strftime(date_format)
 
-        self._stored.v13_migration_date = v13_date
+        self._peer_data_set("v13_migration_date", v13_date)
         ret.append({"version": "v13", "date": v13_date})
+        logger.info("Schema migration dates (computed): %s", ret)
         return ret
 
     def _update_datasource_exchange(self) -> None:
