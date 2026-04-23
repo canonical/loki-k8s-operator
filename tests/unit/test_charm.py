@@ -3,6 +3,7 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
+import datetime
 import json
 import os
 import unittest
@@ -564,6 +565,13 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         assert peer_rel is not None
         return peer_rel.data[charm.app].get(key, "")
 
+    @staticmethod
+    def _mock_backup(v13_date="", v12_date=""):
+        """Return a mock for _get_schema_config_version_migration_date_from_backup."""
+        def _inner(self_inner, sc_version):
+            return {"v13": v13_date, "v12": v12_date}.get(sc_version, "")
+        return _inner
+
     def test_fresh_install_no_backup_uses_today(self):
         """GIVEN a fresh install with no backup config and no peer v13 date.
 
@@ -582,8 +590,6 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             dates = charm._tsdb_versions_migration_dates  # type: ignore
             v13_entries = [d for d in dates if d["version"] == "v13"]
             self.assertEqual(len(v13_entries), 1)
-            import datetime
-
             expected = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
             self.assertEqual(v13_entries[0]["date"], expected)
 
@@ -596,13 +602,10 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         charm = self.harness.charm
         original_date = "2026-01-15"
 
-        def mock_backup(self_inner, sc_version):
-            return {"v13": original_date, "v12": ""}.get(sc_version, "")
-
         with patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
-            mock_backup,
+            self._mock_backup(v13_date=original_date),
         ):
             dates = charm._tsdb_versions_migration_dates  # type: ignore
             v13_entries = [d for d in dates if d["version"] == "v13"]
@@ -619,13 +622,10 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         self._set_peer_data("fresh_install", "false")
         original_date = "2026-01-15"
 
-        def mock_backup(self_inner, sc_version):
-            return {"v13": original_date, "v12": ""}.get(sc_version, "")
-
         with patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
-            mock_backup,
+            self._mock_backup(v13_date=original_date),
         ):
             dates = charm._tsdb_versions_migration_dates  # type: ignore
             v13_entries = [d for d in dates if d["version"] == "v13"]
@@ -651,8 +651,6 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             dates = charm._tsdb_versions_migration_dates  # type: ignore
             v13_entries = [d for d in dates if d["version"] == "v13"]
             self.assertEqual(len(v13_entries), 1)
-            import datetime
-
             expected = (
                 datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
             ).strftime("%Y-%m-%d")
@@ -688,13 +686,10 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         charm = self.harness.charm
         original_date = "2026-01-15"
 
-        def mock_backup(self_inner, sc_version):
-            return {"v13": original_date, "v12": ""}.get(sc_version, "")
-
         with patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
-            mock_backup,
+            self._mock_backup(v13_date=original_date),
         ):
             charm._tsdb_versions_migration_dates  # type: ignore
             self.assertEqual(self._get_peer_data("v13_migration_date"), original_date)
@@ -740,19 +735,14 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         # Clear any v13 date that may have been set during setUp hooks.
         self._set_peer_data("v13_migration_date", "")
 
-        def mock_backup(self_inner, sc_version):
-            return {"v12": "2025-06-01", "v13": ""}.get(sc_version, "")
-
         with patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
-            mock_backup,
+            self._mock_backup(v12_date="2025-06-01"),
         ):
             dates = charm._tsdb_versions_migration_dates  # type: ignore
             v13_entries = [d for d in dates if d["version"] == "v13"]
             self.assertEqual(len(v13_entries), 1)
-            import datetime
-
             expected = (
                 datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
             ).strftime("%Y-%m-%d")

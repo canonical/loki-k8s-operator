@@ -383,10 +383,7 @@ class LokiOperatorCharm(CharmBase):
         return self.model.get_relation("replicas")
 
     def _peer_data_get(self, key: str) -> str:
-        """Read a value from the peer relation app databag.
-
-        Returns empty string if the peer relation is unavailable or the key is absent.
-        """
+        """Returns the value of a given key from the peer data or empty string if the peer relation is unavailable or the key is absent."""
         if (peers := self._peers) is None:
             return ""
         return peers.data[self.app].get(key, "")
