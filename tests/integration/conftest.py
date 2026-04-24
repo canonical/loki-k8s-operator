@@ -105,7 +105,12 @@ def faulty_loki_tester_charm(copy_loki_library_into_test_charms):
 
 @pytest.fixture(scope="session")
 def log_proxy_tester_charm(copy_loki_library_into_test_charms):
-    """A charm for integration test of Promtail."""
+    """A charm for integration test of Promtail (deprecated).
+
+    Deprecated: This fixture builds the log-proxy-tester charm, which uses LogProxyConsumer
+    and Promtail. Promtail is deprecated by Grafana. New integrations should use
+    LokiPushApiConsumer with OpenTelemetry Collector instead.
+    """
     charm_path = "tests/integration/log-proxy-tester"
     subprocess.run(["charmcraft", "clean"], check=True, cwd=charm_path)
     return _pack_charm(charm_path)

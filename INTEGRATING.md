@@ -35,6 +35,8 @@ Learn more about this library [on charmhub](https://charmhub.io/loki-k8s/librari
 
 #### `log_proxy`
 
+> **Deprecated:** The `log_proxy` library and the `LogProxyConsumer`/`LogProxyProvider` objects rely on [Promtail](https://grafana.com/docs/loki/latest/clients/promtail/), which is deprecated by Grafana. New integrations should use `LokiPushApiConsumer` from the `loki_push_api` library together with OpenTelemetry Collector instead.
+
 This library provides two main objects:
 
 - `LogProxyConsumer`: This object may be used by any K8s charmed operator that wants to

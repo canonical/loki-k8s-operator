@@ -3,8 +3,35 @@
 name: loki-k8s
 type: "charm"
 summary: Loki is a log aggregation system inspired by Prometheus.
-description: >
-  Loki is a set of components that can be composed into a fully featured logging stack.
+description: |
+  Loki K8s is a Juju charm that deploys and manages Grafana Loki in monolithic mode on
+  Kubernetes, designed for small to medium-sized deployments. It is a core component of
+  COS Lite, the lightweight version of the Canonical Observability Stack (COS):
+  https://documentation.ubuntu.com/observability
+
+  Any charm that supports the loki_push_api relation can send logs to Loki automatically.
+  Collected logs can then be explored through Grafana and used to trigger alerts via
+  Alertmanager.
+
+  Key features:
+
+  - Automatic log ingestion from related charms via the Loki Push API relation.
+  - Seamless integration with Grafana, Prometheus, and Alertmanager through Juju relations.
+  - Built-in Grafana dashboards and Prometheus alert rules for self-monitoring.
+  - Configurable ingestion rate limits, burst sizes, and log retention periods.
+  - Per-unit ingress support for cross-model log collection through reverse proxies such as
+    Traefik.
+  - TLS support via the certificates relation.
+  - Distributed tracing support via integration with Tempo.
+  - Persistent storage for log index and chunks across container restarts.
+  - Configurable Kubernetes resource limits for CPU and memory.
+
+  Known limitations:
+
+  - Each unit runs as an independent Loki instance with its own local storage and no data
+    replication. Ingress is per unit, and each unit registers as a separate Grafana
+    datasource. For horizontally scalable, highly available log aggregation, consider the
+    Loki Coordinator and Loki Worker charms.
 
 links:
   documentation: https://discourse.charmhub.io/t/loki-k8s-docs-index/5228
@@ -133,7 +160,7 @@ resources:
   loki-image:
     type: oci-image
     description: Loki OCI image
-    upstream-source: docker.io/ubuntu/loki@sha256:c1cf06a25176ea7c9574b53df272c2cc56c3f797a2a0c574c8e6ad923b0657b4  # renovate: oci-image tag: 2.9-24.04
+    upstream-source: docker.io/ubuntu/loki@sha256:dfdf5a4db1116a9111e5222910a8d7b30a44f83a4a1f2d99d97af14c77c43ac8  # renovate: oci-image tag: 3.7-24.04
   node-exporter-image:
     type: oci-image
     description: Node-exporter OCI image

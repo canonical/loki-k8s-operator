@@ -1,5 +1,7 @@
 # Static releases of Promtail binaries
 
+> **Deprecated:** Promtail is deprecated by Grafana. This build and release process is kept for backwards compatibility with charms using `LogProxyConsumer`, but new integrations should use OpenTelemetry Collector instead.
+
 In order to support any container running Linux with the [LogProxyConsumer](lib/charms/loki_k8s/v1/loki_push_api.py), we need builds of `promtail` that are statically linked.
 
 ## Why statically linking Promtail?

@@ -177,15 +177,14 @@ class ConfigBuilder:
     @property
     def _storage_config(self) -> dict:
         # Ref: https://grafana.com/docs/loki/latest/configure/#storage_config
+        # Note: shared_store was removed in Loki 3.0
         return {
             "boltdb_shipper": {
                 "active_index_directory": BOLTDB_DIR,
-                "shared_store": "filesystem",
                 "cache_location": BOLTDB_CACHE_DIR,
             },
             "tsdb_shipper": {
                 "active_index_directory": TSDB_DIR,
-                "shared_store": "filesystem",
                 "cache_location": TSDB_CACHE_DIR,
             },
             "filesystem": {"directory": CHUNKS_DIR},
@@ -258,13 +257,17 @@ class ConfigBuilder:
     @property
     def _compactor(self) -> dict:
         # Ref: https://grafana.com/docs/loki/latest/configure/#compactor
+        # Note: shared_store was removed in Loki 3.0
         retention_enabled = self.retention_period != 0
-        return {
+        config = {
             # Activate custom retention. Default is False.
             "retention_enabled": retention_enabled,
             "working_directory": COMPACTOR_DIR,
-            "shared_store": "filesystem",
         }
+        # delete_request_store must be explicitly set when retention is enabled (Loki 3.0+)
+        if retention_enabled:
+            config["delete_request_store"] = "filesystem"
+        return config
 
     @property
     def _analytics(self) -> dict:
