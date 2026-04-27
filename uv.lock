@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.8, <4"
 resolution-markers = [
     "python_full_version >= '3.11'",
@@ -712,7 +712,7 @@ wheels = [
 
 [[package]]
 name = "cosl"
-version = "1.3.1"
+version = "1.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops" },
@@ -723,9 +723,9 @@ dependencies = [
     { name = "tenacity", version = "9.1.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/d5/a9ea4a4c29a374d6d356bbdc2a78348de5dc7aa2d869b932bbd559367d2b/cosl-1.3.1.tar.gz", hash = "sha256:aa836828350398beb5bbd4fe85cb582e796a7b8b5d9a214a5bc6fd855cde11af", size = 45361, upload-time = "2025-10-08T09:58:04.504Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/f1/6bc646976c499e9bb7a048ef17b6295f23b145f11f1cee4207ce10494342/cosl-1.9.1.tar.gz", hash = "sha256:80d899b5f278bf64252eb94bfb1bbd03dade5073c2cbc0ea43e9abc68be9ee1e", size = 150395, upload-time = "2026-03-31T12:50:20.064Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/54/a72b67cae15af226882dd6c7da011c26ae3c9c5843c36511d0dd1753c298/cosl-1.3.1-py3-none-any.whl", hash = "sha256:8ab9b23b367f041ec0f4eae63d4b1960712431a2b3bf6fb6fdec473efea30f77", size = 36387, upload-time = "2025-10-08T09:58:03.544Z" },
+    { url = "https://files.pythonhosted.org/packages/be/1d/558af69f639d6772be034b13417a7bbeb92a56939f891493d1546e724213/cosl-1.9.1-py3-none-any.whl", hash = "sha256:201107a68f398b8a5f5e91f6dcaeb1777e7b2816a1592c8eea4a491d1750e1a6", size = 38217, upload-time = "2026-03-31T12:50:18.87Z" },
 ]
 
 [[package]]
