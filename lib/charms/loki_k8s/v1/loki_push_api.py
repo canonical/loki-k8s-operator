@@ -507,7 +507,6 @@ import re
 import socket
 import subprocess
 import tempfile
-import typing
 import warnings
 from copy import deepcopy
 from gzip import GzipFile
@@ -520,6 +519,7 @@ from urllib.error import URLError
 
 import yaml
 from cosl import JujuTopology
+from cosl.rules import AlertRules
 from ops.charm import (
     CharmBase,
     HookEvent,
@@ -536,7 +536,6 @@ from ops.framework import BoundEvent, EventBase, EventSource, Object, ObjectEven
 from ops.jujuversion import JujuVersion
 from ops.model import Container, ModelError, Relation
 from ops.pebble import APIError, ChangeError, Layer, PathError, ProtocolError
-from cosl.rules import AlertRules
 
 # The unique Charmhub library identifier, never change it
 LIBID = "bf76f23cdd03464b877c52bd1d2f563e"
@@ -1369,7 +1368,9 @@ class ConsumerBase(Object):
             return
 
         alert_rules = (
-            AlertRules(None) if self._skip_alert_topology_labeling else AlertRules(self.topology)
+            AlertRules(query_type="logql")
+            if self._skip_alert_topology_labeling
+            else AlertRules(query_type="logql", topology=self.topology)
         )
         if self._forward_alert_rules:
             alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
