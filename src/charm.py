@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
+import ops
 import yaml
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
@@ -44,8 +45,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     adjust_resource_requirements,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
@@ -114,18 +114,6 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
     return StatusBase.from_name(name, message)
 
 
-@trace_charm(
-    tracing_endpoint="_charm_tracing_endpoint",
-    server_cert="_charm_tracing_ca_cert",
-    extra_types=[
-        GrafanaDashboardProvider,
-        GrafanaSourceProvider,
-        LokiPushApiProvider,
-        TLSCertificatesRequiresV4,
-        ConfigBuilder,
-        MetricsEndpointProvider,
-    ],
-)
 @log_charm(logging_endpoints="_charm_logging_endpoints", server_cert="_charm_logging_ca_cert")
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
@@ -242,14 +230,13 @@ class LokiOperatorCharm(CharmBase):
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
-        self.charm_tracing = TracingEndpointRequirer(
-            self, relation_name="charm-tracing", protocols=["otlp_http"]
+        self.tracing = ops.tracing.Tracing(  # type: ignore[union-attr]
+            self,
+            tracing_relation_name="charm-tracing",
+            ca_relation_name="receive-ca-cert",
         )
         self.workload_tracing = TracingEndpointRequirer(
             self, relation_name="workload-tracing", protocols=["jaeger_thrift_http"]
-        )
-        self._charm_tracing_endpoint, self._charm_tracing_ca_cert = charm_tracing_config(
-            self.charm_tracing, self._ca_cert_path
         )
 
         self.datasource_exchange = DatasourceExchange(

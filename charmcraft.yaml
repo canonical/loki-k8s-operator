@@ -50,7 +50,7 @@ parts:
   charm:
     source: .
     plugin: uv
-    build-packages: [git]
+    build-packages: [cargo, git]
     build-snaps: [astral-uv]
     override-build: |
       craftctl default
@@ -151,6 +151,12 @@ requires:
     limit: 1
     description: |
       Enables sending workload traces to a distributed tracing backend such as Tempo.
+  receive-ca-cert:
+    interface: certificate_transfer
+    optional: true
+    limit: 1
+    description: |
+      Receive a CA certificate for TLS validation of the tracing endpoint.
 
 peers:
   replicas:
