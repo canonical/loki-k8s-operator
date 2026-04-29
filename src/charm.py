@@ -230,7 +230,7 @@ class LokiOperatorCharm(CharmBase):
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
-        self.tracing = ops.tracing.Tracing(  # type: ignore[union-attr]
+        self.charm_tracing = ops.tracing.Tracing(  # type: ignore[union-attr]
             self,
             tracing_relation_name="charm-tracing",
             ca_relation_name="receive-ca-cert",
