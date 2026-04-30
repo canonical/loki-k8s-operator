@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import ops
 import pytest
-from charms.tempo_coordinator_k8s.v0.charm_tracing import charm_tracing_disabled
 from interface_tester import InterfaceTester
 from ops import ActiveStatus
 from scenario.state import Container, Exec, Relation, State
@@ -28,7 +27,6 @@ def patch_all():
                 get_status=lambda _: ActiveStatus(""),
             )
         )
-        stack.enter_context(charm_tracing_disabled())
 
         yield
 

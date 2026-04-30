@@ -23,11 +23,15 @@ ds_mimir = [
 
 mimir_dsx = Relation(
     "send-datasource",
-    remote_app_data=dict(DSExchangeAppData(datasources=json.dumps(ds_mimir)).dump()),
+    remote_app_data=dict(
+        DSExchangeAppData(datasources=json.dumps(ds_mimir)).dump()  # type: ignore[arg-type]
+    ),
 )
 tempo_dsx = Relation(
     "send-datasource",
-    remote_app_data=dict(DSExchangeAppData(datasources=json.dumps(ds_tempo)).dump()),
+    remote_app_data=dict(
+        DSExchangeAppData(datasources=json.dumps(ds_tempo)).dump()  # type: ignore[arg-type]
+    ),
 )
 
 ds = Relation(
