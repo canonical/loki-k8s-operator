@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 """Config builder for Loki Charmed Operator."""
 
+import datetime
 import os
 from typing import Dict, List, Optional
 
@@ -191,10 +192,19 @@ class ConfigBuilder:
         }
 
     @property
+    def _v13_effective_today(self) -> bool:
+        """Check if v13 schema is the currently effective schema (from date <= today)."""
+        today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+        for migration in self.tsdb_versions_migration_dates:
+            if migration["version"] == "v13" and migration["date"] and migration["date"] <= today:
+                return True
+        return False
+
+    @property
     def _limits_config(self) -> dict:
         # Ref: https://grafana.com/docs/loki/latest/configure/#limits_config
         return {
-            "allow_structured_metadata": True,
+            "allow_structured_metadata": self._v13_effective_today,
             # For convenience, we use an integer but Loki takes a float
             "ingestion_rate_mb": float(self.ingestion_rate_mb),
             "ingestion_burst_size_mb": float(self.ingestion_burst_size_mb),

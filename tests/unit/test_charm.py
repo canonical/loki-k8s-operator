@@ -753,7 +753,7 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], expected)
 
     def test_upgrade_charm_sets_peer_databag_flag(self):
-        """GIVEN a running charm.
+        """GIVEN a running charm with v13 already persisted.
 
         WHEN upgrade-charm fires
         THEN fresh_install is set to 'false' in the peer databag.
@@ -761,8 +761,104 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         charm = self.harness.charm
         # Verify fresh_install is not set before upgrade
         self.assertEqual(self._get_peer_data("fresh_install"), "")
+        # Verify v13_migration_date IS set (from setUp's initial hooks)
+        self.assertNotEqual(self._get_peer_data("v13_migration_date"), "")
 
         charm.on.upgrade_charm.emit()
 
         self.assertEqual(self._get_peer_data("fresh_install"), "false")
+
+    def test_upgrade_charm_does_not_set_flag_before_initial_configure(self):
+        """GIVEN a fresh deploy where upgrade-charm fires before _configure() completes.
+
+        This simulates the scenario where KubernetesComputeResourcesPatch triggers a
+        pod restart before the initial configuration is written (no backup, no peer v13).
+
+        WHEN upgrade-charm fires with no v13 in peer databag
+        THEN fresh_install must NOT be set to 'false', so the subsequent _configure()
+        correctly computes v13 = today (fresh install logic).
+        """
+        charm = self.harness.charm
+        # Simulate: v13 was never persisted (resource patch restart before initial config)
+        self._set_peer_data("v13_migration_date", "")
+        self._set_peer_data("fresh_install", "")
+
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            return_value="",
+        ):
+            # Emit upgrade-charm: since v13_migration_date is empty,
+            # the handler must NOT set fresh_install = "false"
+            charm.on.upgrade_charm.emit()
+
+        # fresh_install must remain unset — this is still a fresh install
+        self.assertEqual(self._get_peer_data("fresh_install"), "")
+
+        # Now simulate _configure() completing (e.g. after pebble-ready on new pod)
+        # The v13 date should be today (fresh install logic, not tomorrow/upgrade logic)
+        with patch.object(
+            type(charm),
+            "_get_schema_config_version_migration_date_from_backup",
+            return_value="",
+        ):
+            dates = charm._tsdb_versions_migration_dates  # type: ignore
+            v13_entries = [d for d in dates if d["version"] == "v13"]
+            self.assertEqual(len(v13_entries), 1)
+            expected = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+            self.assertEqual(v13_entries[0]["date"], expected)
+
+    def test_allow_structured_metadata_false_when_v13_is_future(self):
+        """GIVEN a config where v13 starts tomorrow.
+
+        WHEN the config is built
+        THEN allow_structured_metadata must be false to avoid Loki rejecting the config.
+        """
+        from config_builder import ConfigBuilder
+
+        tomorrow = (
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+
+        config = ConfigBuilder(
+            instance_addr="localhost",
+            alertmanager_url="",
+            external_url="http://localhost:3100",
+            ingestion_rate_mb=4,
+            ingestion_burst_size_mb=6,
+            retention_period=30,
+            http_tls=False,
+            tsdb_versions_migration_dates=[{"version": "v13", "date": tomorrow}],
+            reporting_enabled=True,
+            grafana_external_url=None,
+            datasource_uid="test-uid",
+        ).build()
+
+        self.assertFalse(config["limits_config"]["allow_structured_metadata"])
+
+    def test_allow_structured_metadata_true_when_v13_is_today(self):
+        """GIVEN a config where v13 starts today.
+
+        WHEN the config is built
+        THEN allow_structured_metadata must be true.
+        """
+        from config_builder import ConfigBuilder
+
+        today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+        config = ConfigBuilder(
+            instance_addr="localhost",
+            alertmanager_url="",
+            external_url="http://localhost:3100",
+            ingestion_rate_mb=4,
+            ingestion_burst_size_mb=6,
+            retention_period=30,
+            http_tls=False,
+            tsdb_versions_migration_dates=[{"version": "v13", "date": today}],
+            reporting_enabled=True,
+            grafana_external_url=None,
+            datasource_uid="test-uid",
+        ).build()
+
+        self.assertTrue(config["limits_config"]["allow_structured_metadata"])
 

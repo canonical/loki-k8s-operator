@@ -329,8 +329,14 @@ class LokiOperatorCharm(CharmBase):
         The flag is stored in the peer relation app databag so it survives pod churns.
         The backup config on persistent storage is the primary safeguard against date drift;
         this flag only matters on the very first config generation after an upgrade.
+
+        We only set the flag if v13 has already been persisted in the peer databag, proving
+        that the initial configuration completed at least once. On a fresh deploy, the
+        KubernetesComputeResourcesPatch may trigger a pod restart that fires upgrade-charm
+        before _configure() ever completes — in that case we must NOT mark it as "not fresh".
         """
-        self._peer_data_set("fresh_install", "false")
+        if self._peer_data_get("v13_migration_date"):
+            self._peer_data_set("fresh_install", "false")
         self._configure()
 
     def _on_certificate_available(self, _):
