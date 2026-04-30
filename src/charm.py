@@ -65,7 +65,7 @@ from ops.model import (
     StatusBase,
     WaitingStatus,
 )
-from ops.pebble import APIError, Error, Layer, PathError, ProtocolError
+from ops.pebble import Error, Layer, PathError, ProtocolError
 
 from config_builder import (
     CERT_FILE,
@@ -839,13 +839,16 @@ class LokiOperatorCharm(CharmBase):
         Other files (e.g. the backup config) live at the top level of CHUNKS_DIR and
         are not chunks, so we check the tenant subdirectory directly.
         Ref: https://grafana.com/docs/loki/latest/operations/storage/filesystem/
+
+        Uses the charm-container mount point directly (via Juju storage) instead of the
+        Pebble API, to avoid units going into error state due to socket timeouts.
         """
         # "fake" is the fixed tenant ID used when auth_enabled=False (single-tenant mode).
-        tenant_chunks_dir = os.path.join(CHUNKS_DIR, "fake")
         try:
-            files = self._loki_container.list_files(tenant_chunks_dir)
-            return len(files) > 0
-        except (PathError, FileNotFoundError, APIError):
+            storage = self.model.storages["loki-chunks"][0]
+            tenant_chunks_dir = Path(storage.location) / "fake"
+            return tenant_chunks_dir.exists() and any(tenant_chunks_dir.iterdir())
+        except (IndexError, OSError):
             return False
 
     @property
