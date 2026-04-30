@@ -892,6 +892,10 @@ class LokiOperatorCharm(CharmBase):
         are not chunks, so we check the tenant subdirectory directly.
         Ref: https://grafana.com/docs/loki/latest/operations/storage/filesystem/
 
+        In addition, we also check the CHUNKS_DIR/wal directory. If there are WAL files,
+        it means Loki has written data to disk even if the tenant directory is empty
+        (which can happen if the chunks have been flushed but not yet compacted).
+
         Uses the charm-container mount point directly (via Juju storage) instead of the
         Pebble API, to avoid units going into error state due to socket timeouts.
         """
@@ -899,7 +903,8 @@ class LokiOperatorCharm(CharmBase):
         try:
             storage = self.model.storages["loki-chunks"][0]
             tenant_chunks_dir = Path(storage.location) / "fake"
-            return tenant_chunks_dir.exists() and any(tenant_chunks_dir.iterdir())
+            wal_chunks_dir = Path(storage.location) / "wal"
+            return (tenant_chunks_dir.exists() and any(tenant_chunks_dir.iterdir())) or (wal_chunks_dir.exists() and any(wal_chunks_dir.iterdir()))
         except (IndexError, OSError):
             return False
 
