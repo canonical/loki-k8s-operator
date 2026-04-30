@@ -273,6 +273,9 @@ class LokiOperatorCharm(CharmBase):
         self.framework.observe(
             self.on.node_exporter_pebble_ready, self._on_node_exporter_pebble_ready
         )
+        self.framework.observe(
+            self.on.loki_pebble_check_failed, self._on_loki_pebble_check_failed
+        )
 
         self.framework.observe(
             self.loki_provider.on.loki_push_api_alert_rules_changed,
@@ -321,6 +324,16 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_upgrade_charm(self, _):
         self._configure()
+
+    def _on_loki_pebble_check_failed(self, event):
+        """Re-run configure when the schema-migration check detects a stale config.
+
+        This fires when v13 has become the effective schema but the Loki config still
+        has allow_structured_metadata: false. Reconfiguring rewrites the config with the
+        correct value now that v13 is active.
+        """
+        if event.info.name == "schema-migration":
+            self._configure()
 
     def _on_certificate_available(self, _):
         self._update_cert()
@@ -458,6 +471,19 @@ class LokiOperatorCharm(CharmBase):
                         "command": self._loki_command,
                         "startup": "disabled",
                         "environment": env,
+                    },
+                },
+                "checks": {
+                    "schema-migration": {
+                        "override": "replace",
+                        "level": "alive",
+                        "period": "24h",
+                        "threshold": 1,
+                        "exec": {
+                            "command": (
+                                f"grep -q 'allow_structured_metadata: false' {LOKI_CONFIG}"
+                            ),
+                        },
                     },
                 },
             }
