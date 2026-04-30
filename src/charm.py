@@ -31,6 +31,9 @@ import ops
 import yaml
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
+    CertificateTransferRequires,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceData, GrafanaSourceProvider
 from charms.loki_k8s.v0.charm_logging import log_charm
@@ -125,6 +128,7 @@ class LokiOperatorCharm(CharmBase):
     _loki_rules_endpoint = "/loki/api/v1/rules"
     _service_name = "loki"
     _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
+    _recv_ca_cert_folder_path = "/usr/local/share/ca-certificates/juju_receive-ca-cert"
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -172,11 +176,20 @@ class LokiOperatorCharm(CharmBase):
             relationship_name="certificates",
             certificate_requests=[self._csr_attributes],
         )
+        self._cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
         # Update certs here in init to avoid code ordering issues
         self._update_cert()
         self.framework.observe(
             self._cert_requirer.on.certificate_available,  # pyright: ignore
             self._on_certificate_available,
+        )
+        self.framework.observe(
+            self._cert_transfer.on.certificate_set_updated,  # pyright: ignore
+            self._on_receive_ca_cert,
+        )
+        self.framework.observe(
+            self._cert_transfer.on.certificates_removed,  # pyright: ignore
+            self._on_receive_ca_cert,
         )
 
         self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
@@ -323,6 +336,9 @@ class LokiOperatorCharm(CharmBase):
     def _on_certificate_available(self, _):
         self._update_cert()
         self._configure()
+
+    def _on_receive_ca_cert(self, _):
+        self._update_cert()
 
     def _on_loki_pebble_ready(self, _):
         if self._ensure_alert_rules_path():
@@ -711,6 +727,29 @@ class LokiOperatorCharm(CharmBase):
 
             # Repeat for the charm container.
             ca_cert_path.unlink(missing_ok=True)
+
+        # Handle certificates received via the receive-ca-cert relation
+        recv_ca_folder = Path(self._recv_ca_cert_folder_path)
+        ca_certs = self._cert_transfer.get_all_certificates()
+
+        # Workload container: clean up and write current certs
+        try:
+            self._loki_container.remove_path(self._recv_ca_cert_folder_path, recursive=True)
+        except (PathError, ProtocolError):
+            pass
+        for i, cert in enumerate(ca_certs):
+            self._loki_container.push(
+                f"{self._recv_ca_cert_folder_path}/{i}.crt", cert, make_dirs=True
+            )
+
+        # Charm container: clean up and write current certs
+        if recv_ca_folder.exists():
+            for f in recv_ca_folder.iterdir():
+                f.unlink()
+        if ca_certs:
+            recv_ca_folder.mkdir(parents=True, exist_ok=True)
+            for i, cert in enumerate(ca_certs):
+                (recv_ca_folder / f"{i}.crt").write_text(cert)
 
         self._loki_container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
