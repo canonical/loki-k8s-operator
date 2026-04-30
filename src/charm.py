@@ -273,6 +273,9 @@ class LokiOperatorCharm(CharmBase):
         self.framework.observe(
             self.on.node_exporter_pebble_ready, self._on_node_exporter_pebble_ready
         )
+        self.framework.observe(
+            self.on.loki_pebble_check_failed, self._on_loki_pebble_check_failed
+        )
 
         self.framework.observe(
             self.loki_provider.on.loki_push_api_alert_rules_changed,
@@ -320,18 +323,17 @@ class LokiOperatorCharm(CharmBase):
         self._configure()
 
     def _on_upgrade_charm(self, _):
-        """Handle upgrade-charm by marking this unit as an upgrade (not fresh install).
-
-        This ensures that the initial v13 schema date (if not yet persisted in the backup
-        config) is set to tomorrow rather than today, preserving today's logs that were
-        written under the previous v11/v12 schema.
-
-        The flag is stored in the peer relation app databag so it survives pod churns.
-        The backup config on persistent storage is the primary safeguard against date drift;
-        this flag only matters on the very first config generation after an upgrade.
-        """
-        self._peer_data_set("fresh_install", "false")
         self._configure()
+
+    def _on_loki_pebble_check_failed(self, event):
+        """Re-run configure when the schema-migration check detects a stale config.
+
+        This fires when v13 has become the effective schema but the Loki config still
+        has allow_structured_metadata: false. Reconfiguring rewrites the config with the
+        correct value now that v13 is active.
+        """
+        if event.info.name == "schema-migration":
+            self._configure()
 
     def _on_certificate_available(self, _):
         self._update_cert()
@@ -469,6 +471,19 @@ class LokiOperatorCharm(CharmBase):
                         "command": self._loki_command,
                         "startup": "disabled",
                         "environment": env,
+                    },
+                },
+                "checks": {
+                    "schema-migration": {
+                        "override": "replace",
+                        "level": "alive",
+                        "period": "24h",
+                        "threshold": 1,
+                        "exec": {
+                            "command": (
+                                f"grep -q 'allow_structured_metadata: false' {LOKI_CONFIG}"
+                            ),
+                        },
                     },
                 },
             }
@@ -869,6 +884,30 @@ class LokiOperatorCharm(CharmBase):
         for f in files:
             self._loki_container.remove_path(f.path)
 
+    def _chunks_non_empty(self) -> bool:
+        """Return True if Loki has written any log chunks to the filesystem.
+
+        In single-tenant mode, Loki stores chunks exclusively under CHUNKS_DIR/fake/.
+        Other files (e.g. the backup config) live at the top level of CHUNKS_DIR and
+        are not chunks, so we check the tenant subdirectory directly.
+        Ref: https://grafana.com/docs/loki/latest/operations/storage/filesystem/
+
+        In addition, we also check the CHUNKS_DIR/wal directory. If there are WAL files,
+        it means Loki has written data to disk even if the tenant directory is empty
+        (which can happen if the chunks have been flushed but not yet compacted).
+
+        Uses the charm-container mount point directly (via Juju storage) instead of the
+        Pebble API, to avoid units going into error state due to socket timeouts.
+        """
+        # "fake" is the fixed tenant ID used when auth_enabled=False (single-tenant mode).
+        try:
+            storage = self.model.storages["loki-chunks"][0]
+            tenant_chunks_dir = Path(storage.location) / "fake"
+            wal_chunks_dir = Path(storage.location) / "wal"
+            return (tenant_chunks_dir.exists() and any(tenant_chunks_dir.iterdir())) or (wal_chunks_dir.exists() and any(wal_chunks_dir.iterdir()))
+        except (IndexError, OSError):
+            return False
+
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the loki api server."""
@@ -961,69 +1000,55 @@ class LokiOperatorCharm(CharmBase):
 
     @property
     def _tsdb_versions_migration_dates(self) -> List[Dict[str, str]]:
-        """Return the schema version migration dates for the Loki TSDB config.
+        # Migration date selection is driven by whether Loki has already stored log chunks:
+        #
+        # No chunks  → v13 = value from backup config if present, else today
+        # Chunks exist → v13 from backup config if present;
+        #                else v13 = v12 + 1 day if v12 known;
+        #                else v13 = tomorrow
 
-        Always reads migration dates from the persisted backup config first.
-        The backup (on persistent storage) is the source of truth — this ensures
-        idempotency across pod churns, upgrades, and any event that triggers _configure().
-
-        The peer relation app databag is used as a secondary fallback, because
-        the backup file may be temporarily unavailable (e.g. PathError during pod
-        recreation). Unlike StoredState, the peer databag persists for the lifetime
-        of the application and survives pod churns.
-
-        The v13 date is computed only once (when neither backup nor peer data has it):
-        - Fresh install: today (no pre-existing logs)
-        - Upgrade from older charm (v11/v12 only): tomorrow (preserves today's logs
-          written under the previous schema)
-
-        Fresh-vs-upgrade is determined by the peer databag 'fresh_install' key (set to
-        'false' by _on_upgrade_charm), with v12 presence in the backup as a secondary
-        signal (if v12 exists in backup, it's definitely not a fresh install).
-        """
         date_format = "%Y-%m-%d"
         today = datetime.datetime.now(datetime.timezone.utc)
+        tomorrow = today + datetime.timedelta(days=1)
 
-        ret = []
+        chunks_non_empty = self._chunks_non_empty()
 
         v12_migration_date = self._get_schema_config_version_migration_date_from_backup("v12")
+        v13_migration_date = self._get_schema_config_version_migration_date_from_backup("v13")
+
+        ret = []
         if v12_migration_date:
             ret.append({"version": "v12", "date": v12_migration_date})
 
-        v13_migration_date = self._get_schema_config_version_migration_date_from_backup("v13")
+        if not chunks_non_empty:
+            # [Config does not exist, Chunks empty] OR [Config exists, Chunks empty]
+            # Use v13 from config when available, otherwise today (safe for fresh installs
+            # and re-installs that haven't yet ingested any data).
+            ret.append(
+                {"version": "v13", "date": v13_migration_date or today.strftime(date_format)}
+            )
+            return ret
+
+        # Chunks are non-empty from here on.
+        # [Config does not exist, Chunks non-empty] is blocked in _configure; not reached here.
+        # [Config exists, Chunks non-empty]:
         if v13_migration_date:
-            self._peer_data_set("v13_migration_date", v13_migration_date)
+            # v13 already established — leave it untouched.
             ret.append({"version": "v13", "date": v13_migration_date})
             logger.info("Schema migration dates (from backup): %s", ret)
             return ret
 
-        # Backup unavailable or has no v13 — fall back to peer relation databag.
-        peer_v13 = self._peer_data_get("v13_migration_date")
-        if peer_v13:
-            ret.append({"version": "v13", "date": peer_v13})
-            logger.info("Schema migration dates (from peer data): %s", ret)
+        if v12_migration_date:
+            # Advance v13 one day past v12 to avoid overlapping schema periods.
+            v12_date = datetime.datetime.strptime(v12_migration_date, date_format).replace(
+                tzinfo=datetime.timezone.utc
+            )
+            v13_date = v12_date + datetime.timedelta(days=1)
+            ret.append({"version": "v13", "date": v13_date.strftime(date_format)})
             return ret
 
-        # No v13 anywhere — first time determining the date.
-        # Determine fresh install vs upgrade:
-        #   - peer databag: absent key or "true" means fresh (default)
-        #   - v12 in backup: if present, it's definitely not fresh
-        peer_fresh = self._peer_data_get("fresh_install")
-        is_fresh = peer_fresh != "false" and not v12_migration_date
-
-        if is_fresh:
-            v13_date = today.strftime(date_format)
-        else:
-            tomorrow = today + datetime.timedelta(days=1)
-            if v12_migration_date and tomorrow.strftime(date_format) == v12_migration_date:
-                after_tomorrow = tomorrow + datetime.timedelta(days=1)
-                v13_date = after_tomorrow.strftime(date_format)
-            else:
-                v13_date = tomorrow.strftime(date_format)
-
-        self._peer_data_set("v13_migration_date", v13_date)
-        ret.append({"version": "v13", "date": v13_date})
-        logger.info("Schema migration dates (computed): %s", ret)
+        # No schema history at all: use tomorrow so today's chunks remain readable.
+        ret.append({"version": "v13", "date": tomorrow.strftime(date_format)})
         return ret
 
     def _update_datasource_exchange(self) -> None:

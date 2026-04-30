@@ -555,20 +555,6 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
     def tearDown(self):
         self.check_alert_rules_patcher.stop()
 
-    def _set_peer_data(self, key, value):
-        """Write a value into the peer relation app databag."""
-        charm = self.harness.charm
-        peer_rel = charm.model.get_relation("replicas")
-        assert peer_rel is not None
-        peer_rel.data[charm.app][key] = value
-
-    def _get_peer_data(self, key):
-        """Read a value from the peer relation app databag."""
-        charm = self.harness.charm
-        peer_rel = charm.model.get_relation("replicas")
-        assert peer_rel is not None
-        return peer_rel.data[charm.app].get(key, "")
-
     @staticmethod
     def _mock_backup(v13_date="", v12_date=""):
         """Return a mock for _get_schema_config_version_migration_date_from_backup."""
@@ -577,16 +563,13 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         return _inner
 
     def test_fresh_install_no_backup_uses_today(self):
-        """GIVEN a fresh install with no backup config and no peer v13 date.
+        """GIVEN no log chunks and no backup config dates.
 
         WHEN _tsdb_versions_migration_dates is accessed
         THEN the v13 date should be today.
         """
         charm = self.harness.charm
-        # Clear any v13 date that may have been set during setUp hooks.
-        self._set_peer_data("v13_migration_date", "")
-
-        with patch.object(
+        with patch.object(type(charm), "_chunks_non_empty", return_value=False), patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
             return_value="",
@@ -598,7 +581,7 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], expected)
 
     def test_fresh_install_with_backup_preserves_date(self):
-        """GIVEN a fresh install where the backup config already has a v13 date.
+        """GIVEN no log chunks and backup config already has a v13 date.
 
         WHEN _tsdb_versions_migration_dates is accessed after a pod churn
         THEN the backup date takes precedence over today.
@@ -606,7 +589,7 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         charm = self.harness.charm
         original_date = "2026-01-15"
 
-        with patch.object(
+        with patch.object(type(charm), "_chunks_non_empty", return_value=False), patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
             self._mock_backup(v13_date=original_date),
@@ -617,16 +600,15 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(v13_entries[0]["date"], original_date)
 
     def test_upgrade_with_backup_preserves_date(self):
-        """GIVEN an upgrade where the backup config already has a v13 date.
+        """GIVEN log chunks exist and backup config already has a v13 date.
 
         WHEN _tsdb_versions_migration_dates is accessed
         THEN the persisted backup date must be used.
         """
         charm = self.harness.charm
-        self._set_peer_data("fresh_install", "false")
         original_date = "2026-01-15"
 
-        with patch.object(
+        with patch.object(type(charm), "_chunks_non_empty", return_value=True), patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
             self._mock_backup(v13_date=original_date),
@@ -636,18 +618,14 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             self.assertEqual(len(v13_entries), 1)
             self.assertEqual(v13_entries[0]["date"], original_date)
 
-    def test_upgrade_no_backup_uses_tomorrow(self):
-        """GIVEN an upgrade from v11-only with no v13 in backup or peer data.
+    def test_chunks_exist_no_backup_uses_tomorrow(self):
+        """GIVEN log chunks exist and no v12/v13 dates are in backup.
 
         WHEN _tsdb_versions_migration_dates is accessed
         THEN the v13 date should be tomorrow to preserve today's v11/v12 logs.
         """
         charm = self.harness.charm
-        self._set_peer_data("fresh_install", "false")
-        # Clear any v13 date that may have been set during setUp hooks.
-        self._set_peer_data("v13_migration_date", "")
-
-        with patch.object(
+        with patch.object(type(charm), "_chunks_non_empty", return_value=True), patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
             return_value="",
@@ -659,44 +637,6 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
                 datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
             ).strftime("%Y-%m-%d")
             self.assertEqual(v13_entries[0]["date"], expected)
-
-    def test_peer_databag_fallback_when_backup_unavailable(self):
-        """GIVEN a v13 date persisted in peer databag but the backup file is unavailable.
-
-        WHEN _tsdb_versions_migration_dates is accessed (e.g. PathError)
-        THEN the peer databag date is returned, preventing date drift.
-        """
-        charm = self.harness.charm
-        original_date = "2026-01-15"
-        self._set_peer_data("v13_migration_date", original_date)
-
-        # Backup returns "" (e.g. PathError during pod recreation)
-        with patch.object(
-            type(charm),
-            "_get_schema_config_version_migration_date_from_backup",
-            return_value="",
-        ):
-            dates = charm._tsdb_versions_migration_dates  # type: ignore
-            v13_entries = [d for d in dates if d["version"] == "v13"]
-            self.assertEqual(len(v13_entries), 1)
-            self.assertEqual(v13_entries[0]["date"], original_date)
-
-    def test_backup_syncs_to_peer_databag(self):
-        """GIVEN a v13 date in the backup config but not yet in peer databag.
-
-        WHEN _tsdb_versions_migration_dates is accessed
-        THEN the backup date is also persisted into the peer databag for future fallback.
-        """
-        charm = self.harness.charm
-        original_date = "2026-01-15"
-
-        with patch.object(
-            type(charm),
-            "_get_schema_config_version_migration_date_from_backup",
-            self._mock_backup(v13_date=original_date),
-        ):
-            charm._tsdb_versions_migration_dates  # type: ignore
-            self.assertEqual(self._get_peer_data("v13_migration_date"), original_date)
 
     def test_v13_date_stable_across_config_changed_events(self):
         """GIVEN a fully configured Loki with a v13 date already pushed.
@@ -730,39 +670,79 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
         self.assertEqual(original_v13_date, v13_date_after)
 
     def test_v12_in_backup_signals_upgrade_even_without_peer_data(self):
-        """GIVEN no peer data for fresh_install, but backup has a v12 entry.
+        """GIVEN log chunks exist and backup has v12 but no v13 entry.
 
         WHEN _tsdb_versions_migration_dates is accessed
-        THEN v12 presence signals an upgrade → v13 = tomorrow (not today).
+        THEN v13 must be 1 day after the v12 migration date.
         """
         charm = self.harness.charm
-        # Clear any v13 date that may have been set during setUp hooks.
-        self._set_peer_data("v13_migration_date", "")
-
-        with patch.object(
+        v12_date = "2025-06-01"
+        with patch.object(type(charm), "_chunks_non_empty", return_value=True), patch.object(
             type(charm),
             "_get_schema_config_version_migration_date_from_backup",
-            self._mock_backup(v12_date="2025-06-01"),
+            self._mock_backup(v12_date=v12_date),
         ):
             dates = charm._tsdb_versions_migration_dates  # type: ignore
             v13_entries = [d for d in dates if d["version"] == "v13"]
             self.assertEqual(len(v13_entries), 1)
             expected = (
-                datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+                datetime.datetime.strptime(v12_date, "%Y-%m-%d")
+                + datetime.timedelta(days=1)
             ).strftime("%Y-%m-%d")
             self.assertEqual(v13_entries[0]["date"], expected)
 
-    def test_upgrade_charm_sets_peer_databag_flag(self):
-        """GIVEN a running charm.
+    def test_allow_structured_metadata_false_when_v13_is_future(self):
+        """GIVEN a config where v13 starts tomorrow.
 
-        WHEN upgrade-charm fires
-        THEN fresh_install is set to 'false' in the peer databag.
+        WHEN the config is built
+        THEN allow_structured_metadata must be false to avoid Loki rejecting the config.
         """
-        charm = self.harness.charm
-        # Verify fresh_install is not set before upgrade
-        self.assertEqual(self._get_peer_data("fresh_install"), "")
+        from config_builder import ConfigBuilder
 
-        charm.on.upgrade_charm.emit()
+        tomorrow = (
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%d")
 
-        self.assertEqual(self._get_peer_data("fresh_install"), "false")
+        config = ConfigBuilder(
+            instance_addr="localhost",
+            alertmanager_url="",
+            external_url="http://localhost:3100",
+            ingestion_rate_mb=4,
+            ingestion_burst_size_mb=6,
+            retention_period=30,
+            http_tls=False,
+            tsdb_versions_migration_dates=[{"version": "v13", "date": tomorrow}],
+            reporting_enabled=True,
+            grafana_external_url=None,
+            datasource_uid="test-uid",
+        ).build()
+
+        self.assertFalse(config["limits_config"]["allow_structured_metadata"])
+
+    def test_allow_structured_metadata_true_when_v13_is_today(self):
+        """GIVEN a config where v13 starts today.
+
+        WHEN the config is built
+        THEN allow_structured_metadata must be true.
+        """
+        from config_builder import ConfigBuilder
+
+        today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+        config = ConfigBuilder(
+            instance_addr="localhost",
+            alertmanager_url="",
+            external_url="http://localhost:3100",
+            ingestion_rate_mb=4,
+            ingestion_burst_size_mb=6,
+            retention_period=30,
+            http_tls=False,
+            tsdb_versions_migration_dates=[{"version": "v13", "date": today}],
+            reporting_enabled=True,
+            grafana_external_url=None,
+            datasource_uid="test-uid",
+        ).build()
+
+        self.assertTrue(config["limits_config"]["allow_structured_metadata"])
+
 
