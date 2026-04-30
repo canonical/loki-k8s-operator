@@ -691,4 +691,58 @@ class TestTsdbVersionsMigrationDates(unittest.TestCase):
             ).strftime("%Y-%m-%d")
             self.assertEqual(v13_entries[0]["date"], expected)
 
+    def test_allow_structured_metadata_false_when_v13_is_future(self):
+        """GIVEN a config where v13 starts tomorrow.
+
+        WHEN the config is built
+        THEN allow_structured_metadata must be false to avoid Loki rejecting the config.
+        """
+        from config_builder import ConfigBuilder
+
+        tomorrow = (
+            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+
+        config = ConfigBuilder(
+            instance_addr="localhost",
+            alertmanager_url="",
+            external_url="http://localhost:3100",
+            ingestion_rate_mb=4,
+            ingestion_burst_size_mb=6,
+            retention_period=30,
+            http_tls=False,
+            tsdb_versions_migration_dates=[{"version": "v13", "date": tomorrow}],
+            reporting_enabled=True,
+            grafana_external_url=None,
+            datasource_uid="test-uid",
+        ).build()
+
+        self.assertFalse(config["limits_config"]["allow_structured_metadata"])
+
+    def test_allow_structured_metadata_true_when_v13_is_today(self):
+        """GIVEN a config where v13 starts today.
+
+        WHEN the config is built
+        THEN allow_structured_metadata must be true.
+        """
+        from config_builder import ConfigBuilder
+
+        today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+        config = ConfigBuilder(
+            instance_addr="localhost",
+            alertmanager_url="",
+            external_url="http://localhost:3100",
+            ingestion_rate_mb=4,
+            ingestion_burst_size_mb=6,
+            retention_period=30,
+            http_tls=False,
+            tsdb_versions_migration_dates=[{"version": "v13", "date": today}],
+            reporting_enabled=True,
+            grafana_external_url=None,
+            datasource_uid="test-uid",
+        ).build()
+
+        self.assertTrue(config["limits_config"]["allow_structured_metadata"])
+
 
