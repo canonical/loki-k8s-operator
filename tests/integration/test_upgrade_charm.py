@@ -14,86 +14,67 @@
 import logging
 from pathlib import Path
 
+import jubilant
 import pytest
-import sh
 import yaml
-from helpers import is_loki_up
-from pytest_operator.plugin import OpsTest
-
-# pyright: reportAttributeAccessIssue = false
+from helpers import all_active_idle, is_loki_up
 
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-app_name = METADATA["name"]
 resources = {
     "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
     "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
 }
-resources_arg = [
-    f"loki-image={resources['loki-image']}",
-    f"node-exporter-image={resources['node-exporter-image']}",
-]
+app_name = "loki-k8s"
 
 
-async def test_setup_env(ops_test: OpsTest):
-    assert ops_test.model
-    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
+@pytest.mark.juju_setup
+def test_setup_env(juju: jubilant.Juju):
+    juju.model_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
-@pytest.mark.abort_on_fail
-async def test_upgrade_edge_with_local_in_isolation(ops_test: OpsTest, loki_charm, cos_channel):
+def test_upgrade_edge_with_local_in_isolation(juju: jubilant.Juju, loki_charm, cos_channel):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.debug("deploy charm from charmhub")
-    assert ops_test.model
-    sh.juju.deploy(app_name, app_name, model=ops_test.model.name, channel=cos_channel, trust=True)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    juju.deploy(app_name, app_name, channel=cos_channel, trust=True)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
-    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-    assert await is_loki_up(ops_test, app_name)
+    juju.refresh(app_name, path=loki_charm)
+    juju.wait(lambda s: all_active_idle(s, app_name), timeout=1000)
+    assert is_loki_up(juju, app_name)
 
 
-@pytest.mark.abort_on_fail
-async def test_upgrade_local_with_local_with_relations(ops_test: OpsTest, loki_charm, cos_channel):
-    assert ops_test.model
+
+def test_upgrade_local_with_local_with_relations(juju: jubilant.Juju, loki_charm, cos_channel):
     # Deploy related apps
-    sh.juju.deploy("alertmanager-k8s", "am", model=ops_test.model.name, channel=cos_channel, trust=True)
-    sh.juju.deploy("grafana-k8s", "grafana", model=ops_test.model.name, channel=cos_channel, trust=True)
+    juju.deploy("alertmanager-k8s", "am", channel=cos_channel, trust=True)
+    juju.deploy("grafana-k8s", "grafana", channel=cos_channel, trust=True)
     app_names = [app_name, "am", "grafana"]
 
     # Relate apps
-    sh.juju.relate(app_name, "am", model=ops_test.model.name)
-    sh.juju.relate(app_name, "grafana:grafana-source", model=ops_test.model.name)
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=60
-    )
+    juju.integrate(app_name, "am")
+    juju.integrate(app_name, "grafana:grafana-source")
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     # Refresh from path
-    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm)
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=60
-    )
-    assert await is_loki_up(ops_test, app_name)
+    juju.refresh(app_name, path=loki_charm)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
+    assert is_loki_up(juju, app_name)
 
 
-@pytest.mark.abort_on_fail
-async def test_upgrade_with_multiple_units(ops_test: OpsTest, loki_charm):
-    assert ops_test.model
+
+def test_upgrade_with_multiple_units(juju: jubilant.Juju, loki_charm):
     app_names = [app_name, "am", "grafana"]
-    application = ops_test.model.applications[app_name]
-    assert application
+    status = juju.status()
+    current_units = len(status.get_units(app_name))
     # Add unit
-    await application.scale(scale_change=1)
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=60
-    )
+    juju.cli("scale-application", app_name, str(current_units + 1))
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     # Refresh from path
-    sh.juju.refresh(app_name, model=ops_test.model.name, path=loki_charm)
-    await ops_test.model.wait_for_idle(
-        apps=app_names, status="active", timeout=1000, idle_period=60
-    )
+    juju.refresh(app_name, path=loki_charm)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
-    assert await is_loki_up(ops_test, app_name, num_units=2)
+    assert is_loki_up(juju, app_name, num_units=current_units + 1)

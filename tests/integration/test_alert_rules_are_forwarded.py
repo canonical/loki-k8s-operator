@@ -2,13 +2,12 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import logging
 from pathlib import Path
 
-import pytest
+import jubilant
 import yaml
-from helpers import get_alertmanager_alerts
+from helpers import all_active_idle, get_alertmanager_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -19,57 +18,27 @@ resources = {
 }
 
 
-@pytest.mark.abort_on_fail
-async def test_alert_rules_do_forward_to_alertmanager(ops_test, loki_charm, loki_tester_charm, cos_channel):
+def test_alert_rules_do_forward_to_alertmanager(juju: jubilant.Juju, loki_charm, loki_tester_charm, cos_channel):
     """Test basic functionality of Loki push API relation interface."""
     loki_app_name = "loki"
     tester_app_name = "loki-tester"
     alertmanager_app_name = "alertmanager"
     app_names = [loki_app_name, tester_app_name, alertmanager_app_name]
 
-    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
+    juju.model_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
-    await asyncio.gather(
-        ops_test.model.deploy(
-            loki_charm,
-            resources=resources,
-            application_name=loki_app_name,
-            trust=True,
-        ),
-        ops_test.model.deploy(
-            loki_tester_charm,
-            application_name=tester_app_name,
-        ),
-        ops_test.model.deploy(
-            "ch:alertmanager-k8s",
-            application_name=alertmanager_app_name,
-            channel=cos_channel,
-            trust=True,
-        ),
-    )
+    juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
+    juju.deploy(loki_tester_charm, tester_app_name)
+    juju.deploy("ch:alertmanager-k8s", alertmanager_app_name, channel=cos_channel, trust=True)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
-    await ops_test.model.block_until(
-        lambda: (
-            len(ops_test.model.applications[loki_app_name].units) > 0
-            and len(ops_test.model.applications[tester_app_name].units) > 0
-            and len(ops_test.model.applications[alertmanager_app_name].units) > 0
-        )
-    )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active", raise_on_error=False)
-
-    await asyncio.gather(
-        ops_test.model.add_relation(loki_app_name, tester_app_name),
-        ops_test.model.add_relation(loki_app_name, alertmanager_app_name),
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[loki_app_name, tester_app_name, alertmanager_app_name], status="active"
-    )
+    juju.integrate(loki_app_name, tester_app_name)
+    juju.integrate(loki_app_name, alertmanager_app_name)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     # Trigger a log message to fire an alert on
-    await ops_test.model.applications[tester_app_name].units[0].run_action(
-        "log-error", message="Error logged!"
-    )
-    alerts = await get_alertmanager_alerts(ops_test, "alertmanager", 0, retries=100)
+    juju.run(f"{tester_app_name}/0", "log-error", params={"message": "Error logged!"})
+    alerts = get_alertmanager_alerts(juju, "alertmanager", 0, retries=100)
     assert all(
         key in alert["labels"].keys()
         for key in ["juju_application", "juju_model", "juju_model_uuid"]

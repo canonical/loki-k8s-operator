@@ -42,8 +42,9 @@ dev = [
   # Interface
   "pytest-interface-tester",
   # Integration
-  "juju",
-  "pytest-operator",
+  "jubilant",
+  "pytest-jubilant~=2.0",
+  "tenacity",
   "minio",
   "sh",
 ]
@@ -86,7 +87,6 @@ exclude = [
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
-asyncio_mode = "auto"
 addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 markers = ["setup", "work", "teardown"]
 

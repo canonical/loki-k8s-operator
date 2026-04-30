@@ -2,13 +2,12 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import logging
 from pathlib import Path
 
-import pytest
+import jubilant
 import yaml
-from helpers import loki_alerts, oci_image
+from helpers import all_active_idle, loki_alerts, oci_image
 
 logger = logging.getLogger(__name__)
 
@@ -24,34 +23,22 @@ tester_resources = {
 }
 
 
-@pytest.mark.abort_on_fail
-async def test_alert_rules_do_fire_from_log_proxy(ops_test, loki_charm, log_proxy_tester_charm):
+def test_alert_rules_do_fire_from_log_proxy(juju: jubilant.Juju, loki_charm, log_proxy_tester_charm):
     """Test basic functionality of Log Proxy."""
     loki_app_name = "loki"
     tester_app_name = "log-proxy-tester"
     app_names = [loki_app_name, tester_app_name]
 
-    await asyncio.gather(
-        ops_test.model.deploy(
-            loki_charm,
-            resources=resources,
-            application_name=loki_app_name,
-            trust=True,
-        ),
-        ops_test.model.deploy(
-            log_proxy_tester_charm,
-            resources=tester_resources,
-            application_name=tester_app_name,
-        ),
-    )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
+    juju.deploy(loki_charm, loki_app_name, resources=resources, trust=True)
+    juju.deploy(log_proxy_tester_charm, tester_app_name, resources=tester_resources)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
-    await ops_test.model.add_relation(loki_app_name, tester_app_name)
-    await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
+    juju.integrate(loki_app_name, tester_app_name)
+    juju.wait(lambda s: all_active_idle(s, *app_names), timeout=1000)
 
     # Trigger a log message to fire an alert on
-    await ops_test.model.applications[tester_app_name].set_config({"rate": "5"})
-    alerts = await loki_alerts(ops_test, "loki")
+    juju.config(tester_app_name, {"rate": "5"})
+    alerts = loki_alerts(juju, "loki")
     assert all(
         key in alert["labels"].keys()
         for key in ["juju_application", "juju_model", "juju_model_uuid"]
