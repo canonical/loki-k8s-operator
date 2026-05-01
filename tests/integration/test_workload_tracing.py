@@ -2,6 +2,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+from datetime import datetime
 import logging
 from pathlib import Path
 
@@ -29,8 +30,9 @@ loki_resources = {
 async def test_setup_env(ops_test):
     await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
-
-@pytest.mark.skip("tracing-relation-joined fails - https://github.com/canonical/cos-coordinated-workers/issues/19")
+# Xfailing the test until the expected resolution date of the issue: https://github.com/canonical/loki-operators/issues/59
+# Using strict=True to ensure that the test will start failing if it starts passing before the expected date, which would indicate that the underlying issue has been resolved.
+@pytest.mark.xfail(datetime.date.today() < datetime.date(2026, 5, 15), reason="expected to fail until 2026-05-15", strict=True)
 async def test_workload_tracing_is_present(ops_test, loki_charm, cos_channel):
     # Deploy a Tempo cluster
     minio_user = "accesskey"
