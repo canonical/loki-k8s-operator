@@ -27,9 +27,13 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
+import ops
 import yaml
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
+    CertificateTransferRequires,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceData, GrafanaSourceProvider
 from charms.loki_k8s.v0.charm_logging import log_charm
@@ -44,8 +48,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     adjust_resource_requirements,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequestAttributes,
     TLSCertificatesRequiresV4,
@@ -114,18 +117,6 @@ def to_status(tpl: Tuple[str, str]) -> StatusBase:
     return StatusBase.from_name(name, message)
 
 
-@trace_charm(
-    tracing_endpoint="_charm_tracing_endpoint",
-    server_cert="_charm_tracing_ca_cert",
-    extra_types=[
-        GrafanaDashboardProvider,
-        GrafanaSourceProvider,
-        LokiPushApiProvider,
-        TLSCertificatesRequiresV4,
-        ConfigBuilder,
-        MetricsEndpointProvider,
-    ],
-)
 @log_charm(logging_endpoints="_charm_logging_endpoints", server_cert="_charm_logging_ca_cert")
 class LokiOperatorCharm(CharmBase):
     """Charm the service."""
@@ -137,6 +128,7 @@ class LokiOperatorCharm(CharmBase):
     _loki_rules_endpoint = "/loki/api/v1/rules"
     _service_name = "loki"
     _ca_cert_path = "/usr/local/share/ca-certificates/cos-ca.crt"
+    _recv_ca_cert_folder_path = "/usr/local/share/ca-certificates/juju_receive-ca-cert"
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -184,11 +176,20 @@ class LokiOperatorCharm(CharmBase):
             relationship_name="certificates",
             certificate_requests=[self._csr_attributes],
         )
+        self._cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
         # Update certs here in init to avoid code ordering issues
         self._update_cert()
         self.framework.observe(
             self._cert_requirer.on.certificate_available,  # pyright: ignore
             self._on_certificate_available,
+        )
+        self.framework.observe(
+            self._cert_transfer.on.certificate_set_updated,  # pyright: ignore
+            self._on_receive_ca_cert,
+        )
+        self.framework.observe(
+            self._cert_transfer.on.certificates_removed,  # pyright: ignore
+            self._on_receive_ca_cert,
         )
 
         self.framework.observe(self.resources_patch.on.patch_failed, self._on_k8s_patch_failed)
@@ -242,14 +243,13 @@ class LokiOperatorCharm(CharmBase):
         self.dashboard_provider = GrafanaDashboardProvider(self)
 
         self.catalogue = CatalogueConsumer(charm=self, item=self._catalogue_item)
-        self.charm_tracing = TracingEndpointRequirer(
-            self, relation_name="charm-tracing", protocols=["otlp_http"]
+        self.charm_tracing = ops.tracing.Tracing(  # type: ignore[union-attr]
+            self,
+            tracing_relation_name="charm-tracing",
+            ca_relation_name="receive-ca-cert",
         )
         self.workload_tracing = TracingEndpointRequirer(
             self, relation_name="workload-tracing", protocols=["jaeger_thrift_http"]
-        )
-        self._charm_tracing_endpoint, self._charm_tracing_ca_cert = charm_tracing_config(
-            self.charm_tracing, self._ca_cert_path
         )
 
         self.datasource_exchange = DatasourceExchange(
@@ -272,6 +272,9 @@ class LokiOperatorCharm(CharmBase):
         self.framework.observe(self.on.loki_pebble_ready, self._on_loki_pebble_ready)
         self.framework.observe(
             self.on.node_exporter_pebble_ready, self._on_node_exporter_pebble_ready
+        )
+        self.framework.observe(
+            self.on.loki_pebble_check_failed, self._on_loki_pebble_check_failed
         )
 
         self.framework.observe(
@@ -322,9 +325,22 @@ class LokiOperatorCharm(CharmBase):
     def _on_upgrade_charm(self, _):
         self._configure()
 
+    def _on_loki_pebble_check_failed(self, event):
+        """Re-run configure when the schema-migration check detects a stale config.
+
+        This fires when v13 has become the effective schema but the Loki config still
+        has allow_structured_metadata: false. Reconfiguring rewrites the config with the
+        correct value now that v13 is active.
+        """
+        if event.info.name == "schema-migration":
+            self._configure()
+
     def _on_certificate_available(self, _):
         self._update_cert()
         self._configure()
+
+    def _on_receive_ca_cert(self, _):
+        self._update_cert()
 
     def _on_loki_pebble_ready(self, _):
         if self._ensure_alert_rules_path():
@@ -455,6 +471,19 @@ class LokiOperatorCharm(CharmBase):
                         "command": self._loki_command,
                         "startup": "disabled",
                         "environment": env,
+                    },
+                },
+                "checks": {
+                    "schema-migration": {
+                        "override": "replace",
+                        "level": "alive",
+                        "period": "24h",
+                        "threshold": 1,
+                        "exec": {
+                            "command": (
+                                f"grep -q 'allow_structured_metadata: false' {LOKI_CONFIG}"
+                            ),
+                        },
                     },
                 },
             }
@@ -714,6 +743,29 @@ class LokiOperatorCharm(CharmBase):
             # Repeat for the charm container.
             ca_cert_path.unlink(missing_ok=True)
 
+        # Handle certificates received via the receive-ca-cert relation
+        recv_ca_folder = Path(self._recv_ca_cert_folder_path)
+        ca_certs = self._cert_transfer.get_all_certificates()
+
+        # Workload container: clean up and write current certs
+        try:
+            self._loki_container.remove_path(self._recv_ca_cert_folder_path, recursive=True)
+        except (PathError, ProtocolError):
+            pass
+        for i, cert in enumerate(ca_certs):
+            self._loki_container.push(
+                f"{self._recv_ca_cert_folder_path}/{i}.crt", cert, make_dirs=True
+            )
+
+        # Charm container: clean up and write current certs
+        if recv_ca_folder.exists():
+            for f in recv_ca_folder.iterdir():
+                f.unlink()
+        if ca_certs:
+            recv_ca_folder.mkdir(parents=True, exist_ok=True)
+            for i, cert in enumerate(ca_certs):
+                (recv_ca_folder / f"{i}.crt").write_text(cert)
+
         self._loki_container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
 
@@ -839,13 +891,21 @@ class LokiOperatorCharm(CharmBase):
         Other files (e.g. the backup config) live at the top level of CHUNKS_DIR and
         are not chunks, so we check the tenant subdirectory directly.
         Ref: https://grafana.com/docs/loki/latest/operations/storage/filesystem/
+
+        In addition, we also check the CHUNKS_DIR/wal directory. If there are WAL files,
+        it means Loki has written data to disk even if the tenant directory is empty
+        (which can happen if the chunks have been flushed but not yet compacted).
+
+        Uses the charm-container mount point directly (via Juju storage) instead of the
+        Pebble API, to avoid units going into error state due to socket timeouts.
         """
         # "fake" is the fixed tenant ID used when auth_enabled=False (single-tenant mode).
-        tenant_chunks_dir = os.path.join(CHUNKS_DIR, "fake")
         try:
-            files = self._loki_container.list_files(tenant_chunks_dir)
-            return len(files) > 0
-        except (PathError, FileNotFoundError, APIError):
+            storage = self.model.storages["loki-chunks"][0]
+            tenant_chunks_dir = Path(storage.location) / "fake"
+            wal_chunks_dir = Path(storage.location) / "wal"
+            return (tenant_chunks_dir.exists() and any(tenant_chunks_dir.iterdir())) or (wal_chunks_dir.exists() and any(wal_chunks_dir.iterdir()))
+        except (IndexError, OSError):
             return False
 
     @property
