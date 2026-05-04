@@ -171,3 +171,51 @@ def test_v12_in_backup_signals_upgrade_even_without_peer_data(context, loki_cont
         datetime.datetime.strptime(v12_date, "%Y-%m-%d") + datetime.timedelta(days=1)
     ).strftime("%Y-%m-%d")
     assert v13_entries[0]["date"] == expected
+
+
+def test_allow_structured_metadata_false_when_v13_is_future(context, loki_container):
+    """GIVEN a config where v13 starts tomorrow.
+
+    WHEN config-changed fires
+    THEN allow_structured_metadata must be false to avoid Loki rejecting the config.
+    """
+    tomorrow = (
+        datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+    state_in = State(containers=[loki_container], leader=True)
+
+    with patch.object(
+        LokiOperatorCharm,
+        "_tsdb_versions_migration_dates",
+        new_callable=lambda: property(lambda self: [{"version": "v13", "date": tomorrow}]),
+    ):
+        with patch.object(LokiOperatorCharm, "_update_cert"):
+            with context(context.on.config_changed(), state_in) as mgr:
+                state_out = mgr.run()
+
+    fs = state_out.get_container("loki").get_filesystem(context)
+    config = yaml.safe_load((fs / LOKI_CONFIG.lstrip("/")).read_text())
+    assert config["limits_config"]["allow_structured_metadata"] is False
+
+
+def test_allow_structured_metadata_true_when_v13_is_today(context, loki_container):
+    """GIVEN a config where v13 starts today.
+
+    WHEN config-changed fires
+    THEN allow_structured_metadata must be true.
+    """
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    state_in = State(containers=[loki_container], leader=True)
+
+    with patch.object(
+        LokiOperatorCharm,
+        "_tsdb_versions_migration_dates",
+        new_callable=lambda: property(lambda self: [{"version": "v13", "date": today}]),
+    ):
+        with patch.object(LokiOperatorCharm, "_update_cert"):
+            with context(context.on.config_changed(), state_in) as mgr:
+                state_out = mgr.run()
+
+    fs = state_out.get_container("loki").get_filesystem(context)
+    config = yaml.safe_load((fs / LOKI_CONFIG.lstrip("/")).read_text())
+    assert config["limits_config"]["allow_structured_metadata"] is True

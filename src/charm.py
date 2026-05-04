@@ -68,7 +68,7 @@ from ops.model import (
     StatusBase,
     WaitingStatus,
 )
-from ops.pebble import APIError, Error, Layer, PathError, ProtocolError
+from ops.pebble import Error, Layer, PathError, ProtocolError
 
 from config_builder import (
     CERT_FILE,
