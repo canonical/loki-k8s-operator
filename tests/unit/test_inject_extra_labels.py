@@ -17,10 +17,10 @@ def given_rules(docstring):
 @when("extra labels are injected", target_fixture="modified_rules")
 def when_extra_labels_injected(docstring, rules):
     """Inject extra labels using the method under test."""
-    extra_labels = yaml.safe_load(docstring)
+    extra_labels = yaml.safe_load(docstring) or {}
 
     return ConsumerBase._inject_extra_labels_to_alert_rules(
-        alert_rules, extra_labels
+        rules, extra_labels
     )
 
 
