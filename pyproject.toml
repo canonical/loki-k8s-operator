@@ -28,6 +28,7 @@ dev = [
   "pyright",
   # Unit
   "pytest",
+  "pytest-bdd",
   "coverage[toml]",
   "ops[testing]",
   "responses",
