@@ -62,6 +62,7 @@ Feature: Inject extra labels to alert rules
       """
     When extra labels are injected
       """
+      ---
       """
     Then modified rules match
       """
