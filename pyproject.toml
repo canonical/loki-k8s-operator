@@ -87,3 +87,8 @@ markers = ["setup", "work", "teardown"]
 [tool.codespell]
 skip = ".git,.tox,build,venv*"
 ignore-words-list = "assertIn"
+
+[dependency-groups]
+dev = [
+    "pytest-bdd>=8.1.0",
+]
