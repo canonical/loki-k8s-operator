@@ -25,7 +25,7 @@ def when_extra_labels_injected(docstring, rules):
 
 
 @then("modified rules match")
-def then_modified_rules_match(modified_rules, docstring):
+def then_modified_rules_match(docstring, modified_rules):
     """Verify every rule has the extra labels."""
     expected = yaml.safe_load(docstring)
     assert expected == modified_rules
