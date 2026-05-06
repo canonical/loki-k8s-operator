@@ -511,13 +511,14 @@ from gzip import GzipFile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from urllib import request
 from urllib.error import URLError
 
 import yaml
 from cosl import CosTool, JujuTopology
 from cosl.rules import AlertRules
+from cosl.types import OfficialRuleFileFormat
 from ops.charm import (
     CharmBase,
     HookEvent,
@@ -1180,7 +1181,7 @@ class LokiPushApiProvider(Object):
                 )
                 continue
 
-            _, errmsg = self._tool.validate_alert_rules(alert_rules)
+            _, errmsg = self._tool.validate_alert_rules(cast(OfficialRuleFileFormat, alert_rules))
             if errmsg:
                 relation.data[self._charm.app]["event"] = json.dumps({"errors": errmsg})
                 continue
