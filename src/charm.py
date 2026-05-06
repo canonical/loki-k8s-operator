@@ -851,10 +851,43 @@ class LokiOperatorCharm(CharmBase):
     def _regenerate_alert_rules(self):
         """Recreate all alert rules."""
         self._remove_alert_rules_files()
+
+        alerts = self.loki_provider.alerts
+
+        # Check if any relations reported alert rule validation errors.
+        # The provider's alerts property writes {"errors": ...} to relation data
+        # when cos-tool rejects a rule. The charm should go blocked in that case.
+        if self._has_alert_rule_errors():
+            msg = "Failed to verify alert rules. Check juju debug-log"
+            logger.error(msg)
+            self._stored.status["rules"] = to_tuple(BlockedStatus(msg))
+            return
+
         # If there aren't any alerts, we can just clean it and move on
-        if self.loki_provider.alerts:
+        if alerts:
             self._generate_alert_rules_files()
             self._check_alert_rules()
+
+    def _has_alert_rule_errors(self) -> bool:
+        """Check if any logging relations have alert rule validation errors."""
+        import json
+
+        for relation in self.model.relations.get("logging", []):
+            app_data = relation.data.get(self.app)
+            if app_data:
+                event_raw = app_data.get("event", "{}")
+                try:
+                    event_data = json.loads(event_raw)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if event_data.get("errors"):
+                    logger.debug(
+                        "Alert rule validation error on relation %s: %s",
+                        relation.id,
+                        event_data["errors"],
+                    )
+                    return True
+        return False
 
     def _generate_alert_rules_files(self) -> None:
         """Generate and upload alert rules files.
