@@ -6,7 +6,7 @@ groups:
     expr: (histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket{route!~"(?i).*tail.*"}[5m])) by (namespace, job, route, le)))  > 1
     for: 5m
     labels:
-      severity: critical
+      severity: warning
     annotations:
       summary: Loki request latency for route {{ $labels.route }} (job {{ $labels.job }})
       description: "The {{ $labels.job }} on route {{ $labels.route }} is experiencing {{ printf \"%.2f\" $value }}s 99th percentile latency\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
