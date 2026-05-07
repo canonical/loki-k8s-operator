@@ -33,7 +33,7 @@ ALERT_RULES = {
             "rules": [
                 {
                     "alert": "HighPercentageError",
-                    "expr": "sum(rate({%%juju_topology%%} |= 'error' [5m])) by (job)",
+                    "expr": 'sum(rate({job="app"} |= "error" [5m])) by (job)',
                     "for": "0m",
                     "labels": {
                         "severity": "Low",
