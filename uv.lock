@@ -712,7 +712,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = "!=3.11.13" },
     { name = "codespell", marker = "extra == 'dev'" },
-    { name = "cosl" },
+    { name = "cosl", specifier = ">=1.9.1" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "cryptography" },
     { name = "fs", marker = "extra == 'dev'" },
