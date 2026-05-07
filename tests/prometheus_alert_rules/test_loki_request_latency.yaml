@@ -44,7 +44,7 @@ tests:
         alertname: LokiRequestLatency
         exp_alerts:
           - exp_labels:
-              severity: critical
+              severity: warning
               namespace: test
               job: loki
               route: loki_api_v1_push
@@ -178,14 +178,14 @@ tests:
         alertname: LokiRequestLatency
         exp_alerts:
           - exp_labels:
-              severity: critical
+              severity: warning
               namespace: test
               job: loki
               route: loki_api_v1_push
             exp_annotations:
               summary: 'Loki request latency for route loki_api_v1_push (job loki)'
           - exp_labels:
-              severity: critical
+              severity: warning
               namespace: test
               job: loki
               route: loki_api_v1_query_range
