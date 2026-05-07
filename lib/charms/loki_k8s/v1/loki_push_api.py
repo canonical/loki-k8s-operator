@@ -544,7 +544,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 24
+LIBPATCH = 25
 
 PYDEPS = ["cosl"]
 
@@ -1183,7 +1183,8 @@ class LokiPushApiProvider(Object):
 
             _, errmsg = self._tool.validate_alert_rules(cast(OfficialRuleFileFormat, alert_rules))
             if errmsg:
-                relation.data[self._charm.app]["event"] = json.dumps({"errors": errmsg})
+                if self._charm.unit.is_leader():
+                    relation.data[self._charm.app]["event"] = json.dumps({"errors": errmsg})
                 continue
 
             alerts[identifier] = alert_rules

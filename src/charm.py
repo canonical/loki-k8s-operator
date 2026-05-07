@@ -872,6 +872,9 @@ class LokiOperatorCharm(CharmBase):
         """Check if any logging relations have alert rule validation errors."""
         import json
 
+        if not self.unit.is_leader():
+            return False
+
         for relation in self.model.relations.get("logging", []):
             app_data = relation.data.get(self.app)
             if app_data:
