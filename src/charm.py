@@ -858,7 +858,7 @@ class LokiOperatorCharm(CharmBase):
         # The provider's alerts property writes {"errors": ...} to relation data
         # when cos-tool rejects a rule. The charm should go blocked in that case.
         if self._has_alert_rule_errors():
-            msg = "Failed to verify alert rules. Check juju debug-log"
+            msg = "Invalid alert rules. See debug-log"
             logger.error(msg)
             self._stored.status["rules"] = to_tuple(BlockedStatus(msg))
             return
