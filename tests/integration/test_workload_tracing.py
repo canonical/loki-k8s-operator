@@ -3,10 +3,8 @@
 # See LICENSE file for licensing details.
 
 import logging
-from datetime import date
 from pathlib import Path
 
-import pytest
 import yaml
 from helpers import (
     get_application_ip,
