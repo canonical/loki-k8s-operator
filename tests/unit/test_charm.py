@@ -441,6 +441,37 @@ class TestAppRelationData(unittest.TestCase):
         url = promtail_binaries["amd64"]["url"]
         self.assertTrue(url.startswith("http"))
 
+    def test_promtail_url_set_on_relation_changed_if_missing(self):
+        """Scenario: promtail_binary_zip_url is set on relation_changed as a fallback.
+
+        Charms using the reconcile pattern may miss the relation_joined event if the
+        workload container is not yet ready. In that case, promtail_binary_zip_url
+        must be set on the next relation_changed event.
+
+        Ref: https://github.com/canonical/loki-k8s-operator/issues/615
+        """
+        # GIVEN promtail_binary_zip_url was removed from app data (simulating missed relation_joined)
+        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
+        self.assertIn("promtail_binary_zip_url", rel_data)
+        self.harness.update_relation_data(
+            self.rel_id, self.harness.charm.app.name, {"promtail_binary_zip_url": ""}
+        )
+        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
+        self.assertNotIn("promtail_binary_zip_url", rel_data)
+
+        # WHEN a relation_changed event fires (e.g. consumer updates its metadata)
+        self.harness.update_relation_data(
+            self.rel_id, "consumer", {"metadata": json.dumps(METADATA)}
+        )
+
+        # THEN promtail_binary_zip_url is set again in app data
+        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
+        self.assertIn("promtail_binary_zip_url", rel_data)
+        self.assertNotEqual(rel_data["promtail_binary_zip_url"], "")
+        promtail_binaries = json.loads(rel_data["promtail_binary_zip_url"])
+        url = promtail_binaries["amd64"]["url"]
+        self.assertTrue(url.startswith("http"))
+
 
 class TestAlertRuleBlockedStatus(unittest.TestCase):
     """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
