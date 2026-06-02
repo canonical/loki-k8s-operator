@@ -34,7 +34,7 @@ description: |
     Loki Coordinator and Loki Worker charms.
 
 links:
-  documentation: https://discourse.charmhub.io/t/loki-k8s-docs-index/5228
+  documentation: https://documentation.ubuntu.com/observability/latest/
   website: https://charmhub.io/loki-k8s
   source: https://github.com/canonical/loki-k8s-operator
   issues: https://github.com/canonical/loki-k8s-operator/issues
