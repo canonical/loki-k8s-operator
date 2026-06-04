@@ -62,7 +62,6 @@ from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric.types import CertificateIssuerPrivateKeyTypes
 from cryptography.x509.oid import ExtensionOID, NameOID
 from ops import BoundEvent, CharmBase, CharmEvents, Secret, SecretExpiredEvent, SecretRemoveEvent
 from ops.framework import EventBase, EventSource, Handle, Object
@@ -77,7 +76,7 @@ LIBAPI = 4
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 27
+LIBPATCH = 29
 
 PYDEPS = [
     "cryptography>=43.0.0",
@@ -632,7 +631,8 @@ class Certificate:
         private_key = serialization.load_pem_private_key(
             str(ca_private_key).encode(), password=None
         )
-        assert isinstance(private_key, CertificateIssuerPrivateKeyTypes)
+        if not isinstance(private_key, rsa.RSAPrivateKey):
+            raise TLSCertificatesError("Expected an RSA private key")
 
         # Create a certificate builder
         cert_builder = x509.CertificateBuilder(
@@ -989,7 +989,8 @@ class CertificateSigningRequest:
             CertificateSigningRequest: CSR
         """
         signing_key = private_key._private_key
-        assert isinstance(signing_key, CertificateIssuerPrivateKeyTypes)
+        if not isinstance(signing_key, rsa.RSAPrivateKey):
+            raise TLSCertificatesError("Expected an RSA private key")
 
         csr_builder = x509.CertificateSigningRequestBuilder()
         if subject_name := _extract_subject_name_attributes(attributes):
@@ -1732,6 +1733,7 @@ class TLSCertificatesRequiresV4(Object):
                 "Invalid renewal relative time. Must be between 0.5 and 1.0"
             )
         self._private_key = private_key
+        self._cached_private_key: Optional[PrivateKey] = None
         self.renewal_relative_time = renewal_relative_time
         self.framework.observe(charm.on[relationship_name].relation_created, self._configure)
         self.framework.observe(charm.on[relationship_name].relation_changed, self._configure)
@@ -1864,11 +1866,15 @@ class TLSCertificatesRequiresV4(Object):
         """Return the private key."""
         if self._private_key:
             return self._private_key
-        if not self._private_key_generated():
+        if self._cached_private_key:
+            return self._cached_private_key
+        try:
+            secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
+            private_key = secret.get_content(refresh=True)["private-key"]
+        except SecretNotFoundError:
             return None
-        secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
-        private_key = secret.get_content(refresh=True)["private-key"]
-        return PrivateKey.from_string(private_key)
+        self._cached_private_key = PrivateKey.from_string(private_key)
+        return self._cached_private_key
 
     def _ensure_private_key(self) -> None:
         """Make sure there is a private key to be used.
@@ -1931,6 +1937,7 @@ class TLSCertificatesRequiresV4(Object):
             return False
 
     def _store_private_key_in_secret(self, private_key: PrivateKey) -> None:
+        self._cached_private_key = None
         try:
             secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
             secret.set_content({"private-key": str(private_key)})
@@ -1943,6 +1950,7 @@ class TLSCertificatesRequiresV4(Object):
 
     def _remove_private_key_secret(self) -> None:
         """Remove the private key secret."""
+        self._cached_private_key = None
         try:
             secret = self.charm.model.get_secret(label=self._get_private_key_secret_label())
             secret.remove_all_revisions()
