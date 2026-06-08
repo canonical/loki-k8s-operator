@@ -2,63 +2,62 @@
 # See LICENSE file for licensing details.
 
 import json
-import textwrap
-import unittest
 
+import pytest
 from charms.loki_k8s.v1.loki_push_api import LogForwarder, _PebbleLogClient
 from ops.charm import CharmBase
-from ops.testing import Harness
+from ops.testing import Context
+from scenario import Container, Relation, State
+
+FAKE_CHARM_META = {
+    "name": "fake-charm",
+    "containers": {"consumer": {"resource": "consumer-image"}},
+    "requires": {"logging": {"interface": "loki_push_api"}},
+}
 
 
 class FakeCharm(CharmBase):
     """Container charm for forwarding logs using the logforwarder class."""
-
-    metadata_yaml = textwrap.dedent(
-        """
-        containers:
-          consumer:
-            resource: consumer-image
-
-        requires:
-          logging:
-            interface: loki_push_api
-        """
-    )
 
     def __init__(self, *args):
         super().__init__(*args)
         self.log_forwarder = LogForwarder(self)
 
 
-class TestLogForwarding(unittest.TestCase):
-    """Test that the Log Forwarder implementation works."""
+@pytest.fixture
+def log_forwarder_context():
+    return Context(FakeCharm, meta=FAKE_CHARM_META)
 
-    def setUp(self):
-        self.harness = Harness(FakeCharm, meta=FakeCharm.metadata_yaml)
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin_with_initial_hooks()
 
-    def test_handle_logging_with_relation_lifecycle(self):
-        rel_id = self.harness.add_relation("logging", "loki")
-        for i in range(2):
-            loki_unit = f"loki/{i}"
-            endpoint = f"http://loki-{i}:3100/loki/api/v1/push"
-            data = json.dumps({"url": f"{endpoint}"})
-            self.harness.add_relation_unit(rel_id, loki_unit)
-            self.harness.set_planned_units(1)
-            self.harness.update_relation_data(
-                rel_id,
-                loki_unit,
-                {"endpoint": data},
-            )
-        relation_obj = self.harness.model.relations["logging"][0]
+def test_handle_logging_with_relation_lifecycle(log_forwarder_context):
+    """Test that log forwarding handles relation lifecycle correctly."""
+    # Create relation with 2 loki units
+    logging_relation = Relation(
+        "logging",
+        remote_app_name="loki",
+        remote_units_data={
+            0: {"endpoint": json.dumps({"url": "http://loki-0:3100/loki/api/v1/push"})},
+            1: {"endpoint": json.dumps({"url": "http://loki-1:3100/loki/api/v1/push"})},
+        },
+    )
+
+    # Add consumer container
+    consumer_container = Container("consumer", can_connect=True)
+
+    state = State(relations=[logging_relation], containers=[consumer_container], planned_units=1)
+
+    with log_forwarder_context(
+        log_forwarder_context.on.relation_changed(logging_relation), state
+    ) as mgr:
+        charm = mgr.charm
+        relation_obj = charm.model.relations["logging"][0]
+
         expected_endpoints = {
             "loki/0": "http://loki-0:3100/loki/api/v1/push",
             "loki/1": "http://loki-1:3100/loki/api/v1/push",
         }
-        self.assertDictEqual(
-            self.harness.charm.log_forwarder._fetch_endpoints(relation_obj), expected_endpoints
-        )
+        assert charm.log_forwarder._fetch_endpoints(relation_obj) == expected_endpoints
+
         expected_layer_config = {
             "loki/0": {
                 "override": "replace",
@@ -67,11 +66,11 @@ class TestLogForwarding(unittest.TestCase):
                 "services": ["all"],
                 "labels": {
                     "product": "Juju",
-                    "charm": self.harness.charm.log_forwarder.topology._charm_name,
-                    "juju_model": self.harness.charm.log_forwarder.topology._model,
-                    "juju_model_uuid": self.harness.charm.log_forwarder.topology._model_uuid,
-                    "juju_application": self.harness.charm.log_forwarder.topology._application,
-                    "juju_unit": self.harness.charm.log_forwarder.topology._unit,
+                    "charm": charm.log_forwarder.topology._charm_name,
+                    "juju_model": charm.log_forwarder.topology._model,
+                    "juju_model_uuid": charm.log_forwarder.topology._model_uuid,
+                    "juju_application": charm.log_forwarder.topology._application,
+                    "juju_unit": charm.log_forwarder.topology._unit,
                 },
             },
             "loki/1": {
@@ -81,15 +80,15 @@ class TestLogForwarding(unittest.TestCase):
                 "services": ["all"],
                 "labels": {
                     "product": "Juju",
-                    "charm": self.harness.charm.log_forwarder.topology._charm_name,
-                    "juju_model": self.harness.charm.log_forwarder.topology._model,
-                    "juju_model_uuid": self.harness.charm.log_forwarder.topology._model_uuid,
-                    "juju_application": self.harness.charm.log_forwarder.topology._application,
-                    "juju_unit": self.harness.charm.log_forwarder.topology._unit,
+                    "charm": charm.log_forwarder.topology._charm_name,
+                    "juju_model": charm.log_forwarder.topology._model,
+                    "juju_model_uuid": charm.log_forwarder.topology._model_uuid,
+                    "juju_application": charm.log_forwarder.topology._application,
+                    "juju_unit": charm.log_forwarder.topology._unit,
                 },
             },
         }
         actual_layer_config = _PebbleLogClient._build_log_targets(
-            expected_endpoints, self.harness.charm.log_forwarder.topology, True
+            expected_endpoints, charm.log_forwarder.topology, True
         )
-        self.assertDictEqual(expected_layer_config, actual_layer_config)
+        assert expected_layer_config == actual_layer_config

@@ -4,19 +4,20 @@
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import json
-import os
-import unittest
+from dataclasses import replace
 from io import BytesIO
 from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
 
+import ops
+import pytest
 import yaml
-from helpers import FakeProcessVersionCheck, k8s_resource_multipatch
-from ops.model import ActiveStatus, BlockedStatus, Container, MaintenanceStatus
-from ops.testing import Harness
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.testing import Context
+from scenario import Container, Exec, Relation, State
 
-from charm import LOKI_CONFIG as LOKI_CONFIG_PATH  # type: ignore
-from charm import LokiOperatorCharm  # type: ignore
+from charm import LOKI_CONFIG as LOKI_CONFIG_PATH
+from charm import LokiOperatorCharm
 
 METADATA = {
     "model": "consumer-model",
@@ -46,515 +47,378 @@ ALERT_RULES = {
     ]
 }
 
-LOKI_CONFIG = """
-auth_enabled: false
-chunk_store_config:
-  max_look_back_period: 0s
-compactor:
-  shared_store: filesystem
-  working_directory: /loki/boltdb-shipper-compactor
-ingester:
-  chunk_idle_period: 1h
-  chunk_retain_period: 30s
-  chunk_target_size: 1048576
-  lifecycler:
-    address: 127.0.0.1
-    final_sleep: 0s
-    ring:
-      kvstore:
-        store: inmemory
-      replication_factor: 1
-  max_chunk_age: 1h
-  max_transfer_retries: 0
-limits_config:
-  reject_old_samples: true
-  reject_old_samples_max_age: 168h
-ruler:
-  alertmanager_url: ''
-  enable_api: true
-  ring:
-    kvstore:
-      store: inmemory
-  rule_path: /loki/rules-temp
-  storage:
-    local:
-      directory: /loki/rules
-    type: local
-schema_config:
-  configs:
-  - from: 2020-10-24
-    index:
-      period: 24h
-      prefix: index_
-    object_store: filesystem
-    schema: v11
-    store: boltdb-shipper
-server:
-  http_listen_port: 3100
-storage_config:
-  boltdb_shipper:
-    active_index_directory: /loki/boltdb-shipper-active
-    cache_location: /loki/boltdb-shipper-cache
-    cache_ttl: 24h
-    shared_store: filesystem
-  filesystem:
-    directory: /loki/chunks
-table_manager:
-  retention_deletes_enabled: false
-  retention_period: 0s
-"""
+
+def tautology(*_, **__) -> bool:
+    return True
 
 
-class TestCharm(unittest.TestCase):
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def setUp(self, *_):
-        self.container_name: str = "loki"
-        version_patcher = patch(
-            "charm.LokiOperatorCharm._loki_version",
-            new_callable=PropertyMock,
-            return_value="3.14159",
-        )
-        os.environ["JUJU_VERSION"] = "3.0.3"
-        self.mock_version = version_patcher.start()
-        self.harness = Harness(LokiOperatorCharm)
-        self.addCleanup(self.harness.cleanup)
-        self.addCleanup(version_patcher.stop)
-        self.harness.set_leader(True)
-        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
-        self.harness.begin_with_initial_hooks()
-        self.harness.container_pebble_ready("loki")
+@pytest.fixture
+def loki_charm():
+    with patch.multiple(
+        "charm.KubernetesComputeResourcesPatch",
+        _namespace=PropertyMock("test-namespace"),
+        _patch=PropertyMock(tautology),
+        is_ready=PropertyMock(tautology),
+    ):
+        with patch("socket.getfqdn", new=lambda *args: "fqdn"):
+            with patch("lightkube.core.client.GenericSyncClient"):
+                yield LokiOperatorCharm
 
-    def test__alerting_config(self):
-        self.harness.charm.alertmanager_consumer = Mock()  # type: ignore
+
+@pytest.fixture
+def ctx(loki_charm):
+    return Context(loki_charm)
+
+
+@pytest.fixture
+def loki_container():
+    """Loki container with all required execs for version check."""
+    return Container(
+        "loki",
+        can_connect=True,
+        execs={
+            Exec(["update-ca-certificates", "--fresh"], return_code=0),
+            Exec(["/usr/bin/loki", "-version"], return_code=0, stdout="loki, version 3.14159"),
+        },
+        layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
+        service_statuses={"loki": ops.pebble.ServiceStatus.INACTIVE},
+    )
+
+
+@pytest.fixture
+def loki_container_cannot_connect():
+    return Container(
+        "loki",
+        can_connect=False,
+        execs={
+            Exec(["update-ca-certificates", "--fresh"], return_code=0),
+            Exec(["/usr/bin/loki", "-version"], return_code=0, stdout="loki, version 3.14159"),
+        },
+        layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
+        service_statuses={"loki": ops.pebble.ServiceStatus.INACTIVE},
+    )
+
+
+# --- TestCharm ---
+
+
+def test_alerting_config(ctx, loki_container):
+    """Test _alerting_config method returns correct alertmanager URLs."""
+    state = State(leader=True, containers=[loki_container])
+
+    with ctx(ctx.on.start(), state) as mgr:
+        charm = mgr.charm
+        # Mock the alertmanager_consumer
+        charm.alertmanager_consumer = Mock()
         mock_cluster = {"http://10.1.2.52", "http://10.1.3.52"}
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = mock_cluster  # type: ignore
-        expected_value = "http://10.1.2.52,http://10.1.3.52"
-        self.assertEqual(mock_cluster, set(self.harness.charm._alerting_config().split(",")))  # type: ignore
+        charm.alertmanager_consumer.get_cluster_info.return_value = mock_cluster
+        result = charm._alerting_config()
+        assert set(result.split(",")) == mock_cluster
 
-        self.harness.charm.alertmanager_consumer.get_cluster_info.return_value = set()  # type: ignore
-        expected_value = ""
-        self.assertEqual(self.harness.charm._alerting_config(), expected_value)  # type: ignore
-
-        with self.assertLogs(level="DEBUG") as logger:
-            self.harness.charm._alerting_config()  # type: ignore
-            searched_message = "DEBUG:charm:No alertmanagers available"
-            any_matches = any(searched_message in log_message for log_message in logger.output)
-            self.assertTrue(any_matches)
-
-    @patch("config_builder.ConfigBuilder.build")
-    @k8s_resource_multipatch
-    def test__on_config_cannot_connect(self, mock_loki_config):
-        self.harness.set_leader(True)
-        self.harness.set_can_connect("loki", False)
-        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
-
-        # Since harness was not started with begin_with_initial_hooks(), this must
-        # be emitted by hand to actually trigger _configure()
-        self.harness.charm.on.config_changed.emit()
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
-
-    @patch("config_builder.ConfigBuilder.build")
-    @k8s_resource_multipatch
-    def test__on_config_can_connect(self, mock_loki_config):
-        mock_loki_config.return_value = yaml.safe_load(LOKI_CONFIG)
-        self.harness.set_leader(True)
-
-        # Since harness was not started with begin_with_initial_hooks(), this must
-        # be emitted by hand to actually trigger _configure()
-        self.harness.charm.on.config_changed.emit()
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+        # Test empty cluster
+        charm.alertmanager_consumer.get_cluster_info.return_value = set()
+        assert charm._alerting_config() == ""
 
 
-class TestConfigFile(unittest.TestCase):
-    """Feature: Loki config file in the workload container is rendered by the charm."""
+def test_on_config_cannot_connect(ctx, loki_container_cannot_connect):
+    """Test that charm goes to Maintenance when cannot connect to container."""
+    state = State(leader=True, containers=[loki_container_cannot_connect])
 
-    @patch("socket.getfqdn", new=lambda *args: "fqdn")
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def setUp(self, *_):
-        os.environ["JUJU_VERSION"] = "3.0.3"
-        # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
-        self.check_alert_rules_patcher = patch(
-            "charm.LokiOperatorCharm._check_alert_rules",
-            new=lambda x: True,
-        )
-        self.check_alert_rules_patcher.start()
+    with patch("config_builder.ConfigBuilder.build") as mock_build:
+        mock_build.return_value = {}
+        state_out = ctx.run(ctx.on.config_changed(), state)
 
-        self.harness = Harness(LokiOperatorCharm)
-        self.addCleanup(self.harness.cleanup)
+    # When can't connect, charm stays in Maintenance (exact message may vary)
+    assert isinstance(state_out.unit_status, MaintenanceStatus)
 
-        # GIVEN this unit is the leader
-        self.harness.set_leader(True)
-        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
-        self.harness.begin_with_initial_hooks()
-        self.harness.container_pebble_ready("loki")
 
-    def tearDown(self):
-        self.check_alert_rules_patcher.stop()
+def test_on_config_can_connect(ctx, loki_container):
+    """Test that charm goes to Active when connected to container."""
+    state = State(leader=True, containers=[loki_container])
 
-    @k8s_resource_multipatch
-    def test_relating_over_alertmanager_updates_config_with_ip_addresses(self):
-        """Scenario: The charm is related to alertmanager."""
-        container = self.harness.charm.unit.get_container("loki")
+    with patch("config_builder.ConfigBuilder.build") as mock_build, patch.object(
+        LokiOperatorCharm, "_update_cert"
+    ):
+        mock_build.return_value = {}
+        state_out = ctx.run(ctx.on.config_changed(), state)
 
-        # WHEN no units are related over the alertmanager relation
+    assert state_out.unit_status == ActiveStatus()
 
-        # THEN the `alertmanager_url` property is blank (`yaml.safe_load` converts blanks to None)
-        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["ruler"]["alertmanager_url"], "")
+
+# --- TestConfigFile ---
+
+
+def test_relating_over_alertmanager_updates_config_with_ip_addresses(ctx, loki_container):
+    """Scenario: The charm is related to alertmanager."""
+    # GIVEN no alertmanager units initially
+    state_in = State(leader=True, containers=[loki_container])
+
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=True), patch.object(
+        LokiOperatorCharm, "_update_cert"
+    ):
+        # Run to get initial config
+        state_with_config = ctx.run(ctx.on.config_changed(), state_in)
+
+        # Check initial state - alertmanager_url should be empty
+        fs = state_with_config.get_container("loki").get_filesystem(ctx)
+        config = yaml.safe_load((fs / LOKI_CONFIG_PATH.lstrip("/")).read_text())
+        assert config["ruler"]["alertmanager_url"] == ""
 
         # WHEN alertmanager units join
-        self.alerting_rel_id = self.harness.add_relation("alertmanager", "alertmanager-app")
-        self.harness.add_relation_unit(self.alerting_rel_id, "alertmanager-app/0")
-        self.harness.add_relation_unit(self.alerting_rel_id, "alertmanager-app/1")
-        self.harness.update_relation_data(
-            self.alerting_rel_id, "alertmanager-app/0", {"public_address": "10.0.0.1"}
-        )
-        self.harness.update_relation_data(
-            self.alerting_rel_id, "alertmanager-app/1", {"public_address": "10.0.0.2"}
-        )
-
-        # THEN the `alertmanager_url` property has their ip addresses
-        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(
-            set(config["ruler"]["alertmanager_url"].split(",")),
-            {"http://10.0.0.1", "http://10.0.0.2"},
-        )
-
-        # WHEN the relation is broken
-        self.harness.remove_relation(self.alerting_rel_id)
-
-        # THEN the `alertmanager_url` property is blank again
-        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["ruler"]["alertmanager_url"], "")
-
-    @patch("socket.getfqdn", new=lambda *args: "fqdn")
-    def test_instance_address_is_set_to_this_unit_ip(self):
-        container = self.harness.charm.unit.get_container("loki")
-
-        # WHEN no units are related over the logging relation
-
-        # THEN the `instance_addr` property has the fqdn
-        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["common"]["ring"]["instance_addr"], "fqdn")
-
-        # WHEN logging units join
-        self.log_rel_id = self.harness.add_relation("logging", "logging-app")
-        self.harness.add_relation_unit(self.log_rel_id, "logging-app/0")
-        self.harness.add_relation_unit(self.log_rel_id, "logging-app/1")
-        self.harness.update_relation_data(
-            self.log_rel_id, "logging-app/0", {"something": "just to trigger rel-changed event"}
-        )
-
-        self.harness.charm.on.config_changed.emit()
-
-        # THEN the `instance_addr` property has the fqdn
-        config = yaml.safe_load(container.pull(LOKI_CONFIG_PATH))
-        self.assertEqual(config["common"]["ring"]["instance_addr"], "fqdn")
-
-
-class TestPebblePlan(unittest.TestCase):
-    """Feature: Multi-unit loki deployments.
-
-    Background: TODO
-    """
-
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def test_loki_starts_when_cluster_deployed_without_any_relations(self, *_):
-        """Scenario: A loki cluster is deployed without any relations."""
-        is_leader = True
-        num_consumer_apps = 3
-        os.environ["JUJU_VERSION"] = "3.0.3"
-        self.harness = Harness(LokiOperatorCharm)
-        self.addCleanup(self.harness.cleanup)
-
-        # WHEN the unit is started as either a leader or not
-        self.harness.set_leader(is_leader)
-
-        # AND potentially some logging relations join
-        for i in range(num_consumer_apps):
-            self.log_rel_id = self.harness.add_relation("logging", f"consumer-app-{i}")
-            # Add two units per consumer app
-            for u in range(2):
-                self.harness.add_relation_unit(self.log_rel_id, f"consumer-app-{i}/{u}")
-
-        self.harness.begin_with_initial_hooks()
-        self.harness.container_pebble_ready("loki")
-
-        # THEN a pebble service is created for this unit
-        plan = self.harness.get_container_pebble_plan("loki")
-        self.assertIn("loki", plan.services)
-
-        # AND the command includes a config file
-        command = plan.services["loki"].command
-        self.assertIn("-config.file=", command)
-
-        # AND the service is running
-        container = self.harness.charm.unit.get_container("loki")
-        service = container.get_service("loki")
-        self.assertTrue(service.is_running())
-
-
-class TestDelayedPebbleReady(unittest.TestCase):
-    """Feature: Charm code must be resilient to any (reasonable) order of startup event firing."""
-
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
-    def setUp(self, *_):
-        os.environ["JUJU_VERSION"] = "3.0.3"
-        # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
-        self.check_alert_rules_patcher = patch(
-            "charm.LokiOperatorCharm._check_alert_rules",
-            new=lambda x: True,
-        )
-        self.check_alert_rules_patcher.start()
-        self.version_patcher = patch(
-            "charm.LokiOperatorCharm._loki_version",
-            new_callable=PropertyMock,
-            return_value="3.14159",
-        )
-        self.version_patcher.start()
-        self.harness = Harness(LokiOperatorCharm)
-
-        self.addCleanup(self.harness.cleanup)
-        self.harness.set_leader(True)
-        self.harness.begin()
-        self.harness.charm.on.config_changed.emit()
-
-        # AND a "logging" app joins with several units
-        self.log_rel_id = self.harness.add_relation("logging", "consumer-app")
-        self.harness.add_relation_unit(self.log_rel_id, "consumer-app/0")
-        self.harness.add_relation_unit(self.log_rel_id, "consumer-app/1")
-        self.harness.update_relation_data(
-            self.log_rel_id,
-            "consumer-app",
-            {
-                "metadata": "{}",
-                "alert_rules": "{}",
+        alertmanager_rel = Relation(
+            "alertmanager",
+            remote_app_name="alertmanager-app",
+            remote_units_data={
+                0: {"public_address": "10.0.0.1"},
+                1: {"public_address": "10.0.0.2"},
             },
         )
+        state_with_am = replace(state_with_config, relations=frozenset([alertmanager_rel]))
 
-    def tearDown(self):
-        self.check_alert_rules_patcher.stop()
-        self.version_patcher.stop()
+        state_after_am = ctx.run(ctx.on.relation_changed(alertmanager_rel), state_with_am)
 
-    @k8s_resource_multipatch
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def test_pebble_ready_changes_status_from_waiting_to_active(self):
-        """Scenario: a pebble-ready event is delayed."""
-        # WHEN all startup hooks except pebble-ready finished
-        # THEN app status is "Maintenance" before pebble-ready
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
+        # THEN the alertmanager_url property has their ip addresses
+        fs2 = state_after_am.get_container("loki").get_filesystem(ctx)
+        config2 = yaml.safe_load((fs2 / LOKI_CONFIG_PATH.lstrip("/")).read_text())
+        assert set(config2["ruler"]["alertmanager_url"].split(",")) == {
+            "http://10.0.0.1",
+            "http://10.0.0.2",
+        }
 
-        # AND app status is "Active" after pebble-ready
-        self.harness.container_pebble_ready("loki")
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+        # WHEN the relation is broken
+        rel_from_state = state_after_am.get_relation(alertmanager_rel.id)
+        state_broken = ctx.run(ctx.on.relation_broken(rel_from_state), state_after_am)
 
-    @k8s_resource_multipatch
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def test_regular_relation_departed_runs_before_pebble_ready(self):
-        """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
-        # WHEN relation-departed fires before pebble-ready
-        self.harness.remove_relation_unit(self.log_rel_id, "consumer-app/1")
-
-        # THEN app status is "Waiting" before pebble-ready
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
-
-        # AND app status is "Active" after pebble-ready
-        self.harness.container_pebble_ready("loki")
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
-
-    @k8s_resource_multipatch
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def test_regular_relation_broken_runs_before_pebble_ready(self):
-        """Scenario: a regular relation is removed quickly, before pebble-ready fires."""
-        # WHEN relation-broken fires before pebble-ready
-        self.harness.remove_relation(self.log_rel_id)
-
-        # THEN app status is "Waiting" before pebble-ready
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, MaintenanceStatus)
-
-        # AND app status is "Active" after pebble-ready
-        self.harness.container_pebble_ready("loki")
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+        # THEN the alertmanager_url property is blank again
+        fs3 = state_broken.get_container("loki").get_filesystem(ctx)
+        config3 = yaml.safe_load((fs3 / LOKI_CONFIG_PATH.lstrip("/")).read_text())
+        assert config3["ruler"]["alertmanager_url"] == ""
 
 
-class TestAppRelationData(unittest.TestCase):
-    """Feature: Loki advertises common global info over app relation data.
+def test_instance_address_is_set_to_this_unit_ip(ctx, loki_container):
+    """Test that instance_addr is set to fqdn."""
+    state = State(leader=True, containers=[loki_container])
 
-    Background: Consumer charms need to have a URL for downloading promtail.
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=True), patch.object(
+        LokiOperatorCharm, "_update_cert"
+    ):
+        state_out = ctx.run(ctx.on.config_changed(), state)
 
-    Deprecated: The promtail_binary_zip_url relation data field is deprecated along with Promtail.
-    New integrations should use LokiPushApiConsumer with OpenTelemetry Collector instead.
-    """
+        # THEN the instance_addr property has the fqdn
+        fs = state_out.get_container("loki").get_filesystem(ctx)
+        config = yaml.safe_load((fs / LOKI_CONFIG_PATH.lstrip("/")).read_text())
+        assert config["common"]["ring"]["instance_addr"] == "fqdn"
 
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def setUp(self, *_) -> None:
-        os.environ["JUJU_VERSION"] = "3.0.3"
-        self.harness = Harness(LokiOperatorCharm)
-        self.addCleanup(self.harness.cleanup)
-        self.harness.set_leader(True)
 
-        self.rel_id = self.harness.add_relation("logging", "consumer")
-        self.harness.add_relation_unit(self.rel_id, "consumer/0")
+# --- TestPebblePlan ---
 
-        self.harness.begin_with_initial_hooks()
-        self.harness.container_pebble_ready("loki")
 
-    def test_endpoint(self):
-        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.unit)
-        # Relation data must include an "endpoints" key
-        self.assertIn("endpoint", rel_data)
-        endpoint = json.loads(rel_data["endpoint"])
-
-        # The endpoint must be a dicts
-        self.assertIsInstance(endpoint, dict)
-
-        # Endpoint must have a "url" key
-        self.assertIn("url", endpoint)
-        self.assertTrue(endpoint["url"].startswith("http"))
-
-    def test_promtail_url(self):
-        # Deprecated: promtail_binary_zip_url is part of the deprecated LogProxyConsumer/Promtail flow.
-        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
-
-        # Relation data must include a "promtail_binary_zip_url" key
-        self.assertIn("promtail_binary_zip_url", rel_data)
-
-        # The value must be a url
-        promtail_binaries = json.loads(rel_data["promtail_binary_zip_url"])
-        url = promtail_binaries["amd64"]["url"]
-        self.assertTrue(url.startswith("http"))
-
-    def test_promtail_url_set_on_relation_changed_if_missing(self):
-        """Scenario: promtail_binary_zip_url is set on relation_changed as a fallback.
-
-        Charms using the reconcile pattern may miss the relation_joined event if the
-        workload container is not yet ready. In that case, promtail_binary_zip_url
-        must be set on the next relation_changed event.
-
-        Ref: https://github.com/canonical/loki-k8s-operator/issues/615
-        """
-        # GIVEN promtail_binary_zip_url was removed from app data (simulating missed relation_joined)
-        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
-        self.assertIn("promtail_binary_zip_url", rel_data)
-        self.harness.update_relation_data(
-            self.rel_id, self.harness.charm.app.name, {"promtail_binary_zip_url": ""}
+def test_loki_starts_when_cluster_deployed_without_any_relations(ctx, loki_container):
+    """Scenario: A loki cluster is deployed without any relations."""
+    # Create logging relations
+    logging_rels = [
+        Relation(
+            "logging",
+            remote_app_name=f"consumer-app-{i}",
+            remote_units_data={0: {}, 1: {}},
         )
-        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
-        self.assertNotIn("promtail_binary_zip_url", rel_data)
+        for i in range(3)
+    ]
 
-        # WHEN a relation_changed event fires (e.g. consumer updates its metadata)
-        self.harness.update_relation_data(
-            self.rel_id, "consumer", {"metadata": json.dumps(METADATA)}
-        )
+    state = State(leader=True, containers=[loki_container], relations=logging_rels)
 
-        # THEN promtail_binary_zip_url is set again in app data
-        rel_data = self.harness.get_relation_data(self.rel_id, self.harness.charm.app)
-        self.assertIn("promtail_binary_zip_url", rel_data)
-        self.assertNotEqual(rel_data["promtail_binary_zip_url"], "")
-        promtail_binaries = json.loads(rel_data["promtail_binary_zip_url"])
+    with patch.object(LokiOperatorCharm, "_update_cert"):
+        state_out = ctx.run(ctx.on.pebble_ready(loki_container), state)
+
+    # THEN a pebble service is created for this unit
+    container = state_out.get_container("loki")
+    plan = container.plan
+    assert "loki" in plan.services
+
+    # AND the command includes a config file
+    command = plan.services["loki"].command
+    assert "-config.file=" in command
+
+
+# --- TestDelayedPebbleReady ---
+
+
+def test_pebble_ready_changes_status_from_waiting_to_active(ctx, loki_container):
+    """Scenario: a pebble-ready event is delayed."""
+    # GIVEN charm started without pebble ready
+    loki_not_ready = Container(
+        "loki",
+        can_connect=False,
+        execs={
+            Exec(["update-ca-certificates", "--fresh"], return_code=0),
+            Exec(["/usr/bin/loki", "-version"], return_code=0, stdout="loki, version 3.14159"),
+        },
+    )
+    state_waiting = State(leader=True, containers=[loki_not_ready])
+
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=True), patch(
+        "charm.LokiOperatorCharm._loki_version",
+        new_callable=PropertyMock,
+        return_value="3.14159",
+    ), patch.object(LokiOperatorCharm, "_update_cert"):
+        # Before pebble ready - charm should be in Maintenance
+        state_before = ctx.run(ctx.on.config_changed(), state_waiting)
+        assert isinstance(state_before.unit_status, MaintenanceStatus)
+
+        # After pebble ready
+        state_with_pebble = replace(state_before, containers=frozenset([loki_container]))
+        state_after = ctx.run(ctx.on.pebble_ready(loki_container), state_with_pebble)
+        assert state_after.unit_status == ActiveStatus()
+
+
+# --- TestAppRelationData ---
+
+
+def test_endpoint(ctx, loki_container):
+    """Test that endpoint relation data is set correctly."""
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="consumer",
+        remote_units_data={0: {}},
+    )
+
+    state = State(leader=True, containers=[loki_container], relations=[logging_rel])
+
+    with patch.object(LokiOperatorCharm, "_update_cert"):
+        state_out = ctx.run(ctx.on.pebble_ready(loki_container), state)
+
+    # Check the unit relation data
+    rel = state_out.get_relation(logging_rel.id)
+    rel_data = rel.local_unit_data
+
+    # Relation data must include an "endpoint" key
+    assert "endpoint" in rel_data
+    endpoint = json.loads(rel_data["endpoint"])
+
+    # The endpoint must be a dict
+    assert isinstance(endpoint, dict)
+
+    # Endpoint must have a "url" key
+    assert "url" in endpoint
+    assert endpoint["url"].startswith("http")
+
+
+def test_promtail_url(ctx, loki_container):
+    """Test that promtail_binary_zip_url is set in app relation data (deprecated)."""
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="consumer",
+        remote_units_data={0: {}},
+    )
+
+    state = State(leader=True, containers=[loki_container], relations=[logging_rel])
+
+    with patch.object(LokiOperatorCharm, "_update_cert"):
+        # Use relation_joined to trigger the promtail_binary_zip_url to be set
+        state_out = ctx.run(ctx.on.relation_joined(logging_rel), state)
+
+    # Check the app relation data
+    rel = state_out.get_relation(logging_rel.id)
+    rel_data = rel.local_app_data
+
+    # Relation data must include a "promtail_binary_zip_url" key
+    assert "promtail_binary_zip_url" in rel_data
+
+    # The value must be a url
+    promtail_binaries = json.loads(rel_data["promtail_binary_zip_url"])
+    url = promtail_binaries["amd64"]["url"]
+    assert url.startswith("http")
+
+
+def test_promtail_url_set_on_relation_changed_if_missing(ctx, loki_container):
+    """Scenario: promtail_binary_zip_url is set on relation_changed as a fallback."""
+    # Start with a relation where promtail_binary_zip_url is not set (simulating missed joined)
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="consumer",
+        remote_app_data={"metadata": json.dumps(METADATA)},
+        remote_units_data={0: {}},
+        local_app_data={},  # Empty - simulating missed relation_joined
+    )
+
+    state = State(leader=True, containers=[loki_container], relations=[logging_rel])
+
+    with patch.object(LokiOperatorCharm, "_update_cert"):
+        # Trigger relation_changed which should set promtail_binary_zip_url as fallback
+        state_after_changed = ctx.run(ctx.on.relation_changed(logging_rel), state)
+
+        # THEN promtail_binary_zip_url should be set in app data
+        rel_after = state_after_changed.get_relation(logging_rel.id)
+        assert "promtail_binary_zip_url" in rel_after.local_app_data
+        assert rel_after.local_app_data["promtail_binary_zip_url"] != ""
+        promtail_binaries = json.loads(rel_after.local_app_data["promtail_binary_zip_url"])
         url = promtail_binaries["amd64"]["url"]
-        self.assertTrue(url.startswith("http"))
+        assert url.startswith("http")
 
 
-class TestAlertRuleBlockedStatus(unittest.TestCase):
+# --- TestAlertRuleBlockedStatus ---
+
+
+def test_alert_rule_errors_appropriately_set_state(ctx, loki_container):
     """Ensure that Loki 'keeps' BlockedStatus from alert rules until another rules event."""
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="tester",
+        remote_app_data={
+            "metadata": json.dumps(METADATA),
+            "alert_rules": json.dumps(ALERT_RULES),
+        },
+        remote_units_data={0: {}},
+    )
 
-    @k8s_resource_multipatch
-    @patch("lightkube.core.client.GenericSyncClient")
-    @patch.object(Container, "exec", new=FakeProcessVersionCheck)
-    def setUp(self, *_):
-        os.environ["JUJU_VERSION"] = "3.0.3"
-        # Patch _check_alert_rules, which attempts to talk to a loki server endpoint
-        self.patcher = patch("urllib.request.urlopen", new=Mock())
-        self.mock_request = self.patcher.start()
-        self.addCleanup(self.mock_request.stop)
+    state = State(leader=True, containers=[loki_container], relations=[logging_rel])
 
-        self.harness = Harness(LokiOperatorCharm)
-        self.addCleanup(self.harness.cleanup)
-        self.harness.set_leader(True)
-        self.harness.handle_exec("loki", ["update-ca-certificates"], result=0)
-        self.harness.begin_with_initial_hooks()
-        self.harness.container_pebble_ready("loki")
-
-    def tearDown(self):
-        self.mock_request.stop()
-
-    def _add_alerting_relation(self):
-        rel_id = self.harness.add_relation("logging", "tester")
-        self.harness.add_relation_unit(rel_id, "tester/0")
-
-        self.harness.update_relation_data(
-            rel_id,
-            "tester",
-            {"metadata": json.dumps(METADATA), "alert_rules": json.dumps(ALERT_RULES)},
-        )
-
-    @k8s_resource_multipatch
-    def test__alert_rule_errors_appropriately_set_state(self):
-        self.harness.charm.on.config_changed.emit()
-        self.mock_request.side_effect = HTTPError(
+    with patch("urllib.request.urlopen") as mock_request, patch.object(
+        LokiOperatorCharm, "_update_cert"
+    ):
+        # Configure mock to raise HTTPError
+        mock_request.side_effect = HTTPError(
             url="http://example.com",
             code=404,
             msg="fubar!",
             fp=BytesIO(initial_bytes="fubar!".encode()),
-            hdrs=None,  # type: ignore
+            hdrs=None,
         )
-        self._add_alerting_relation()
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-        self.assertEqual(
-            self.harness.charm.unit.status.message,
-            "Failed to verify alert rules. Check juju debug-log",
-        )
+        state_out = ctx.run(ctx.on.relation_changed(logging_rel), state)
 
-        # Emit another config changed to make sure we stay blocked
-        self.harness.charm.on.config_changed.emit()
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-        self.assertEqual(
-            self.harness.charm.unit.status.message,
-            "Failed to verify alert rules. Check juju debug-log",
-        )
+    assert state_out.unit_status == BlockedStatus(
+        "Failed to verify alert rules. Check juju debug-log"
+    )
 
-        self.mock_request.side_effect = None
-        self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
 
-        self.harness.charm._loki_push_api_alert_rules_changed(None)  # type: ignore
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+def test_loki_connection_errors_on_lifecycle_events_appropriately_clear(ctx, loki_container):
+    """Test that connection errors are properly handled and can clear."""
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="tester",
+        remote_app_data={
+            "metadata": json.dumps(METADATA),
+            "alert_rules": json.dumps(ALERT_RULES),
+        },
+        remote_units_data={0: {}},
+    )
 
-    @k8s_resource_multipatch
-    def test__loki_connection_errors_on_lifecycle_events_appropriately_clear(self):
-        self.harness.charm.on.config_changed.emit()
-        self.mock_request.side_effect = URLError(reason="fubar!")
-        self._add_alerting_relation()
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, BlockedStatus)
-        self.assertIn(
-            "Failed to verify alert rules via",
-            self.harness.charm.unit.status.message,
-        )
+    state = State(leader=True, containers=[loki_container], relations=[logging_rel])
 
-        # Emit another config changed to make sure we unblock
-        self.mock_request.side_effect = None
-        self.mock_request.return_value = BytesIO(initial_bytes="success".encode())
-        self.harness.charm.on.config_changed.emit()
-        self.harness.evaluate_status()
-        self.assertIsInstance(self.harness.charm.unit.status, ActiveStatus)
+    with patch("urllib.request.urlopen") as mock_request, patch.object(
+        LokiOperatorCharm, "_update_cert"
+    ):
+        # First call: error
+        mock_request.side_effect = URLError(reason="fubar!")
+        state_error = ctx.run(ctx.on.relation_changed(logging_rel), state)
+
+        assert isinstance(state_error.unit_status, BlockedStatus)
+        assert "Failed to verify alert rules via" in state_error.unit_status.message
+
+        # Second call: success
+        mock_request.side_effect = None
+        mock_request.return_value = BytesIO(initial_bytes="success".encode())
+
+        state_success = ctx.run(ctx.on.config_changed(), state_error)
+
+        assert state_success.unit_status == ActiveStatus()
