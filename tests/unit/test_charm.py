@@ -125,9 +125,7 @@ def test_on_config_cannot_connect(ctx, loki_container_cannot_connect):
     """Test that charm goes to Maintenance when cannot connect to container."""
     state = State(leader=True, containers=[loki_container_cannot_connect])
 
-    with patch("config_builder.ConfigBuilder.build") as mock_build:
-        mock_build.return_value = {}
-        state_out = ctx.run(ctx.on.config_changed(), state)
+    state_out = ctx.run(ctx.on.config_changed(), state)
 
     # When can't connect, charm stays in Maintenance (exact message may vary)
     assert isinstance(state_out.unit_status, MaintenanceStatus)
@@ -137,10 +135,7 @@ def test_on_config_can_connect(ctx, loki_container):
     """Test that charm goes to Active when connected to container."""
     state = State(leader=True, containers=[loki_container])
 
-    with patch("config_builder.ConfigBuilder.build") as mock_build, patch.object(
-        LokiOperatorCharm, "_update_cert"
-    ):
-        mock_build.return_value = {}
+    with patch.object(LokiOperatorCharm, "_update_cert"):
         state_out = ctx.run(ctx.on.config_changed(), state)
 
     assert state_out.unit_status == ActiveStatus()
