@@ -5,6 +5,7 @@
 
 import json
 from dataclasses import replace
+from http.client import HTTPMessage
 from io import BytesIO
 from unittest.mock import Mock, PropertyMock, patch
 from urllib.error import HTTPError, URLError
@@ -382,7 +383,7 @@ def test_alert_rule_errors_appropriately_set_state(ctx, loki_container):
             code=404,
             msg="fubar!",
             fp=BytesIO(initial_bytes="fubar!".encode()),
-            hdrs=None,
+            hdrs=HTTPMessage(),
         )
         state_out = ctx.run(ctx.on.relation_changed(logging_rel), state)
 
