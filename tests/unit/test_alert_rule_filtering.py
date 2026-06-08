@@ -8,16 +8,6 @@ from helpers import _written_group_names
 from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Relation, State
 
-
-def _validate_rule_file(rules):
-    """Fail validation if any rule in the relation payload contains the INVALID marker."""
-    for group in rules.get("groups", []):
-        for rule in group.get("rules", []):
-            if "INVALID" in rule.get("expr", ""):
-                return False, "parse error"
-    return True, ""
-
-
 VALID_RELATION = Relation(
     "logging",
     remote_app_name="app-valid",
