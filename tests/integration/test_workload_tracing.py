@@ -5,6 +5,7 @@
 import logging
 from pathlib import Path
 
+import jubilant
 import yaml
 from helpers import (
     get_application_ip,
@@ -25,40 +26,37 @@ loki_resources = {
 }
 
 
-async def test_setup_env(ops_test):
-    await ops_test.model.set_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
+def test_setup_env(juju: jubilant.Juju):
+    juju.model_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
-async def test_workload_tracing_is_present(ops_test, loki_charm, cos_channel):
+def test_workload_tracing_is_present(juju: jubilant.Juju, loki_charm, cos_channel):
     # Deploy a Tempo cluster
     minio_user = "accesskey"
     minio_pass = "secretkey"
     minio_bucket = "tempo"
 
-    await ops_test.model.deploy(
-        "tempo-worker-k8s", application_name="tempo-worker", channel=cos_channel, trust=True
-    )
-    await ops_test.model.deploy(
-        "tempo-coordinator-k8s",
-        application_name=TEMPO_APP_NAME,
-        channel=cos_channel,
-        trust=True,
-    )
+    juju.deploy("tempo-worker-k8s", "tempo-worker", channel=cos_channel, trust=True)
+    juju.deploy("tempo-coordinator-k8s", TEMPO_APP_NAME, channel=cos_channel, trust=True)
     # Set up minio and s3-integrator
-    await ops_test.model.deploy("minio",
-                                application_name="minio-tempo",
-                                channel="edge",
-                                trust=True,
-                                config={"access-key": minio_user, "secret-key": minio_pass})
-    await ops_test.model.deploy("s3-integrator", application_name="s3-tempo", channel="edge")
+    juju.deploy(
+        "minio",
+        "minio-tempo",
+        channel="edge",
+        trust=True,
+        config={"access-key": minio_user, "secret-key": minio_pass},
+    )
+    juju.deploy("s3-integrator", "s3-tempo", channel="edge")
 
-    await ops_test.model.wait_for_idle(
-            apps=["minio-tempo"],
-            status="active",
-            timeout=2000,
-            idle_period=30,
-        )
-    minio_addr = await get_unit_address(ops_test, "minio-tempo", 0)
+    juju.wait(
+        lambda status: (
+            jubilant.all_active(status, "minio-tempo")
+            and jubilant.all_agents_idle(status, "minio-tempo")
+        ),
+        timeout=30 * 60,
+    )
+
+    minio_addr = get_unit_address(juju, "minio-tempo", 0)
     mc_client = Minio(
         f"{minio_addr}:9000",
         access_key=minio_user,
@@ -70,44 +68,47 @@ async def test_workload_tracing_is_present(ops_test, loki_charm, cos_channel):
     if not found:
         mc_client.make_bucket(minio_bucket)
 
-    s3_integrator_app = ops_test.model.applications["s3-tempo"]  # type: ignore
-    s3_integrator_leader = s3_integrator_app.units[0]
-
-    await s3_integrator_app.set_config(
+    juju.config(
+        "s3-tempo",
         {
             "endpoint": f"{minio_addr}:9000",
             "bucket": minio_bucket,
-        }
+        },
     )
 
-    action = await s3_integrator_leader.run_action("sync-s3-credentials", **{"access-key": minio_user, "secret-key": minio_pass})
-    await action.wait()
+    result = juju.run("s3-tempo/0", "sync-s3-credentials", {"access-key": minio_user, "secret-key": minio_pass})
+    assert result.success
 
-    await ops_test.model.integrate(f"{TEMPO_APP_NAME}:s3", "s3-tempo")
-    await ops_test.model.integrate(f"{TEMPO_APP_NAME}:tempo-cluster", "tempo-worker")
+    juju.integrate(f"{TEMPO_APP_NAME}:s3", "s3-tempo")
+    juju.integrate(f"{TEMPO_APP_NAME}:tempo-cluster", "tempo-worker")
 
     logger.info("deploying local charm")
-    await ops_test.model.deploy(
-        loki_charm, resources=loki_resources, application_name=app_name, trust=True
-    )
-    await ops_test.model.wait_for_idle(
-        apps=[app_name], status="active", timeout=300, idle_period=30,
+    juju.deploy(loki_charm, app_name, resources=loki_resources, trust=True)
+    juju.wait(
+        lambda status: (
+            jubilant.all_active(status, app_name)
+            and jubilant.all_agents_idle(status, app_name)
+        ),
+        timeout=5 * 60,
     )
 
     # we relate _only_ workload tracing not to confuse with charm traces
-    await ops_test.model.add_relation(
-        f"{app_name}:workload-tracing", f"{TEMPO_APP_NAME}:tracing"
-    )
+    juju.integrate(f"{app_name}:workload-tracing", f"{TEMPO_APP_NAME}:tracing")
     # but we also need anything to come in to loki so that loki generates traces
-    await ops_test.model.add_relation(
-        f"{TEMPO_APP_NAME}:logging", f"{app_name}:logging"
+    juju.integrate(f"{TEMPO_APP_NAME}:logging", f"{app_name}:logging")
+
+    juju.wait(
+        lambda status: (
+            jubilant.all_active(status, app_name, TEMPO_APP_NAME, "tempo-worker")
+            and jubilant.all_agents_idle(status, app_name, TEMPO_APP_NAME, "tempo-worker")
+        ),
+        timeout=10 * 60,
     )
-    await ops_test.model.wait_for_idle(apps=[app_name, TEMPO_APP_NAME, "tempo-worker"], status="active", idle_period=30)
-    assert await is_loki_up(ops_test, app_name, num_units=1)
+    assert is_loki_up(juju, app_name, num_units=1)
 
     # Verify workload traces are ingested into Tempo
-    assert await get_traces_patiently(
-        await get_application_ip(ops_test, TEMPO_APP_NAME),
+    assert get_traces_patiently(
+        get_application_ip(juju, TEMPO_APP_NAME),
         service_name=f"{app_name}",
         tls=False,
     )
