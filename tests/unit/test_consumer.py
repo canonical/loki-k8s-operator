@@ -2,6 +2,8 @@
 # See LICENSE file for licensing details.
 
 import json
+import shutil
+import tempfile
 import textwrap
 import unittest
 from pathlib import Path
@@ -10,10 +12,33 @@ from unittest.mock import patch
 import yaml
 from charms.loki_k8s.v0.loki_push_api import AlertRules, CosTool, LokiPushApiConsumer
 from cosl import JujuTopology
-from fs.tempfs import TempFS
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Harness
+
+
+class TempDir:
+    """Simple temp directory wrapper replacing fs.TempFS."""
+
+    def __init__(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._path = Path(self._tmpdir.name)
+
+    def getsyspath(self, subpath: str) -> str:
+        return str(self._path / subpath.lstrip("/"))
+
+    def writetext(self, filename: str, content: str) -> None:
+        (self._path / filename).write_text(content)
+
+    def clean(self) -> None:
+        for item in self._path.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+
+    def close(self) -> None:
+        self._tmpdir.cleanup()
 
 
 class FakeConsumerCharm(CharmBase):
@@ -175,7 +200,7 @@ class TestReloadAlertRules(unittest.TestCase):
         # only through sheer luck that they have worked thus far
         unittest.TestLoader.sortTestMethodsUsing = None  # type: ignore
 
-        self.sandbox = TempFS("rule_files", auto_clean=True)
+        self.sandbox = TempDir()
         self.addCleanup(self.sandbox.close)
         alert_rules_path = self.sandbox.getsyspath("/")
 
@@ -340,7 +365,7 @@ class TestAlertRuleFormat(unittest.TestCase):
     NO_ALERTS = json.dumps({})  # relation data representation for the case of "no alerts"
 
     def setUp(self):
-        self.sandbox = TempFS("consumer_rule_files", auto_clean=True)
+        self.sandbox = TempDir()
         self.addCleanup(self.sandbox.close)
 
         # CosTool uses platform.processor() to locate the cos-tool binary.
