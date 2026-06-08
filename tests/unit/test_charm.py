@@ -240,6 +240,9 @@ def test_loki_starts_when_cluster_deployed_without_any_relations(ctx, loki_conta
     command = plan.services["loki"].command
     assert "-config.file=" in command
 
+    # AND the service is running
+    assert container.service_statuses["loki"] == ops.pebble.ServiceStatus.ACTIVE
+
 
 # --- TestDelayedPebbleReady ---
 
