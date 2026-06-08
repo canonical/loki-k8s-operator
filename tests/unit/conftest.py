@@ -1,7 +1,9 @@
+import logging
 from unittest.mock import PropertyMock, patch
 
 import ops
 import pytest
+from cosl.loki_logger import LokiHandler
 from ops.testing import Context
 from scenario import Container, Exec
 
@@ -10,6 +12,18 @@ from charm import LokiOperatorCharm
 
 def tautology(*_, **__) -> bool:
     return True
+
+
+@pytest.fixture(autouse=True)
+def cleanup_loki_handlers():
+    """Remove any LokiHandlers from the root logger after each test.
+
+    The charm_logging library adds LokiHandlers to the root logger during charm init,
+    and these persist across test runs causing test pollution.
+    """
+    yield
+    root_logger = logging.getLogger()
+    root_logger.handlers = [h for h in root_logger.handlers if not isinstance(h, LokiHandler)]
 
 
 @pytest.fixture
