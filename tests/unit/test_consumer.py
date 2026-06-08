@@ -3,6 +3,7 @@
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -114,9 +115,21 @@ def test_on_upgrade_charm_endpoint_joined_event_fired_for_leader(consumer_contex
     )
     state = State(leader=True, relations=[logging_rel])
 
+    # WHEN a provider unit joins THEN endpoint_joined fires once
     with consumer_context(consumer_context.on.relation_joined(logging_rel), state) as mgr:
-        mgr.run()
+        state = mgr.run()
         assert mgr.charm._stored.endpoint_events == 1
+
+    # WHEN the provider then publishes its push-api endpoint (relation-changed)
+    rel = replace(
+        state.get_relation(logging_rel.id),
+        remote_app_data={"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+    )
+    state = replace(state, relations={rel})
+    with consumer_context(consumer_context.on.relation_changed(rel), state) as mgr:
+        mgr.run()
+        # THEN endpoint_joined fires again
+        assert mgr.charm._stored.endpoint_events == 2
 
 
 def test_on_upgrade_charm_endpoint_joined_event_fired_for_follower(consumer_context):
@@ -128,9 +141,21 @@ def test_on_upgrade_charm_endpoint_joined_event_fired_for_follower(consumer_cont
     )
     state = State(leader=False, relations=[logging_rel])
 
+    # WHEN a provider unit joins THEN endpoint_joined fires once
     with consumer_context(consumer_context.on.relation_joined(logging_rel), state) as mgr:
-        mgr.run()
+        state = mgr.run()
         assert mgr.charm._stored.endpoint_events == 1
+
+    # WHEN the provider then publishes its push-api endpoint (relation-changed)
+    rel = replace(
+        state.get_relation(logging_rel.id),
+        remote_app_data={"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+    )
+    state = replace(state, relations={rel})
+    with consumer_context(consumer_context.on.relation_changed(rel), state) as mgr:
+        mgr.run()
+        # THEN endpoint_joined fires again
+        assert mgr.charm._stored.endpoint_events == 2
 
 
 # --- TestReloadAlertRules ---
