@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 import yaml
-from ops.testing import Relation, State
+from ops.testing import ActiveStatus, BlockedStatus, Relation, State
 
 
 # For the sake of reducing complexity in this test,
@@ -67,9 +67,7 @@ def _relation(name: str, app_name: str, with_invalid_rule: bool) -> Relation:
         (True, True, set()),
     ],
 )
-@patch("charms.loki_k8s.v1.loki_push_api.CosTool.validate_alert_rules", side_effect=_validate_rule_file)
-@patch("charm.LokiOperatorCharm._check_alert_rules", return_value=None)
-def test_relation_level_filtering(_, __, context, loki_container, rel1_invalid, rel2_invalid, expected_group_names):
+def test_relation_level_filtering(context, loki_container, rel1_invalid, rel2_invalid, expected_group_names):
     # Each relation contributes one alert group with two rules.
     # If any rule in that relation payload is invalid, the whole relation payload is dropped.
     rel1 = _relation("rel1", "app-one", rel1_invalid)
@@ -77,7 +75,11 @@ def test_relation_level_filtering(_, __, context, loki_container, rel1_invalid, 
     state_in = State(relations=[rel1, rel2], containers=[loki_container], leader=True)
 
     # WHEN a logging relation-changed event is processed
-    state_out = context.run(context.on.relation_changed(rel1), state_in)
+    with patch(
+        "charms.loki_k8s.v1.loki_push_api.CosTool.validate_alert_rules",
+        side_effect=_validate_rule_file,
+    ), patch("charm.LokiOperatorCharm._check_alert_rules", return_value=None):
+        state_out = context.run(context.on.relation_changed(rel1), state_in)
 
     # THEN relation payloads with any invalid rule are dropped, valid relation payloads are kept.
     fs = state_out.get_container("loki").get_filesystem(context)
@@ -87,6 +89,8 @@ def test_relation_level_filtering(_, __, context, loki_container, rel1_invalid, 
     if not rules_dir.exists():
         # No valid relation payload survived filtering, so no rules directory gets populated.
         assert expected_group_names == set()
+        # the status must be blocked.
+        assert isinstance(state_out.unit_status, BlockedStatus)
         return
 
     rule_files = sorted(path for path in rules_dir.iterdir() if path.is_file())
@@ -100,3 +104,10 @@ def test_relation_level_filtering(_, __, context, loki_container, rel1_invalid, 
             written_group_names.add(group["name"])
 
     assert written_group_names == expected_group_names
+    # If only one file is written, that means the other file contained an invalid rule.
+    # So, we must assert that the charm was correctly blocked in that case.
+    if len(written_group_names) == 1:
+        assert isinstance(state_out.unit_status, BlockedStatus)
+    elif len(written_group_names) == 2:
+        # If both files are written, then no invalid rules were present, so the charm should not be active.
+        assert isinstance(state_out.unit_status, ActiveStatus)

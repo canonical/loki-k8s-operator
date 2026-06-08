@@ -1188,13 +1188,18 @@ class LokiPushApiProvider(Object):
                 )
                 continue
 
+            alerts[identifier] = self._tool.apply_label_matchers(alert_rules)  # type: ignore
+
             _, errmsg = self._tool.validate_alert_rules(cast(OfficialRuleFileFormat, alert_rules))
             if errmsg:
+                logger.error(f"Invalid alert rule file: {errmsg}")
+                if alerts[identifier]:
+                    del alerts[identifier]
                 if self._charm.unit.is_leader():
                     relation.data[self._charm.app]["event"] = json.dumps({"errors": errmsg})
                 continue
 
-            alerts[identifier] = self._tool.apply_label_matchers(alert_rules)  # type: ignore
+            alerts[identifier] = alert_rules
 
         return alerts
 
