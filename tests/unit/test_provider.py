@@ -71,12 +71,6 @@ class FakeLokiCharm(CharmBase):
         self._stored.event_count += 1
 
     @property
-    def _loki_push_api(self) -> str:
-        loki_push_api = f"http://{self.unit_ip}:{self._port}/loki/api/v1/push"
-        data = {"loki_push_api": loki_push_api}
-        return json.dumps(data)
-
-    @property
     def hostname(self) -> str:
         """Unit's hostname."""
         return "{}-{}.{}-endpoints.{}.svc.cluster.local".format(
