@@ -16,6 +16,7 @@ from charms.loki_k8s.v0 import loki_push_api
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from ops.charm import CharmBase
 from ops.framework import StoredState
+from ops.model import Container as OpsContainer
 from ops.pebble import PathError
 from ops.testing import Context
 from scenario import Container, Model, Relation, Resource, State
@@ -264,7 +265,6 @@ def test_valid_container_name_works(consumer_context, loki_container, promtail_c
     with consumer_context(consumer_context.on.start(), state) as mgr:
         charm = mgr.charm
         container = charm.log_proxy._get_container("loki")
-        from ops.model import Container as OpsContainer
         assert isinstance(container, OpsContainer)
 
 
