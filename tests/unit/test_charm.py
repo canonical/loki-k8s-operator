@@ -272,6 +272,66 @@ def test_pebble_ready_changes_status_from_waiting_to_active(ctx, loki_container)
         assert state_after.unit_status == ActiveStatus()
 
 
+def test_regular_relation_departed_runs_before_pebble_ready(
+    ctx, loki_container, loki_container_cannot_connect
+):
+    """A relation-departed arriving before pebble-ready must not break the charm."""
+    # GIVEN a logging relation with two consumer units, but pebble is not ready yet
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="consumer-app",
+        remote_app_data={"metadata": "{}", "alert_rules": "{}"},
+        remote_units_data={0: {}, 1: {}},
+    )
+    state_waiting = State(
+        leader=True, containers=[loki_container_cannot_connect], relations=[logging_rel]
+    )
+
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=True), patch(
+        "charm.LokiOperatorCharm._loki_version",
+        new_callable=PropertyMock,
+        return_value="3.14159",
+    ), patch.object(LokiOperatorCharm, "_update_cert"):
+        # WHEN relation-departed fires before pebble-ready (must not raise)
+        state_early = ctx.run(
+            ctx.on.relation_departed(logging_rel, remote_unit=1), state_waiting
+        )
+
+        # THEN the charm converges to Active once pebble becomes ready
+        state_with_pebble = replace(state_early, containers=frozenset([loki_container]))
+        state_after = ctx.run(ctx.on.pebble_ready(loki_container), state_with_pebble)
+        assert state_after.unit_status == ActiveStatus()
+
+
+def test_regular_relation_broken_runs_before_pebble_ready(
+    ctx, loki_container, loki_container_cannot_connect
+):
+    """A relation-broken arriving before pebble-ready must not break the charm."""
+    # GIVEN a logging relation, but pebble is not ready yet
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="consumer-app",
+        remote_app_data={"metadata": "{}", "alert_rules": "{}"},
+        remote_units_data={0: {}, 1: {}},
+    )
+    state_waiting = State(
+        leader=True, containers=[loki_container_cannot_connect], relations=[logging_rel]
+    )
+
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=True), patch(
+        "charm.LokiOperatorCharm._loki_version",
+        new_callable=PropertyMock,
+        return_value="3.14159",
+    ), patch.object(LokiOperatorCharm, "_update_cert"):
+        # WHEN relation-broken fires before pebble-ready (must not raise)
+        state_early = ctx.run(ctx.on.relation_broken(logging_rel), state_waiting)
+
+        # THEN the charm converges to Active once pebble becomes ready
+        state_with_pebble = replace(state_early, containers=frozenset([loki_container]))
+        state_after = ctx.run(ctx.on.pebble_ready(loki_container), state_with_pebble)
+        assert state_after.unit_status == ActiveStatus()
+
+
 # --- TestAppRelationData ---
 
 
