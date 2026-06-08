@@ -18,7 +18,7 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.pebble import PathError
 from ops.testing import Context
-from scenario import Container, Model, Relation, State
+from scenario import Container, Model, Relation, Resource, State
 
 LOG_FILES = ["/var/log/apache2/access.log", "/var/log/alternatives.log", "/var/log/test.log"]
 
@@ -396,20 +396,41 @@ def consumer_with_resource_context():
     return Context(ConsumerCharmWithPromtailResource, meta=CONSUMER_WITH_RESOURCE_META)
 
 
-def test_fetch_promtail_from_attached_resource(consumer_with_resource_context, loki_container, promtail_container):
-    """Test that promtail detection works with resource metadata."""
+def test_fetch_promtail_from_attached_resource(
+    consumer_with_resource_context, loki_container, promtail_container, caplog, tmp_path
+):
+    """Scenario: the promtail binary is provided via an attached juju resource.
+
+    Note: the original Harness test also asserted ``_promtail_attached_as_resource``
+    is False before attaching. Scenario requires every *declared* resource to be
+    present in ``State.resources`` (a missing one raises ``RuntimeError``, not the
+    ``ModelError`` the lib catches), so the "declared but unattached" state is not
+    representable here; we exercise the attached path, which is the feature itself.
+    """
+    # GIVEN the "promtail-bin" resource (hardcoded name in the lib) is attached
+    resource_file = tmp_path / PROMTAIL_INFO["filename"]
+    resource_file.write_text("somecontent")
     state = State(
         leader=True,
         containers=[loki_container, promtail_container],
+        resources=[Resource(name="promtail-bin", path=resource_file)],
         model=Model(name="MODEL", uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4"),
     )
 
-    # Just test that the charm initializes correctly with resource metadata
-    # The actual resource attachment testing requires proper resource mocking
-    with consumer_with_resource_context(consumer_with_resource_context.on.start(), state) as mgr:
+    with consumer_with_resource_context(
+        consumer_with_resource_context.on.start(), state
+    ) as mgr:
         charm = mgr.charm
-        # Verify that the log_proxy exists and the resource name is expected
-        assert charm.log_proxy._promtail_resource_name == "promtail-bin"
+        # THEN the lib detects the attached resource
+        assert charm.log_proxy._promtail_attached_as_resource is True
+
+        # AND pushing it to the workload reports it came from a resource
+        binary_path = os.path.join("/tmp", PROMTAIL_INFO["filename"])
+        with caplog.at_level("INFO", logger="charms.loki_k8s.v0.loki_push_api"):
+            assert charm.log_proxy._push_promtail_if_attached(binary_path) is True
+        assert (
+            "Promtail binary file has been obtained from an attached resource." in caplog.text
+        )
 
 
 # --- TestTypeValidation ---
