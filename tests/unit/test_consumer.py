@@ -2,7 +2,7 @@
 # See LICENSE file for licensing details.
 
 import json
-from dataclasses import replace
+import shutil
 from pathlib import Path
 from unittest.mock import patch
 
@@ -177,79 +177,103 @@ def test_reload_when_dir_is_still_empty_changes_nothing(reload_context):
     logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
     state = State(leader=True, relations=[logging_rel])
 
-    # Run relation_joined first to initialize
-    state_out = ctx.run(ctx.on.relation_joined(logging_rel), state)
+    with ctx(ctx.on.relation_joined(logging_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        relation = charm.model.get_relation("logging")
+        assert relation
 
-    # Check that alert_rules is empty (or an empty dict serialized)
-    rel = state_out.get_relation(logging_rel.id)
-    alert_rules = rel.local_app_data.get("alert_rules", "{}")
-    assert alert_rules == "{}" or json.loads(alert_rules) == {}
+        # GIVEN relation data contains no alerts
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+        # WHEN the reload method is called
+        charm.loki_consumer._reinitialize_alert_rules()
+
+        # THEN relation data is unchanged
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
 
 
 def test_reload_after_dir_is_populated_updates_relation_data(reload_context):
     """Scenario: The reload method is called after some alert files are added."""
     ctx, sandbox = reload_context
-
-    # WHEN some rule files are added to the alerts dir BEFORE charm runs
-    sandbox.writetext("alert.rule", ALERT)
-
     logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
     state = State(leader=True, relations=[logging_rel])
 
-    # Run relation_joined which will load the alert rules
-    state_out = ctx.run(ctx.on.relation_joined(logging_rel), state)
+    with ctx(ctx.on.relation_joined(logging_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        relation = charm.model.get_relation("logging")
+        assert relation
 
-    # THEN relation data should have the alert rules
-    rel = state_out.get_relation(logging_rel.id)
-    alert_rules = rel.local_app_data.get("alert_rules", "{}")
-    assert alert_rules != NO_ALERTS
-    assert json.loads(alert_rules) != {}
+        # GIVEN relation data contains no alerts
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+        # WHEN some rule files are added to the alerts dir
+        sandbox.writetext("alert.rule", ALERT)
+
+        # AND the reload method is called
+        charm.loki_consumer._reinitialize_alert_rules()
+
+        # THEN relation data is updated
+        assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
 
 
-def test_reload_after_dir_is_emptied_updates_relation_data():
-    """Scenario: The reload method is called after all the loaded alert files are removed.
+def test_reload_after_dir_is_emptied_updates_relation_data(reload_context):
+    """Scenario: The reload method is called after all the loaded alert files are removed."""
+    ctx, sandbox = reload_context
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel])
 
-    This test verifies that when alert rule files are removed, subsequent events
-    reflect the empty state correctly.
-    """
-    # Create a fresh sandbox for this test
-    sandbox = TempFS("rule_files_empty_test", auto_clean=True)
+    with ctx(ctx.on.relation_joined(logging_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        relation = charm.model.get_relation("logging")
+        assert relation
+
+        # GIVEN alert files are present and reload has populated the relation data
+        sandbox.writetext("alert.rule", ALERT)
+        charm.loki_consumer._reinitialize_alert_rules()
+        assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
+
+        # WHEN all rule files are deleted from the alerts dir
+        sandbox.remove("alert.rule")
+
+        # AND the reload method is called
+        charm.loki_consumer._reinitialize_alert_rules()
+
+        # THEN relation data is empty again
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+
+def test_reload_after_dir_itself_removed_updates_relation_data(reload_context):
+    """Scenario: The reload method is called after the alerts dir doesn't exist anymore."""
+    ctx, sandbox = reload_context
     alert_rules_path = sandbox.getsyspath("/")
-
-    class EmptyReloadConsumerCharm(CharmBase):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args)
-            self._port = 3100
-            self.loki_consumer = LokiPushApiConsumer(
-                self,
-                alert_rules_path=alert_rules_path,
-                recursive=True,
-                skip_alert_topology_labeling=True,
-            )
-
-    meta = {
-        "name": "reload-consumer",
-        "requires": {"logging": {"interface": "loki_push_api"}},
-    }
-    ctx = Context(EmptyReloadConsumerCharm, meta=meta)
-
-    # First populate the sandbox
-    sandbox.writetext("alert.rule", ALERT)
-
     logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
     state = State(leader=True, relations=[logging_rel])
 
-    # First run with alert rules
-    state_with_alerts = ctx.run(ctx.on.relation_joined(logging_rel), state)
+    with ctx(ctx.on.relation_joined(logging_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        relation = charm.model.get_relation("logging")
+        assert relation
 
-    # Verify alerts were set
-    rel = state_with_alerts.get_relation(logging_rel.id)
-    assert rel.local_app_data.get("alert_rules") != NO_ALERTS
-    assert json.loads(rel.local_app_data["alert_rules"]) != {}
+        # GIVEN alert files are present and reload has populated the relation data
+        sandbox.writetext("alert.rule", ALERT)
+        charm.loki_consumer._reinitialize_alert_rules()
+        assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
 
-    # Clean up
-    sandbox.clean()
-    sandbox.close()
+        # WHEN the alerts dir itself is deleted
+        shutil.rmtree(alert_rules_path)
+
+        # AND the reload method is called
+        charm.loki_consumer._reinitialize_alert_rules()
+
+        # THEN relation data is empty again (and no error is raised)
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+    # Recreate the dir so the sandbox fixture can tear down cleanly.
+    Path(alert_rules_path).mkdir(parents=True, exist_ok=True)
 
 
 # --- TestAlertRuleNaming ---
