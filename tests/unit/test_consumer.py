@@ -189,7 +189,7 @@ def reload_context(alert_rules_sandbox):
         "name": "reload-consumer",
         "requires": {"logging": {"interface": "loki_push_api"}},
     }
-    return Context(ReloadConsumerCharm, meta=meta), alert_rules_sandbox
+    return Context(ReloadConsumerCharm, meta=meta)
 
 
 NO_ALERTS = json.dumps({})
@@ -198,7 +198,7 @@ ALERT = yaml.safe_dump({"alert": "free_standing", "expr": "avg(some_vector[5m]) 
 
 def test_reload_when_dir_is_still_empty_changes_nothing(reload_context):
     """Scenario: The reload method is called when the alerts dir is still empty."""
-    ctx, sandbox = reload_context
+    ctx = reload_context
     logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
     state = State(leader=True, relations=[logging_rel])
 
@@ -218,9 +218,9 @@ def test_reload_when_dir_is_still_empty_changes_nothing(reload_context):
         assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
 
 
-def test_reload_after_dir_is_populated_updates_relation_data(reload_context):
+def test_reload_after_dir_is_populated_updates_relation_data(reload_context, alert_rules_sandbox):
     """Scenario: The reload method is called after some alert files are added."""
-    ctx, sandbox = reload_context
+    ctx = reload_context
     logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
     state = State(leader=True, relations=[logging_rel])
 
@@ -234,7 +234,7 @@ def test_reload_after_dir_is_populated_updates_relation_data(reload_context):
         assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
 
         # WHEN some rule files are added to the alerts dir
-        sandbox.writetext("alert.rule", ALERT)
+        alert_rules_sandbox.writetext("alert.rule", ALERT)
 
         # AND the reload method is called
         charm.loki_consumer._reinitialize_alert_rules()
@@ -243,9 +243,9 @@ def test_reload_after_dir_is_populated_updates_relation_data(reload_context):
         assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
 
 
-def test_reload_after_dir_is_emptied_updates_relation_data(reload_context):
+def test_reload_after_dir_is_emptied_updates_relation_data(reload_context, alert_rules_sandbox):
     """Scenario: The reload method is called after all the loaded alert files are removed."""
-    ctx, sandbox = reload_context
+    ctx = reload_context
     logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
     state = State(leader=True, relations=[logging_rel])
 
@@ -256,12 +256,12 @@ def test_reload_after_dir_is_emptied_updates_relation_data(reload_context):
         assert relation
 
         # GIVEN alert files are present and reload has populated the relation data
-        sandbox.writetext("alert.rule", ALERT)
+        alert_rules_sandbox.writetext("alert.rule", ALERT)
         charm.loki_consumer._reinitialize_alert_rules()
         assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
 
         # WHEN all rule files are deleted from the alerts dir
-        sandbox.remove("alert.rule")
+        alert_rules_sandbox.remove("alert.rule")
 
         # AND the reload method is called
         charm.loki_consumer._reinitialize_alert_rules()
@@ -270,10 +270,10 @@ def test_reload_after_dir_is_emptied_updates_relation_data(reload_context):
         assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
 
 
-def test_reload_after_dir_itself_removed_updates_relation_data(reload_context):
+def test_reload_after_dir_itself_removed_updates_relation_data(reload_context, alert_rules_sandbox):
     """Scenario: The reload method is called after the alerts dir doesn't exist anymore."""
-    ctx, sandbox = reload_context
-    alert_rules_path = sandbox.getsyspath("/")
+    ctx = reload_context
+    alert_rules_path = alert_rules_sandbox.getsyspath("/")
     logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
     state = State(leader=True, relations=[logging_rel])
 
@@ -284,7 +284,7 @@ def test_reload_after_dir_itself_removed_updates_relation_data(reload_context):
         assert relation
 
         # GIVEN alert files are present and reload has populated the relation data
-        sandbox.writetext("alert.rule", ALERT)
+        alert_rules_sandbox.writetext("alert.rule", ALERT)
         charm.loki_consumer._reinitialize_alert_rules()
         assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
 
