@@ -437,7 +437,7 @@ def test_alert_rule_errors_appropriately_set_state(ctx, loki_container):
     with patch("urllib.request.urlopen") as mock_request, patch.object(
         LokiOperatorCharm, "_update_cert"
     ):
-        # Configure mock to raise HTTPError
+        # GIVEN alert-rules verification fails
         mock_request.side_effect = HTTPError(
             url="http://example.com",
             code=404,
@@ -445,11 +445,28 @@ def test_alert_rule_errors_appropriately_set_state(ctx, loki_container):
             fp=BytesIO(initial_bytes="fubar!".encode()),
             hdrs=HTTPMessage(),
         )
-        state_out = ctx.run(ctx.on.relation_changed(logging_rel), state)
 
-    assert state_out.unit_status == BlockedStatus(
-        "Failed to verify alert rules. Check juju debug-log"
-    )
+        # WHEN a rules-changed event is processed THEN the charm goes blocked
+        state_blocked = ctx.run(ctx.on.relation_changed(logging_rel), state)
+        assert state_blocked.unit_status == BlockedStatus(
+            "Failed to verify alert rules. Check juju debug-log"
+        )
+
+        # WHEN another event fires while verification still fails
+        # THEN the charm stays blocked (the status is "sticky")
+        state_still_blocked = ctx.run(ctx.on.config_changed(), state_blocked)
+        assert state_still_blocked.unit_status == BlockedStatus(
+            "Failed to verify alert rules. Check juju debug-log"
+        )
+
+        # WHEN verification now succeeds and another rules-changed event arrives
+        mock_request.side_effect = None
+        mock_request.return_value = BytesIO(initial_bytes="success".encode())
+        rel = state_still_blocked.get_relation(logging_rel.id)
+        state_recovered = ctx.run(ctx.on.relation_changed(rel), state_still_blocked)
+
+        # THEN the charm recovers to Active
+        assert state_recovered.unit_status == ActiveStatus()
 
 
 def test_loki_connection_errors_on_lifecycle_events_appropriately_clear(ctx, loki_container):
