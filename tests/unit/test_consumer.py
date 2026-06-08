@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -79,9 +80,9 @@ def test_on_logging_relation_changed_no_unit(consumer_context):
     consumer_context.run(consumer_context.on.relation_changed(logging_rel), state)
 
 
-def test_3_provider_units_related_scaled_down_to_0(consumer_context):
-    """Test with 3 provider units, then scale down to 0."""
-    # Create relation with 3 loki units
+def test_multiple_provider_units_related(consumer_context):
+    """Test with 3 provider units."""
+    # GIVEN 3 provider units are related
     logging_rel = Relation(
         "logging",
         remote_app_name="loki",
@@ -92,10 +93,9 @@ def test_3_provider_units_related_scaled_down_to_0(consumer_context):
         },
     )
     state = State(leader=True, relations=[logging_rel])
-
     with consumer_context(consumer_context.on.relation_changed(logging_rel), state) as mgr:
         charm = mgr.charm
-        # Check we have 3 Loki endpoints
+        # THEN we have 3 Loki endpoints
         assert len(charm.loki_consumer.loki_endpoints) == 3
 
         # Check each endpoint is a dict, has a "url" key and starts with "http://"
