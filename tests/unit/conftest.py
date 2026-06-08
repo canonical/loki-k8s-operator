@@ -49,7 +49,10 @@ def loki_container():
     return Container(
         "loki",
         can_connect=True,
-        execs={Exec(["update-ca-certificates", "--fresh"], return_code=0)},
+        execs={
+            Exec(["update-ca-certificates", "--fresh"], return_code=0),
+            Exec(["/usr/bin/loki", "-version"], return_code=0, stdout="loki, version 3.14159"),
+        },
         layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
         service_statuses={"loki": ops.pebble.ServiceStatus.INACTIVE},
     )
