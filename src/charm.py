@@ -666,12 +666,17 @@ class LokiOperatorCharm(CharmBase):
         self._loki_container.replan()
 
         if isinstance(to_status(self._stored.status["rules"]), BlockedStatus):
-            # Wait briefly for Loki to come back up and re-check the alert rules
-            # in case an upgrade/refresh caused the check to occur when it wasn't
-            # ready yet. TODO: use custom pebble notice for "workload ready" event.
-            time.sleep(2)
-            self._check_alert_rules()
-            return  # TODO: why do we have a return here?
+
+            # If the status of this charm is blocked due to invalid rules in relation data,
+            # _check_alert_rules will set the status to Active just because the Loki API returned a 200, even though there are
+            # still errors in relation data.
+            # Thus, we will only call _check_alert_rules if there are no invalid alert rules in relation data.
+            if not self._has_alert_rule_errors():
+                # Wait briefly for Loki to come back up and re-check the alert rules
+                # in case an upgrade/refresh caused the check to occur when it wasn't
+                # ready yet. TODO: use custom pebble notice for "workload ready" event.
+                time.sleep(2)
+                self._check_alert_rules()
 
         self.ingress_per_unit.provide_ingress_requirements(
             scheme="https" if self._tls_available else "http", port=self._port
@@ -854,6 +859,13 @@ class LokiOperatorCharm(CharmBase):
 
         alerts = self.loki_provider.alerts
 
+        # If there aren't any alerts, we can just clean it and move on
+        # The alerts at this point are guaranteed to be valid,
+        # since library filters out invalid rules before returning the dictionary.
+        if alerts:
+            self._generate_alert_rules_files()
+            self._check_alert_rules()
+
         # Check if any relations reported alert rule validation errors.
         # The provider's alerts property writes {"errors": ...} to relation data
         # when cos-tool rejects a rule. The charm should go blocked in that case.
@@ -861,12 +873,6 @@ class LokiOperatorCharm(CharmBase):
             msg = "Invalid alert rules. See debug-log"
             logger.error(msg)
             self._stored.status["rules"] = to_tuple(BlockedStatus(msg))
-            return
-
-        # If there aren't any alerts, we can just clean it and move on
-        if alerts:
-            self._generate_alert_rules_files()
-            self._check_alert_rules()
 
     def _has_alert_rule_errors(self) -> bool:
         """Check if any logging relations have alert rule validation errors."""
