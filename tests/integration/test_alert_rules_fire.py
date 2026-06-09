@@ -39,6 +39,7 @@ def test_alert_rules_do_fire(
     # Trigger a log message to fire an alert on
     juju.run(f"{tester_app_name}/0", "log-error", {"message": "Error logged!"})
     alerts = loki_alerts(juju, "loki")
+    assert alerts, "no alerts fired in Loki after triggering log-error"
     assert all(
         key in alert["labels"].keys()
         for key in ["juju_application", "juju_model", "juju_model_uuid"]
@@ -69,7 +70,8 @@ def test_loki_scales_up(juju: jubilant.Juju):
         loki_alerts(juju, "loki", unit_num=i) for i in range(3)
     ]
 
-    for unit_alerts in alerts_per_unit:
+    for unit_num, unit_alerts in enumerate(alerts_per_unit):
+        assert unit_alerts, f"no alerts fired in Loki on unit {unit_num} after triggering log-error"
         assert all(
             key in alert["labels"].keys()
             for key in ["juju_application", "juju_model", "juju_model_uuid"]
