@@ -71,7 +71,7 @@ def test_loki_scales_up(juju: jubilant.Juju):
     ]
 
     for unit_alerts in alerts_per_unit:
-        assert unit_alerts, f"no alerts fired in Loki units after triggering log-error"
+        assert unit_alerts, "no alerts fired in Loki units after triggering log-error"
         assert all(
             key in alert["labels"].keys()
             for key in ["juju_application", "juju_model", "juju_model_uuid"]
