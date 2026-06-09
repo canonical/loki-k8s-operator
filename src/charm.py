@@ -666,6 +666,13 @@ class LokiOperatorCharm(CharmBase):
         self._loki_container.replan()
 
         if isinstance(to_status(self._stored.status["rules"]), BlockedStatus):
+
+            # It's possible that the status of the rules is Blocked due to an alert rule validation error
+            # If that's the case, we want to check if the error is still present.
+            # If there was a transient error (e.g., due to Loki not being ready during a previous check), we want to clear the error and unblock the charm.
+            if self._has_alert_rule_errors():
+                return
+
             # Wait briefly for Loki to come back up and re-check the alert rules
             # in case an upgrade/refresh caused the check to occur when it wasn't
             # ready yet. TODO: use custom pebble notice for "workload ready" event.
