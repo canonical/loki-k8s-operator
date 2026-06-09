@@ -7,7 +7,6 @@ import logging
 from pathlib import Path
 
 import jubilant
-import pytest
 import sh
 import yaml
 from helpers import is_loki_up

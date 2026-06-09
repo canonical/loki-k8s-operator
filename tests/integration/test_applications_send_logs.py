@@ -6,7 +6,6 @@ import logging
 import time
 
 import jubilant
-import pytest
 from helpers import is_loki_up, loki_api_query, oci_image
 
 logger = logging.getLogger(__name__)
