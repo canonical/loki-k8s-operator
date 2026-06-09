@@ -53,6 +53,7 @@ def test_deploy_charms(
 def test_rule_files_are_retained_after_pod_upgraded(juju: jubilant.Juju, loki_charm, loki_resources):
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     rules_before_upgrade = loki_rules(juju, app_name)
+    assert rules_before_upgrade, "no alert rules present in Loki before upgrade"
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
     juju.cli("refresh", app_name, f"--path={loki_charm}")
 
