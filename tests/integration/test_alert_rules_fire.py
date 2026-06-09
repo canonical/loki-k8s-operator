@@ -38,7 +38,7 @@ def test_alert_rules_do_fire(
 
     # Trigger a log message to fire an alert on
     juju.run(f"{tester_app_name}/0", "log-error", {"message": "Error logged!"})
-    alerts = loki_alerts(juju, "loki")
+    alerts = loki_alerts(juju, "loki", retries=10)
     assert alerts, "no alerts fired in Loki after triggering log-error"
     assert all(
         key in alert["labels"].keys()
@@ -67,7 +67,7 @@ def test_loki_scales_up(juju: jubilant.Juju):
     juju.run(f"{tester_app_name}/0", "log-error", {"message": "Error logged!"})
 
     alerts_per_unit = [
-        loki_alerts(juju, "loki", unit_num=i) for i in range(3)
+        loki_alerts(juju, "loki", unit_num=i, retries=10) for i in range(3)
     ]
 
     for unit_alerts in alerts_per_unit:
