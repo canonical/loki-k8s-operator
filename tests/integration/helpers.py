@@ -141,8 +141,8 @@ def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0, retries: 
             ]
             if alerts:
                 break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to fetch Loki alerts from %s: %s", url, e)
         retries -= 1
         time.sleep(2)
 
@@ -161,8 +161,8 @@ def get_alertmanager_alerts(
             alerts = json.loads(urllib.request.urlopen(url, data=None, timeout=2).read())
             if alerts:
                 break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to fetch Alertmanager alerts from %s: %s", url, e)
         retries -= 1
         time.sleep(2)
 
