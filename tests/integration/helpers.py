@@ -171,7 +171,8 @@ def get_alertmanager_alerts(
 
 def oci_image(charmcraft_file: str, image_name: str) -> str:
     """Find upstream source for a container image."""
-    metadata = yaml.safe_load(open(charmcraft_file).read())
+    with open(charmcraft_file) as file:
+        metadata = yaml.safe_load(file)
     resources = metadata.get("resources", {})
     if not resources:
         raise ValueError("No resources found")
