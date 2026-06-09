@@ -11,7 +11,6 @@ from helpers import get_alertmanager_alerts
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.abort_on_fail
 def test_alert_rules_do_forward_to_alertmanager(
     juju: jubilant.Juju,
     loki_charm,

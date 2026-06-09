@@ -17,7 +17,6 @@ app_name = METADATA["name"]
 rules_app = "loki-tester"
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_charms(
     juju: jubilant.Juju,
     loki_charm,

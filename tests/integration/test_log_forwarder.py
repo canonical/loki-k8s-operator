@@ -18,7 +18,6 @@ tester_resources = {
 }
 
 
-@pytest.mark.abort_on_fail
 def test_containers_forward_logs_after_pod_kill(
     juju: jubilant.Juju,
     loki_charm,
@@ -63,7 +62,6 @@ def test_containers_forward_logs_after_pod_kill(
     assert "log-targets" in yaml.safe_load(restarted_workload_b_plan)
 
 
-@pytest.mark.abort_on_fail
 def test_alert_rules_fire(juju: jubilant.Juju):
     """Test basic alerts functionality of Log Forwarder."""
     tester_app_name = "log-forwarder-tester"

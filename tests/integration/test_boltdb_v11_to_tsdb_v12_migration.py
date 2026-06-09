@@ -37,7 +37,6 @@ def test_setup_env(juju: jubilant.Juju):
 
 
 @pytest.mark.xfail
-@pytest.mark.abort_on_fail
 def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(
     juju: jubilant.Juju, loki_charm, cos_channel
 ):
@@ -55,7 +54,6 @@ def test_deploy_from_charmhub_v11_and_upgrade_to_v12_to_v13(
 
 
 @pytest.mark.xfail
-@pytest.mark.abort_on_fail
 def test_deploy_and_upgrade_v13_locally(juju: jubilant.Juju, loki_charm):
     """Deploy from a local charm (v13 schema) and upgrade locally."""
     deploy_local_charm_v13(juju, V13_APP_NAME, loki_charm)
