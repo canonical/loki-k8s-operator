@@ -11,7 +11,6 @@ from helpers import is_loki_up, juju_show_unit, loki_alerts
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.abort_on_fail
 def test_alert_rules_do_fire(
     juju: jubilant.Juju,
     loki_charm,
@@ -47,7 +46,6 @@ def test_alert_rules_do_fire(
     )
 
 
-@pytest.mark.abort_on_fail
 def test_loki_scales_up(juju: jubilant.Juju):
     """Make sure Loki endpoints propagate on scaling."""
     loki_app_name = "loki"

@@ -33,7 +33,6 @@ tester_app_names = list(tester_apps.keys())
 app_names = [loki_app_name] + tester_app_names
 
 
-@pytest.mark.abort_on_fail
 def test_loki_api_client_logs(
     juju: jubilant.Juju,
     loki_charm,
@@ -75,7 +74,6 @@ def test_loki_api_client_logs(
         assert len(logs) > 0 and len(logs[0]["values"]) > 0
 
 
-@pytest.mark.abort_on_fail
 def test_scale_up_also_gets_logs(juju: jubilant.Juju):
     juju.cli("scale-application", loki_app_name, "3")
     juju.wait(
@@ -106,7 +104,6 @@ def test_scale_up_also_gets_logs(juju: jubilant.Juju):
         assert all(len(logs) > 0 and len(logs[0]["values"]) > 0 for logs in logs_per_unit)
 
 
-@pytest.mark.abort_on_fail
 def test_logs_persist_after_upgrade(juju: jubilant.Juju, loki_charm, loki_resources):
     counts_before_upgrade = {}
     for tester, query in tester_apps.items():

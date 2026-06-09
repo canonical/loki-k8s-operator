@@ -16,7 +16,6 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 app_name = METADATA["name"]
 
 
-@pytest.mark.abort_on_fail
 def test_services_running(juju: jubilant.Juju, loki_charm, loki_resources):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
@@ -31,7 +30,6 @@ def test_services_running(juju: jubilant.Juju, loki_charm, loki_resources):
     assert all(status == "Running" for status in services.values()), "Not all services are running"
 
 
-@pytest.mark.abort_on_fail
 def test_retention_configs(juju: jubilant.Juju):
     default_configs = loki_config(juju, app_name)
     assert all(

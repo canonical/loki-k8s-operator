@@ -17,7 +17,6 @@ tester_resources = {
 }
 
 
-@pytest.mark.abort_on_fail
 def test_alert_rules_do_fire_from_log_proxy(
     juju: jubilant.Juju,
     loki_charm,
