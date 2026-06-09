@@ -121,7 +121,7 @@ def test_on_logging_relation_changed(provider_context):
 
 
 def test_on_logging_relation_created_and_broken(provider_context):
-    """Test that alert rules changed event is fired on relation broken."""
+    """Test that alert_rules_changed fires on relation changed, then departed and broken."""
     logging_relation = Relation(
         "logging",
         remote_app_name="promtail",
@@ -131,18 +131,25 @@ def test_on_logging_relation_created_and_broken(provider_context):
 
     state = State(leader=True, relations=[logging_relation])
 
-    # Run relation_changed first
+    # WHEN the remote populates its alert rules (relation_changed)
     with provider_context(
         provider_context.on.relation_changed(logging_relation), state
     ) as mgr:
-        state_after_changed = mgr.run()
+        state = mgr.run()
+        # THEN alert_rules_changed is emitted once
         assert mgr.charm._stored.event_count == 1
 
-    # For relation_broken, we need to use the relation from the output state
-    rel_from_state = state_after_changed.get_relation(logging_relation.id)
-    provider_context.run(
-        provider_context.on.relation_broken(rel_from_state), state_after_changed
+    # WHEN the relation is removed, juju fires relation_departed then relation_broken
+    rel = state.get_relation(logging_relation.id)
+    state = provider_context.run(
+        provider_context.on.relation_departed(rel, remote_unit=0), state
     )
+
+    rel = state.get_relation(logging_relation.id)
+    with provider_context(provider_context.on.relation_broken(rel), state) as mgr:
+        mgr.run()
+        # THEN alert_rules_changed has fired two more times (departed + broken)
+        assert mgr.charm._stored.event_count == 3
 
 
 def test_alerts(provider_context):

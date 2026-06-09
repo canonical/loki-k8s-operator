@@ -125,9 +125,7 @@ def test_on_config_cannot_connect(ctx, loki_container_cannot_connect):
     """Test that charm goes to Maintenance when cannot connect to container."""
     state = State(leader=True, containers=[loki_container_cannot_connect])
 
-    with patch("config_builder.ConfigBuilder.build") as mock_build:
-        mock_build.return_value = {}
-        state_out = ctx.run(ctx.on.config_changed(), state)
+    state_out = ctx.run(ctx.on.config_changed(), state)
 
     # When can't connect, charm stays in Maintenance (exact message may vary)
     assert isinstance(state_out.unit_status, MaintenanceStatus)
@@ -137,10 +135,7 @@ def test_on_config_can_connect(ctx, loki_container):
     """Test that charm goes to Active when connected to container."""
     state = State(leader=True, containers=[loki_container])
 
-    with patch("config_builder.ConfigBuilder.build") as mock_build, patch.object(
-        LokiOperatorCharm, "_update_cert"
-    ):
-        mock_build.return_value = {}
+    with patch.object(LokiOperatorCharm, "_update_cert"):
         state_out = ctx.run(ctx.on.config_changed(), state)
 
     assert state_out.unit_status == ActiveStatus()
@@ -240,6 +235,9 @@ def test_loki_starts_when_cluster_deployed_without_any_relations(ctx, loki_conta
     command = plan.services["loki"].command
     assert "-config.file=" in command
 
+    # AND the service is running
+    assert container.service_statuses["loki"] == ops.pebble.ServiceStatus.ACTIVE
+
 
 # --- TestDelayedPebbleReady ---
 
@@ -268,6 +266,66 @@ def test_pebble_ready_changes_status_from_waiting_to_active(ctx, loki_container)
 
         # After pebble ready
         state_with_pebble = replace(state_before, containers=frozenset([loki_container]))
+        state_after = ctx.run(ctx.on.pebble_ready(loki_container), state_with_pebble)
+        assert state_after.unit_status == ActiveStatus()
+
+
+def test_regular_relation_departed_runs_before_pebble_ready(
+    ctx, loki_container, loki_container_cannot_connect
+):
+    """A relation-departed arriving before pebble-ready must not break the charm."""
+    # GIVEN a logging relation with two consumer units, but pebble is not ready yet
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="consumer-app",
+        remote_app_data={"metadata": "{}", "alert_rules": "{}"},
+        remote_units_data={0: {}, 1: {}},
+    )
+    state_waiting = State(
+        leader=True, containers=[loki_container_cannot_connect], relations=[logging_rel]
+    )
+
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=True), patch(
+        "charm.LokiOperatorCharm._loki_version",
+        new_callable=PropertyMock,
+        return_value="3.14159",
+    ), patch.object(LokiOperatorCharm, "_update_cert"):
+        # WHEN relation-departed fires before pebble-ready (must not raise)
+        state_early = ctx.run(
+            ctx.on.relation_departed(logging_rel, remote_unit=1), state_waiting
+        )
+
+        # THEN the charm converges to Active once pebble becomes ready
+        state_with_pebble = replace(state_early, containers=frozenset([loki_container]))
+        state_after = ctx.run(ctx.on.pebble_ready(loki_container), state_with_pebble)
+        assert state_after.unit_status == ActiveStatus()
+
+
+def test_regular_relation_broken_runs_before_pebble_ready(
+    ctx, loki_container, loki_container_cannot_connect
+):
+    """A relation-broken arriving before pebble-ready must not break the charm."""
+    # GIVEN a logging relation, but pebble is not ready yet
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="consumer-app",
+        remote_app_data={"metadata": "{}", "alert_rules": "{}"},
+        remote_units_data={0: {}, 1: {}},
+    )
+    state_waiting = State(
+        leader=True, containers=[loki_container_cannot_connect], relations=[logging_rel]
+    )
+
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=True), patch(
+        "charm.LokiOperatorCharm._loki_version",
+        new_callable=PropertyMock,
+        return_value="3.14159",
+    ), patch.object(LokiOperatorCharm, "_update_cert"):
+        # WHEN relation-broken fires before pebble-ready (must not raise)
+        state_early = ctx.run(ctx.on.relation_broken(logging_rel), state_waiting)
+
+        # THEN the charm converges to Active once pebble becomes ready
+        state_with_pebble = replace(state_early, containers=frozenset([loki_container]))
         state_after = ctx.run(ctx.on.pebble_ready(loki_container), state_with_pebble)
         assert state_after.unit_status == ActiveStatus()
 
@@ -377,7 +435,7 @@ def test_alert_rule_errors_appropriately_set_state(ctx, loki_container):
     with patch("urllib.request.urlopen") as mock_request, patch.object(
         LokiOperatorCharm, "_update_cert"
     ):
-        # Configure mock to raise HTTPError
+        # GIVEN alert-rules verification fails
         mock_request.side_effect = HTTPError(
             url="http://example.com",
             code=404,
@@ -385,11 +443,28 @@ def test_alert_rule_errors_appropriately_set_state(ctx, loki_container):
             fp=BytesIO(initial_bytes="fubar!".encode()),
             hdrs=HTTPMessage(),
         )
-        state_out = ctx.run(ctx.on.relation_changed(logging_rel), state)
 
-    assert state_out.unit_status == BlockedStatus(
-        "Failed to verify alert rules. Check juju debug-log"
-    )
+        # WHEN a rules-changed event is processed THEN the charm goes blocked
+        state_blocked = ctx.run(ctx.on.relation_changed(logging_rel), state)
+        assert state_blocked.unit_status == BlockedStatus(
+            "Failed to verify alert rules. Check juju debug-log"
+        )
+
+        # WHEN another event fires while verification still fails
+        # THEN the charm stays blocked (the status is "sticky")
+        state_still_blocked = ctx.run(ctx.on.config_changed(), state_blocked)
+        assert state_still_blocked.unit_status == BlockedStatus(
+            "Failed to verify alert rules. Check juju debug-log"
+        )
+
+        # WHEN verification now succeeds and another rules-changed event arrives
+        mock_request.side_effect = None
+        mock_request.return_value = BytesIO(initial_bytes="success".encode())
+        rel = state_still_blocked.get_relation(logging_rel.id)
+        state_recovered = ctx.run(ctx.on.relation_changed(rel), state_still_blocked)
+
+        # THEN the charm recovers to Active
+        assert state_recovered.unit_status == ActiveStatus()
 
 
 def test_loki_connection_errors_on_lifecycle_events_appropriately_clear(ctx, loki_container):
