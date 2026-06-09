@@ -15,12 +15,8 @@ import logging
 from pathlib import Path
 
 import jubilant
-import pytest
-import sh
 import yaml
 from helpers import is_loki_up
-
-# pyright: reportAttributeAccessIssue = false
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +38,7 @@ def test_upgrade_edge_with_local_in_isolation(juju: jubilant.Juju, loki_charm, c
     )
 
     logger.debug("upgrade deployed charm with local charm %s", loki_charm)
-    sh.juju.refresh(app_name, path=loki_charm)
+    juju.cli("refresh", app_name, f"--path={loki_charm}")
     juju.wait(
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=15 * 60,
@@ -65,7 +61,7 @@ def test_upgrade_local_with_local_with_relations(juju: jubilant.Juju, loki_charm
     )
 
     # Refresh from path
-    sh.juju.refresh(app_name, path=loki_charm)
+    juju.cli("refresh", app_name, f"--path={loki_charm}")
     juju.wait(
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=15 * 60,
@@ -88,7 +84,7 @@ def test_upgrade_with_multiple_units(juju: jubilant.Juju, loki_charm):
     )
 
     # Refresh from path
-    sh.juju.refresh(app_name, path=loki_charm)
+    juju.cli("refresh", app_name, f"--path={loki_charm}")
     juju.wait(
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=15 * 60,

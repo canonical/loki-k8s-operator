@@ -5,7 +5,6 @@
 import logging
 
 import jubilant
-import pytest
 from helpers import loki_alerts, oci_image
 
 logger = logging.getLogger(__name__)

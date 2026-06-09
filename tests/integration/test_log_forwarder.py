@@ -5,7 +5,6 @@
 import logging
 
 import jubilant
-import pytest
 import yaml
 from helpers import delete_pod, get_pebble_plan, loki_alerts, oci_image
 

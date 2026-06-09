@@ -5,7 +5,6 @@
 import logging
 
 import jubilant
-import pytest
 from helpers import get_alertmanager_alerts
 
 logger = logging.getLogger(__name__)
