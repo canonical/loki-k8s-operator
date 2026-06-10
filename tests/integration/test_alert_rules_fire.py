@@ -6,7 +6,7 @@ import logging
 
 import jubilant
 import pytest
-from helpers import is_loki_up, juju_show_unit, loki_alerts
+from helpers import is_loki_up, juju_show_unit, loki_alerts, loki_rules
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,10 @@ def test_alert_rules_do_fire(
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=10 * 60,
     )
+
+    # Wait for alert rules to be loaded into Loki's ruler
+    rules = loki_rules(juju, loki_app_name)
+    assert rules, "alert rules not loaded into Loki after relation"
 
     # Trigger a log message to fire an alert on
     juju.run(f"{tester_app_name}/0", "log-error", {"message": "Error logged!"})
