@@ -48,7 +48,7 @@ def test_alert_rules_do_forward_to_alertmanager(
 
     # Trigger a log message to fire an alert on
     juju.run(f"{tester_app_name}/0", "log-error", {"message": "Error logged!"})
-    alerts = get_alertmanager_alerts(juju, "alertmanager", 0, retries=100)
+    alerts = get_alertmanager_alerts(juju, "alertmanager", 0)
     assert all(
         key in alert["labels"].keys()
         for key in ["juju_application", "juju_model", "juju_model_uuid"]
