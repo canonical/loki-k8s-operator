@@ -128,44 +128,46 @@ def loki_api_query(
         return []
 
 
-def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0, retries: int = 3) -> list:
-    """Get a list of alerts from a Prometheus-compatible endpoint."""
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
+def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0) -> list:
+    """Get a list of alerts from a Prometheus-compatible endpoint.
+
+    Uses tenacity with exponential backoff to wait for alerts to fire.
+    Alert rules typically need 60+ seconds to evaluate and transition to firing.
+    """
     address = get_unit_address(juju, app_name, unit_num)
     url = f"http://{address}:3100/prometheus/api/v1/alerts"
 
-    alerts = []
-    while retries > 0:
-        try:
-            alerts = json.loads(urllib.request.urlopen(url, data=None, timeout=2).read())["data"][
-                "alerts"
-            ]
-            if alerts:
-                break
-        except Exception as e:
-            logger.debug("Failed to fetch Loki alerts from %s: %s", url, e)
-        retries -= 1
-        time.sleep(2)
-
+    response = urllib.request.urlopen(url, data=None, timeout=5)
+    alerts = json.loads(response.read())["data"]["alerts"]
+    if not alerts:
+        raise ValueError("No alerts found yet")
     return alerts
 
 
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
 def get_alertmanager_alerts(
-    juju: jubilant.Juju, unit_name: str, unit_num: int, retries: int = 3
+    juju: jubilant.Juju, unit_name: str, unit_num: int
 ) -> List[dict]:
-    """Get a list of alerts from Alertmanager."""
+    """Get a list of alerts from Alertmanager.
+
+    Uses tenacity with exponential backoff to wait for alerts to appear.
+    """
     address = get_unit_address(juju, unit_name, unit_num)
     url = f"http://{address}:9093/api/v2/alerts"
-    alerts: List[dict] = []
-    while retries > 0:
-        try:
-            alerts = json.loads(urllib.request.urlopen(url, data=None, timeout=2).read())
-            if alerts:
-                break
-        except Exception as e:
-            logger.debug("Failed to fetch Alertmanager alerts from %s: %s", url, e)
-        retries -= 1
-        time.sleep(2)
 
+    response = urllib.request.urlopen(url, data=None, timeout=5)
+    alerts: List[dict] = json.loads(response.read())
+    if not alerts:
+        raise ValueError("No alerts found yet")
     return alerts
 
 
