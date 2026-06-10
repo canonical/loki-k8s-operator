@@ -7,8 +7,33 @@ import logging
 import jubilant
 import pytest
 from helpers import is_loki_up, juju_show_unit, loki_alerts, loki_rules
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
+
+
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
+def wait_for_loki_up(juju: jubilant.Juju, app_name: str) -> None:
+    """Wait for Loki HTTP API to be ready."""
+    if not is_loki_up(juju, app_name):
+        raise ValueError("Loki HTTP API not ready yet")
+
+
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
+def wait_for_loki_rules(juju: jubilant.Juju, app_name: str) -> dict:
+    """Wait for alert rules to be loaded into Loki."""
+    rules = loki_rules(juju, app_name)
+    if not rules:
+        raise ValueError("Alert rules not loaded yet")
+    return rules
 
 
 def test_alert_rules_do_fire(
@@ -29,6 +54,9 @@ def test_alert_rules_do_fire(
         timeout=10 * 60,
     )
 
+    # Verify Loki is responding before establishing relation
+    wait_for_loki_up(juju, loki_app_name)
+
     juju.integrate(loki_app_name, tester_app_name)
 
     juju.wait(
@@ -37,8 +65,7 @@ def test_alert_rules_do_fire(
     )
 
     # Wait for alert rules to be loaded into Loki's ruler
-    rules = loki_rules(juju, loki_app_name)
-    assert rules, "alert rules not loaded into Loki after relation"
+    wait_for_loki_rules(juju, loki_app_name)
 
     # Trigger a log message to fire an alert on
     juju.run(f"{tester_app_name}/0", "log-error", {"message": "Error logged!"})
