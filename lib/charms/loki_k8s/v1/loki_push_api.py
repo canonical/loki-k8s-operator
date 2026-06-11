@@ -2298,6 +2298,7 @@ class _PebbleLogClient:
                         "juju_model_uuid": topology._model_uuid,
                         "juju_application": topology._application,
                         "juju_unit": topology._unit,
+                        "job": f"juju_{topology.identifier}",
                     },
                 }
             )

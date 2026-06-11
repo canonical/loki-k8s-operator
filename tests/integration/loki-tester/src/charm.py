@@ -146,6 +146,7 @@ class LokiTesterCharm(CharmBase):
             return
 
         tags = self.topology.label_matcher_dict
+        tags["job"] = f"{self.topology.model}/{self.topology.application}"
         log_endpoints = self._loki_consumer.loki_endpoints
 
         loki_handlers = {}
