@@ -27,7 +27,7 @@ def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju):
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=5 * 60,
     )
-    juju.integrate("loki", "flog")
+    juju.integrate("loki", "flog:log-forwarder")
     juju.wait(
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=5 * 60,
