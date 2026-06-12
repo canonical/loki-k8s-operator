@@ -34,7 +34,7 @@ def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju):
     )
 
     assert juju.model
-    flog_plan = get_pebble_plan(juju.model, "flog", 0, "flog")
+    flog_plan = get_pebble_plan(juju.model, "flog", 0, "workload")
     assert "log-targets" in yaml.safe_load(flog_plan)
 
     # Delete tester pod
