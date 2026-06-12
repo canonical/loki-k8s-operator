@@ -44,7 +44,7 @@ def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju):
         timeout=5 * 60,
     )
 
-    restarted_flog_plan = get_pebble_plan(juju.model, "flog", 0, "flog")
+    restarted_flog_plan = get_pebble_plan(juju.model, "flog", 0, "workload")
     assert "log-targets" in yaml.safe_load(restarted_flog_plan)
 
 
