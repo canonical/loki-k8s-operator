@@ -458,7 +458,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from urllib import request
-from urllib.error import HTTPError
+from urllib.error import URLError
 
 import yaml
 from cosl import JujuTopology
@@ -485,7 +485,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 32
+LIBPATCH = 33
 
 PYDEPS = ["cosl"]
 
@@ -2332,7 +2332,7 @@ class LogProxyConsumer(ConsumerBase):
         if not self._is_promtail_installed(promtail_binaries[self._arch]):
             try:
                 self._obtain_promtail(promtail_binaries[self._arch])
-            except HTTPError as e:
+            except URLError as e:
                 msg = "Promtail binary couldn't be downloaded - {}".format(str(e))
                 logger.warning(msg)
                 self.on.promtail_digest_error.emit(msg)
