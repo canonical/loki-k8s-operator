@@ -50,7 +50,8 @@ class LogForwarderTesterCharm(CharmBase):
 
     @property
     def _command(self):
-        return "/bin/flog --format apache_common --loop --type stdout "
+        rate = self.config.get("rate", 1)
+        return f"/bin/flog --format apache_common --loop --type stdout -r {rate}"
 
     def _build_service_template(self, name: str, command: str) -> dict:
         return {

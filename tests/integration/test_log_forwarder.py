@@ -6,9 +6,24 @@ import logging
 
 import jubilant
 import yaml
-from helpers import delete_pod, get_pebble_plan, loki_alerts, oci_image
+from helpers import delete_pod, get_pebble_plan, loki_alerts, loki_rules, oci_image
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
+
+
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
+def wait_for_loki_rules(juju: jubilant.Juju, app_name: str) -> dict:
+    """Wait for alert rules to be loaded into Loki."""
+    rules = loki_rules(juju, app_name)
+    if not rules:
+        raise ValueError("Alert rules not loaded yet")
+    return rules
+
 
 tester_resources = {
     "workload-image": oci_image(
@@ -55,6 +70,11 @@ def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju):
 def test_alerts_are_in_loki(juju: jubilant.Juju):
     """Test basic alerts functionality of Log Forwarder."""
     juju.config("log-forwarder-tester", {"rate": "5"})
+    juju.wait(
+        lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
+        timeout=5 * 60,
+    )
+    wait_for_loki_rules(juju, "loki")
     alerts = loki_alerts(juju, "loki")
     assert all(
         key in alert["labels"].keys()
