@@ -4,7 +4,6 @@
 import json
 import logging
 import subprocess
-import time
 import urllib.request
 from typing import List, Optional
 from urllib.error import HTTPError
@@ -13,7 +12,7 @@ from urllib.parse import urljoin
 import jubilant
 import requests
 import yaml
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, wait_fixed
 
 logger = logging.getLogger(__name__)
 
@@ -25,32 +24,27 @@ def get_unit_address(juju: jubilant.Juju, app_name: str, unit_num: int) -> str:
     return status.apps[app_name].units[unit_name].address
 
 
+@retry(
+    stop=stop_after_attempt(10),
+    wait=wait_fixed(2),
+    reraise=True,
+)
 def is_loki_up(juju: jubilant.Juju, app_name: str, num_units: int = 1) -> bool:
     """Check if Loki is responding on all units."""
-    addresses = []
-    for i in range(num_units):
-        addr = get_unit_address(juju, app_name, i)
-        if addr:
-            addresses.append(addr)
+    addresses = [get_unit_address(juju, app_name, i) for i in range(num_units)]
+    addresses = [a for a in addresses if a]
 
     if len(addresses) != num_units:
-        return False
+        raise ValueError(f"Expected {num_units} unit addresses, got {len(addresses)}")
 
-    def get(url) -> bool:
-        try:
-            response = urllib.request.urlopen(url, data=None, timeout=2.0)
-            return response.code == 200 and "version" in json.loads(response.read())
-        except Exception:
-            return False
+    for address in addresses:
+        response = urllib.request.urlopen(
+            f"http://{address}:3100/loki/api/v1/status/buildinfo", data=None, timeout=2.0
+        )
+        if response.code != 200 or "version" not in json.loads(response.read()):
+            raise ValueError(f"Loki at {address} not ready")
 
-    for _ in range(5):
-        resp = [
-            get(f"http://{address}:3100/loki/api/v1/status/buildinfo") for address in addresses
-        ]
-        if all(resp):
-            return True
-        time.sleep(1)
-    return False
+    return True
 
 
 def loki_rules(juju: jubilant.Juju, app_name: str) -> dict:
