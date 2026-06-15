@@ -75,7 +75,15 @@ def test_alerts_are_in_loki(juju: jubilant.Juju):
         timeout=5 * 60,
     )
     wait_for_loki_rules(juju, "loki")
-    alerts = loki_alerts(juju, "loki")
+    rules_response = loki_rules(juju, "loki")
+    # Loki rules is a dict of {group_name: [groups]}, where groups is a list of dicts with a "rules" key containing a list of rules.
+    # We first flatten this structure to get a list of rules, then check that the expected Juju labels are present in each rule's labels.
+    alerts = [
+        rule
+        for groups in rules_response.values()
+        for group in groups
+        for rule in group["rules"]
+    ]
     assert all(
         key in alert["labels"].keys()
         for key in ["juju_application", "juju_model", "juju_model_uuid"]

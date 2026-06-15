@@ -128,18 +128,18 @@ def loki_api_query(
     reraise=True,
 )
 def loki_alerts(juju: jubilant.Juju, app_name: str, unit_num: int = 0) -> list:
-    """Get a list of alerts from a Loki-compatible endpoint.
+    """Get a list of alerts from a Prometheus-compatible endpoint.
 
     Uses tenacity with exponential backoff to wait for alerts to fire.
     Alert rules typically need 60+ seconds to evaluate and transition to firing.
     """
     address = get_unit_address(juju, app_name, unit_num)
-    url = f"http://{address}:3100/loki/api/v1/alerts"
+    url = f"http://{address}:3100/prometheus/api/v1/alerts"
 
     response = urllib.request.urlopen(url, data=None, timeout=5)
     alerts = json.loads(response.read())["data"]["alerts"]
     if not alerts:
-        raise ValueError("No alerts found yet")
+        raise ValueError("No alerts firing yet")
     return alerts
 
 
