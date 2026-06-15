@@ -17,17 +17,6 @@ logger = logging.getLogger(__name__)
     wait=wait_exponential(multiplier=1, min=2, max=30),
     reraise=True,
 )
-def wait_for_loki_up(juju: jubilant.Juju, app_name: str) -> None:
-    """Wait for Loki HTTP API to be ready."""
-    if not is_loki_up(juju, app_name):
-        raise ValueError("Loki HTTP API not ready yet")
-
-
-@retry(
-    stop=stop_after_attempt(20),
-    wait=wait_exponential(multiplier=1, min=2, max=30),
-    reraise=True,
-)
 def wait_for_loki_rules(juju: jubilant.Juju, app_name: str) -> dict:
     """Wait for alert rules to be loaded into Loki."""
     rules = loki_rules(juju, app_name)
@@ -55,7 +44,7 @@ def test_alert_rules_do_fire(
     )
 
     # Verify Loki is responding before establishing relation
-    wait_for_loki_up(juju, loki_app_name)
+    is_loki_up(juju, loki_app_name)
 
     juju.integrate(loki_app_name, tester_app_name)
 
