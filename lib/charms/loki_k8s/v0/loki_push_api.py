@@ -485,7 +485,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 33
+LIBPATCH = 34
 
 PYDEPS = ["cosl"]
 
@@ -1812,7 +1812,7 @@ class LogProxyConsumer(ConsumerBase):
         self.insecure_skip_verify = insecure_skip_verify
 
         # architecture used for promtail binary
-        arch = platform.processor()
+        arch = platform.machine()
         self._arch = "amd64" if arch == "x86_64" else arch
 
         events = self._charm.on[relation_name]
