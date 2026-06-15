@@ -6,7 +6,7 @@ import logging
 
 import jubilant
 import yaml
-from helpers import delete_pod, get_pebble_plan, loki_alerts, loki_rules, oci_image
+from helpers import delete_pod, get_pebble_plan, loki_rules, oci_image
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
