@@ -17,9 +17,9 @@ tester_resources = {
 }
 
 
-def test_deploy(juju: jubilant.Juju, loki_charm, loki_resources):
+def test_deploy(juju: jubilant.Juju, loki_charm, loki_resources, log_forwarder_tester_charm):
     juju.deploy(loki_charm, "loki", resources=loki_resources, trust=True)
-    juju.deploy("flog-k8s", "flog", channel="latest/edge", trust=True)
+    juju.deploy(log_forwarder_tester_charm, "log-forwarder-tester", resources=tester_resources)
 
 
 def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju):
@@ -27,29 +27,34 @@ def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju):
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=5 * 60,
     )
-    juju.integrate("loki", "flog:log-forwarder")
+    juju.integrate("loki", "log-forwarder-tester")
     juju.wait(
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=5 * 60,
     )
 
     assert juju.model
-    flog_plan = get_pebble_plan(juju.model, "flog", 0, "workload")
-    assert "log-targets" in yaml.safe_load(flog_plan)
+    workload_a_plan = get_pebble_plan(juju.model, "log-forwarder-tester", 0, "workload-a")
+    workload_b_plan = get_pebble_plan(juju.model, "log-forwarder-tester", 0, "workload-b")
+    assert "log-targets" in yaml.safe_load(workload_a_plan)
+    assert "log-targets" in yaml.safe_load(workload_b_plan)
 
     # Delete tester pod
-    delete_pod(juju.model, "flog", 0)
+    delete_pod(juju.model, "log-forwarder-tester", 0)
     juju.wait(
         lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
         timeout=5 * 60,
     )
 
-    restarted_flog_plan = get_pebble_plan(juju.model, "flog", 0, "workload")
-    assert "log-targets" in yaml.safe_load(restarted_flog_plan)
+    restarted_workload_a_plan = get_pebble_plan(juju.model, "log-forwarder-tester", 0, "workload-a")
+    restarted_workload_b_plan = get_pebble_plan(juju.model, "log-forwarder-tester", 0, "workload-b")
+    assert "log-targets" in yaml.safe_load(restarted_workload_a_plan)
+    assert "log-targets" in yaml.safe_load(restarted_workload_b_plan)
 
 
 def test_alerts_are_in_loki(juju: jubilant.Juju):
     """Test basic alerts functionality of Log Forwarder."""
+    juju.config("log-forwarder-tester", {"rate": "5"})
     alerts = loki_alerts(juju, "loki")
     assert all(
         key in alert["labels"].keys()

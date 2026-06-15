@@ -12,7 +12,7 @@ from urllib.parse import urljoin
 import jubilant
 import requests
 import yaml
-from tenacity import retry, stop_after_attempt, wait_exponential, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,8 @@ def get_unit_address(juju: jubilant.Juju, app_name: str, unit_num: int) -> str:
 
 
 @retry(
-    stop=stop_after_attempt(10),
-    wait=wait_fixed(2),
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
     reraise=True,
 )
 def is_loki_up(juju: jubilant.Juju, app_name: str, num_units: int = 1) -> bool:
