@@ -1,6 +1,7 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import dataclasses
 import json
 from unittest.mock import patch
 
@@ -89,6 +90,10 @@ INVALID_RELATION = Relation(
 )
 
 
+def mark_alert_rules_active(charm):
+    charm._stored.status["rules"] = ("active", "")
+
+
 def test_valid_relation_only(context, loki_container):
     # GIVEN one relation with only valid rules
     state_in = State(relations=[VALID_RELATION], containers=[loki_container], leader=True)
@@ -128,3 +133,37 @@ def test_valid_and_invalid_relations(context, loki_container):
     # THEN only valid relation rules are written and unit is blocked due to invalid relation
     assert _written_group_names(context, state_out) == {"valid-group"}
     assert isinstance(state_out.unit_status, BlockedStatus)
+
+
+def test_invalid_relation_becoming_valid_recovers_to_active(context, loki_container):
+    # GIVEN a relation with invalid rules has already blocked the charm
+    state_in = State(relations=[INVALID_RELATION], containers=[loki_container], leader=True)
+
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=None):
+        blocked_state = context.run(context.on.relation_changed(INVALID_RELATION), state_in)
+
+    assert isinstance(blocked_state.unit_status, BlockedStatus)
+
+    # WHEN the same relation updates its rules to become valid
+    relation_after_invalid = blocked_state.get_relation(INVALID_RELATION.id)
+    now_valid_relation = dataclasses.replace(
+        relation_after_invalid,
+        remote_app_data={
+            **relation_after_invalid.remote_app_data,
+            "alert_rules": VALID_RELATION.remote_app_data["alert_rules"],
+        },
+    )
+
+    with patch(
+        "charm.LokiOperatorCharm._check_alert_rules",
+        autospec=True,
+        side_effect=mark_alert_rules_active,
+    ):
+        recovered_state = context.run(
+            context.on.relation_changed(now_valid_relation),
+            dataclasses.replace(blocked_state, relations=[now_valid_relation]),
+        )
+
+    # THEN the previous invalid status is cleared and valid rules are written
+    assert _written_group_names(context, recovered_state) == {"valid-group"}
+    assert isinstance(recovered_state.unit_status, ActiveStatus)

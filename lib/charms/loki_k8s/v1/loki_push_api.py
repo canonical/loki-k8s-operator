@@ -1198,6 +1198,10 @@ class LokiPushApiProvider(Object):
                 if self._charm.unit.is_leader():
                     relation.data[self._charm.app]["event"] = json.dumps({"errors": errmsg})
                 continue
+            if self._charm.unit.is_leader():
+                event_data = json.loads(relation.data[self._charm.app].get("event", "{}"))
+                event_data.pop("errors", None)
+                relation.data[self._charm.app]["event"] = json.dumps(event_data)
 
             alerts[identifier] = alert_rules
 
