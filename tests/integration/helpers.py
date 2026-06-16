@@ -47,6 +47,11 @@ def is_loki_up(juju: jubilant.Juju, app_name: str, num_units: int = 1) -> bool:
     return True
 
 
+@retry(
+    stop=stop_after_attempt(10),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
 def loki_rules(juju: jubilant.Juju, app_name: str) -> dict:
     """Get alert rules from Loki."""
     address = get_unit_address(juju, app_name, 0)
