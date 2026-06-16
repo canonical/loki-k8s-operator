@@ -7,6 +7,7 @@
 
 import json
 import os
+import platform
 from pathlib import Path
 from tempfile import mkdtemp
 from unittest.mock import mock_open, patch
@@ -339,6 +340,75 @@ def test_promtail_can_handle_missing_configuration(consumer_context, loki_contai
         with patch("ops.model.Container.pull") as mock_pull:
             mock_pull.side_effect = PathError("", "irrelevant")
             assert charm.log_proxy._current_config == {}
+
+
+@patch("charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._is_promtail_installed")
+@patch("charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._obtain_promtail")
+def test_setup_promtail_handles_url_error_on_download(
+    mock_obtain, mock_is_installed, consumer_context, loki_container, promtail_container
+):
+    # Regression test for https://github.com/canonical/loki-k8s-operator/issues/624
+    # GIVEN promtail is not yet installed and the download fails at the connection
+    # level (e.g. missing juju proxy configuration), raising a bare URLError
+    mock_is_installed.return_value = False
+    mock_obtain.side_effect = URLError(reason="[Errno 110] Connection timed out")
+
+    arch = "amd64" if platform.machine() == "x86_64" else platform.machine()
+    log_proxy_rel = Relation(
+        "log-proxy",
+        remote_app_name="agent",
+        remote_app_data={
+            "promtail_binary_zip_url": json.dumps({arch: {**PROMTAIL_INFO, "url": "http://x"}})
+        },
+    )
+    state = State(
+        leader=True,
+        containers=[loki_container, promtail_container],
+        relations=[log_proxy_rel],
+        model=Model(name="MODEL", uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4"),
+    )
+
+    with consumer_context(consumer_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        # WHEN promtail setup runs
+        charm.log_proxy._setup_promtail()
+        # THEN the URLError is caught and surfaced as a digest error (hook does not crash)
+        assert charm._stored.invalid_events == 1
+
+
+@patch("charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._is_promtail_installed")
+@patch("charms.loki_k8s.v0.loki_push_api.LogProxyConsumer._obtain_promtail")
+def test_setup_promtail_handles_http_error_on_download(
+    mock_obtain, mock_is_installed, consumer_context, loki_container, promtail_container
+):
+    # GIVEN promtail is not yet installed and the download fails with an HTTPError
+    # (a subclass of URLError), so the previously supported behaviour keeps working
+    mock_is_installed.return_value = False
+    mock_obtain.side_effect = HTTPError(
+        url="http://x", code=404, msg="not found", fp=None, hdrs=None  # type: ignore
+    )
+
+    arch = "amd64" if platform.machine() == "x86_64" else platform.machine()
+    log_proxy_rel = Relation(
+        "log-proxy",
+        remote_app_name="agent",
+        remote_app_data={
+            "promtail_binary_zip_url": json.dumps({arch: {**PROMTAIL_INFO, "url": "http://x"}})
+        },
+    )
+    state = State(
+        leader=True,
+        containers=[loki_container, promtail_container],
+        relations=[log_proxy_rel],
+        model=Model(name="MODEL", uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4"),
+    )
+
+    with consumer_context(consumer_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        # WHEN promtail setup runs
+        charm.log_proxy._setup_promtail()
+        # THEN the HTTPError is caught and surfaced as a digest error (hook does not crash)
+        assert charm._stored.invalid_events == 1
 
 
 # --- TestLogProxyConsumerWithoutSyslog ---
