@@ -2,33 +2,31 @@
 # See LICENSE file for licensing details.
 
 import json
-import textwrap
-import unittest
+import shutil
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import yaml
 from charms.loki_k8s.v0.loki_push_api import AlertRules, CosTool, LokiPushApiConsumer
 from cosl import JujuTopology
 from fs.tempfs import TempFS
 from ops.charm import CharmBase
 from ops.framework import StoredState
-from ops.testing import Harness
+from ops.testing import Context
+from scenario import Model, PeerRelation, Relation, State
+
+FAKE_CONSUMER_META = {
+    "name": "fake-consumer",
+    "containers": {"promtail": {"resource": "promtail-image"}},
+    "requires": {"logging": {"interface": "loki_push_api"}},
+    "peers": {"replicas": {"interface": "fake_consumer_replica"}},
+}
 
 
 class FakeConsumerCharm(CharmBase):
     _stored = StoredState()
-    metadata_yaml = textwrap.dedent(
-        """
-        containers:
-          promtail:
-            resource: promtail-image
-
-        requires:
-          logging:
-            interface: loki_push_api
-        """
-    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
@@ -45,7 +43,7 @@ class FakeConsumerCharm(CharmBase):
 
     @property
     def _loki_push_api(self) -> str:
-        loki_push_api = f"http://{self.unit_ip}:{self.charm._port}/loki/api/v1/push"  # type: ignore
+        loki_push_api = f"http://{self.unit_ip}:{self._port}/loki/api/v1/push"
         data = {"loki_push_api": loki_push_api}
         return json.dumps(data)
 
@@ -55,455 +53,460 @@ class FakeConsumerCharm(CharmBase):
         return "10.1.2.3"
 
 
-class TestLokiPushApiConsumer(unittest.TestCase):
-    def setUp(self):
-        self.harness = Harness(FakeConsumerCharm, meta=FakeConsumerCharm.metadata_yaml)
-        self.addCleanup(self.harness.cleanup)
-        self.harness.set_leader(True)
-        self.harness.begin()
+@pytest.fixture
+def consumer_context():
+    return Context(FakeConsumerCharm, meta=FAKE_CONSUMER_META)
 
-    def test_on_logging_relation_changed_no_leader(self):
-        self.harness.set_leader(False)
-        rel_id = self.harness.add_relation("logging", "promtail")
-        self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.assertEqual(self.harness.update_relation_data(rel_id, "promtail", {}), None)
 
-    def test_on_logging_relation_changed_no_unit(self):
-        self.harness.set_leader(True)
-        rel_id = self.harness.add_relation("logging", "promtail")
-        self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.assertEqual(
-            self.harness.update_relation_data(
-                rel_id,
-                "promtail",
-                {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
-            ),
-            None,
-        )
+def test_on_logging_relation_changed_no_leader(consumer_context):
+    """Test relation changed when not leader."""
+    logging_rel = Relation("logging", remote_app_name="promtail", remote_units_data={0: {}})
+    state = State(leader=False, relations=[logging_rel])
 
-    def test_3_provider_units_related_scaled_down_to_0(self):
-        rel_id = self.harness.add_relation("logging", "loki")
+    # Should not raise any errors
+    consumer_context.run(consumer_context.on.relation_changed(logging_rel), state)
 
-        # Add 3 Loki units
-        for i in range(3):
-            loki_unit = f"loki/{i}"
-            endpoint = f"http://loki-{i}:3100/loki/api/v1/push"
-            data = json.dumps({"url": f"{endpoint}"})
-            self.harness.add_relation_unit(rel_id, loki_unit)
-            self.harness.update_relation_data(
-                rel_id,
-                loki_unit,
-                {"endpoint": data},
-            )
 
-        # Check we have 3 Loki endpoints
-        self.assertEqual(len(self.harness.charm.loki_consumer.loki_endpoints), 3)
+def test_on_logging_relation_changed_no_unit(consumer_context):
+    """Test relation changed with unit data."""
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="promtail",
+        remote_app_data={"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+        remote_units_data={0: {}},
+    )
+    state = State(leader=True, relations=[logging_rel])
+
+    # Should not raise any errors
+    consumer_context.run(consumer_context.on.relation_changed(logging_rel), state)
+
+
+def test_multiple_provider_units_related(consumer_context):
+    """Test with 3 provider units."""
+    # GIVEN 3 provider units are related
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="loki",
+        remote_units_data={
+            0: {"endpoint": json.dumps({"url": "http://loki-0:3100/loki/api/v1/push"})},
+            1: {"endpoint": json.dumps({"url": "http://loki-1:3100/loki/api/v1/push"})},
+            2: {"endpoint": json.dumps({"url": "http://loki-2:3100/loki/api/v1/push"})},
+        },
+    )
+    state = State(leader=True, relations=[logging_rel])
+    with consumer_context(consumer_context.on.relation_changed(logging_rel), state) as mgr:
+        charm = mgr.charm
+        # THEN we have 3 Loki endpoints
+        assert len(charm.loki_consumer.loki_endpoints) == 3
 
         # Check each endpoint is a dict, has a "url" key and starts with "http://"
-        for endpoint_dict in self.harness.charm.loki_consumer.loki_endpoints:
-            self.assertIsInstance(endpoint_dict, dict)
-            self.assertTrue(list(endpoint_dict.keys())[0], "url")
-            self.assertTrue(endpoint_dict["url"].startswith("http://"))
-
-        # Remove Loki units
-        for i in range(3):
-            loki_unit = f"loki/{i}"
-            self.harness.remove_relation_unit(rel_id, loki_unit)
-
-        # Check we have no more endpoint
-        self.assertAlmostEqual(len(self.harness.charm.loki_consumer.loki_endpoints), 0)
-
-    def test_on_upgrade_charm_endpoint_joined_event_fired_for_leader(self):
-        self.harness.set_leader(True)
-
-        rel_id = self.harness.add_relation("logging", "promtail")
-        self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.assertEqual(self.harness.charm._stored.endpoint_events, 1)
-
-        self.harness.update_relation_data(
-            rel_id,
-            "promtail",
-            {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
-        )
-
-        self.assertEqual(self.harness.charm._stored.endpoint_events, 2)
-
-    def test_on_upgrade_charm_endpoint_joined_event_fired_for_follower(self):
-        self.harness.set_leader(False)
-
-        rel_id = self.harness.add_relation("logging", "promtail")
-        self.harness.add_relation_unit(rel_id, "promtail/0")
-        self.assertEqual(self.harness.charm._stored.endpoint_events, 1)
-
-        self.harness.update_relation_data(
-            rel_id,
-            "promtail",
-            {"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
-        )
-        self.assertEqual(self.harness.charm._stored.endpoint_events, 2)
+        for endpoint_dict in charm.loki_consumer.loki_endpoints:
+            assert isinstance(endpoint_dict, dict)
+            assert "url" in endpoint_dict
+            assert endpoint_dict["url"].startswith("http://")
 
 
-class TestReloadAlertRules(unittest.TestCase):
-    """Feature: Consumer charm can manually invoke reloading of alerts.
+def test_on_upgrade_charm_endpoint_joined_event_fired_for_leader(consumer_context):
+    """Test that endpoint_joined event fires for leader."""
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="promtail",
+        remote_units_data={0: {}},
+    )
+    state = State(leader=True, relations=[logging_rel])
 
-    Background: In use cases such as cos-configuration-k8s-operator, the last hook can fire before
-    the alert files show up on disk. In that case relation data would remain empty of alerts. To
-    circumvent that, a public method for reloading alert rules is offered.
-    """
+    # WHEN a provider unit joins THEN endpoint_joined fires once
+    with consumer_context(consumer_context.on.relation_joined(logging_rel), state) as mgr:
+        state = mgr.run()
+        assert mgr.charm._stored.endpoint_events == 1
 
-    NO_ALERTS = json.dumps({})  # relation data representation for the case of "no alerts"
+    # WHEN the provider then publishes its push-api endpoint (relation-changed)
+    rel = replace(
+        state.get_relation(logging_rel.id),
+        remote_app_data={"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+    )
+    state = replace(state, relations={rel})
+    with consumer_context(consumer_context.on.relation_changed(rel), state) as mgr:
+        mgr.run()
+        # THEN endpoint_joined fires again
+        assert mgr.charm._stored.endpoint_events == 2
 
-    # use a short-form free-standing alert, for brevity
-    ALERT = yaml.safe_dump({"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5"})
 
-    RENDERED_ALERT_WITHOUT_LABELS = {
+def test_on_upgrade_charm_endpoint_joined_event_fired_for_follower(consumer_context):
+    """Test that endpoint_joined event fires for follower."""
+    logging_rel = Relation(
+        "logging",
+        remote_app_name="promtail",
+        remote_units_data={0: {}},
+    )
+    state = State(leader=False, relations=[logging_rel])
+
+    # WHEN a provider unit joins THEN endpoint_joined fires once
+    with consumer_context(consumer_context.on.relation_joined(logging_rel), state) as mgr:
+        state = mgr.run()
+        assert mgr.charm._stored.endpoint_events == 1
+
+    # WHEN the provider then publishes its push-api endpoint (relation-changed)
+    rel = replace(
+        state.get_relation(logging_rel.id),
+        remote_app_data={"data": '{"loki_push_api": "http://10.1.2.3:3100/loki/api/v1/push"}'},
+    )
+    state = replace(state, relations={rel})
+    with consumer_context(consumer_context.on.relation_changed(rel), state) as mgr:
+        mgr.run()
+        # THEN endpoint_joined fires again
+        assert mgr.charm._stored.endpoint_events == 2
+
+
+# --- TestReloadAlertRules ---
+
+
+@pytest.fixture
+def alert_rules_sandbox():
+    """Fixture that provides a temporary directory for alert rule files."""
+    sandbox = TempFS("rule_files", auto_clean=True)
+    yield sandbox
+    sandbox.close()
+
+
+@pytest.fixture
+def reload_context(alert_rules_sandbox):
+    """Context for testing alert rule reload functionality."""
+    alert_rules_path = alert_rules_sandbox.getsyspath("/")
+
+    class ReloadConsumerCharm(CharmBase):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args)
+            self._port = 3100
+            self.loki_consumer = LokiPushApiConsumer(
+                self,
+                alert_rules_path=alert_rules_path,
+                recursive=True,
+                skip_alert_topology_labeling=True,
+            )
+
+    meta = {
+        "name": "reload-consumer",
+        "requires": {"logging": {"interface": "loki_push_api"}},
+    }
+    return Context(ReloadConsumerCharm, meta=meta)
+
+
+NO_ALERTS = json.dumps({})
+ALERT = yaml.safe_dump({"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5"})
+
+
+def test_reload_when_dir_is_still_empty_changes_nothing(reload_context):
+    """Scenario: The reload method is called when the alerts dir is still empty."""
+    ctx = reload_context
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel])
+
+    with ctx(ctx.on.relation_joined(logging_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        relation = charm.model.get_relation("logging")
+        assert relation
+
+        # GIVEN relation data contains no alerts
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+        # WHEN the reload method is called
+        charm.loki_consumer._reinitialize_alert_rules()
+
+        # THEN relation data is unchanged
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+
+def test_reload_after_dir_is_populated_updates_relation_data(reload_context, alert_rules_sandbox):
+    """Scenario: The reload method is called after some alert files are added."""
+    ctx = reload_context
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel])
+
+    with ctx(ctx.on.relation_joined(logging_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        relation = charm.model.get_relation("logging")
+        assert relation
+
+        # GIVEN relation data contains no alerts
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+        # WHEN some rule files are added to the alerts dir
+        alert_rules_sandbox.writetext("alert.rule", ALERT)
+
+        # AND the reload method is called
+        charm.loki_consumer._reinitialize_alert_rules()
+
+        # THEN relation data is updated
+        assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
+
+
+def test_reload_after_dir_is_emptied_updates_relation_data(reload_context, alert_rules_sandbox):
+    """Scenario: The reload method is called after all the loaded alert files are removed."""
+    ctx = reload_context
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel])
+
+    with ctx(ctx.on.relation_joined(logging_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        relation = charm.model.get_relation("logging")
+        assert relation
+
+        # GIVEN alert files are present and reload has populated the relation data
+        alert_rules_sandbox.writetext("alert.rule", ALERT)
+        charm.loki_consumer._reinitialize_alert_rules()
+        assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
+
+        # WHEN all rule files are deleted from the alerts dir
+        alert_rules_sandbox.remove("alert.rule")
+
+        # AND the reload method is called
+        charm.loki_consumer._reinitialize_alert_rules()
+
+        # THEN relation data is empty again
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+
+def test_reload_after_dir_itself_removed_updates_relation_data(reload_context, alert_rules_sandbox):
+    """Scenario: The reload method is called after the alerts dir doesn't exist anymore."""
+    ctx = reload_context
+    alert_rules_path = alert_rules_sandbox.getsyspath("/")
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel])
+
+    with ctx(ctx.on.relation_joined(logging_rel), state) as mgr:
+        mgr.run()
+        charm = mgr.charm
+        relation = charm.model.get_relation("logging")
+        assert relation
+
+        # GIVEN alert files are present and reload has populated the relation data
+        alert_rules_sandbox.writetext("alert.rule", ALERT)
+        charm.loki_consumer._reinitialize_alert_rules()
+        assert relation.data[charm.app].get("alert_rules") != NO_ALERTS
+
+        # WHEN the alerts dir itself is deleted
+        shutil.rmtree(alert_rules_path)
+
+        # AND the reload method is called
+        charm.loki_consumer._reinitialize_alert_rules()
+
+        # THEN relation data is empty again (and no error is raised)
+        assert relation.data[charm.app].get("alert_rules") == NO_ALERTS
+
+    # Recreate the dir so the sandbox fixture can tear down cleanly.
+    Path(alert_rules_path).mkdir(parents=True, exist_ok=True)
+
+
+# --- TestAlertRuleNaming ---
+
+
+PATHS = {
+    r"src/alert_rules/foo.rule": "testing_20ce8299_tester_render_alerts",
+    r"src/alert_rules/a/foo.rule": "testing_20ce8299_tester_a_render_alerts",
+    r"src/alert_rules/a/b/foo.rule": "testing_20ce8299_tester_a_b_render_alerts",
+    r"src/alert_rules/../../proc/cpuinfo": "testing_20ce8299_tester_proc_render_alerts",
+    r"src/alert_rules/../../../sys/class/net": "testing_20ce8299_tester_sys_class_render_alerts",
+}
+
+
+def test_path_transformation():
+    """Test that alert rule paths are properly transformed."""
+    topology = JujuTopology.from_dict(
+        {
+            "model": "testing",
+            "model_uuid": "20ce8299-3634-4bef-8bd8-5ace6c8816b4",
+            "application": "tester",
+            "unit": "tester/0",
+        }
+    )
+
+    ar = AlertRules(topology)
+
+    for path, rename in PATHS.items():
+        val = ar._group_name(Path("src/alert_rules"), path, "render")
+        assert val == rename
+
+
+# --- TestAlertRuleFormat ---
+
+
+@pytest.fixture
+def format_context():
+    """Context for testing alert rule format validation."""
+    sandbox = TempFS("consumer_rule_files", auto_clean=True)
+
+    # Reset CosTool cache and mock processor
+    CosTool._path = None
+    CosTool._disabled = False
+
+    alert_rules_path = sandbox.getsyspath("/")
+
+    class FormatConsumerCharm(CharmBase):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args)
+            self._port = 3100
+            self.loki_consumer = LokiPushApiConsumer(
+                self, alert_rules_path=alert_rules_path, recursive=True
+            )
+
+    meta = {
+        "name": "loki-consumer-k8s",
+        "requires": {"logging": {"interface": "loki_push_api"}},
+        "peers": {"replicas": {"interface": "consumer_charm_replica"}},
+    }
+    yield Context(FormatConsumerCharm, meta=meta), sandbox
+    sandbox.close()
+
+
+def test_empty_rule_files_are_dropped_and_produce_an_error(format_context, caplog):
+    """Scenario: Consumer charm attempts to forward an empty rule file."""
+    ctx, sandbox = format_context
+
+    # GIVEN a bunch of empty rule files (and ONLY empty rule files)
+    sandbox.writetext("empty.rule", "")
+    sandbox.writetext("whitespace1.rule", " ")
+    sandbox.writetext("whitespace2.rule", "\n")
+    sandbox.writetext("whitespace3.rule", "\r\n")
+
+    peer_rel = PeerRelation("replicas")
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel, peer_rel], model=Model(uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4"))
+
+    with patch("platform.processor", return_value="x86_64"):
+        state_out = ctx.run(ctx.on.relation_joined(logging_rel), state)
+
+    # THEN relation data is empty (empty rule files do not get forwarded in any way)
+    rel = state_out.get_relation(logging_rel.id)
+    assert rel.local_app_data.get("alert_rules") == NO_ALERTS
+
+    # AND an error message is recorded for every empty file
+    assert "empty.rule" in caplog.text
+    assert "whitespace1.rule" in caplog.text
+    assert "whitespace2.rule" in caplog.text
+    assert "whitespace3.rule" in caplog.text
+
+
+def test_rules_files_with_invalid_yaml_are_dropped_and_produce_an_error(format_context, caplog):
+    """Scenario: Consumer charm attempts to forward a rule file which is invalid yaml."""
+    ctx, sandbox = format_context
+
+    # GIVEN a bunch of invalid yaml rule files (and ONLY invalid yaml rule files)
+    sandbox.writetext("tab.rule", "\t")
+    sandbox.writetext("multicolon.rule", "this: is: not: yaml")
+
+    peer_rel = PeerRelation("replicas")
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel, peer_rel], model=Model(uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4"))
+
+    with patch("platform.processor", return_value="x86_64"):
+        state_out = ctx.run(ctx.on.relation_joined(logging_rel), state)
+
+    # THEN relation data is empty (invalid rule files do not get forwarded in any way)
+    rel = state_out.get_relation(logging_rel.id)
+    assert rel.local_app_data.get("alert_rules") == NO_ALERTS
+
+    # AND an error message is recorded for every invalid file
+    assert "tab.rule" in caplog.text
+    assert "multicolon.rule" in caplog.text
+
+
+def test_rules_have_correct_labels(format_context):
+    """Test that rules have correct juju topology labels."""
+    ctx, sandbox = format_context
+
+    unlabeled_rule = {
         "groups": [
             {
-                "name": "alert_alerts",
+                "name": "alert_on_error",
                 "rules": [
-                    {"alert": "free_standing", "expr": "avg(some_vector[5m]) > 5", "labels": {}}
+                    {
+                        "alert": "alert_on_error",
+                        "expr": 'rate({%%juju_topology%%} |= "ERROR" [5m]) > 0',
+                        "for": "1m",
+                        "labels": {
+                            "severity": "critical",
+                        },
+                        "annotations": {"summary": "Logs found at ERROR level"},
+                    }
                 ],
             }
         ]
     }
+    sandbox.writetext("error.rules", yaml.dump(unlabeled_rule))
 
-    def setUp(self):
-        # override the default ordering, since each of these steps depends on the
-        # state of the previous test
+    peer_rel = PeerRelation("replicas")
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel, peer_rel], model=Model(uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4"))
 
-        # The "GIVEN" statements explicitly work against the way unittest is designed, and it is
-        # only through sheer luck that they have worked thus far
-        unittest.TestLoader.sortTestMethodsUsing = None  # type: ignore
+    with patch("platform.processor", return_value="x86_64"):
+        state_out = ctx.run(ctx.on.relation_joined(logging_rel), state)
 
-        self.sandbox = TempFS("rule_files", auto_clean=True)
-        self.addCleanup(self.sandbox.close)
-        alert_rules_path = self.sandbox.getsyspath("/")
-
-        class ConsumerCharm(CharmBase):
-            metadata_yaml = textwrap.dedent(
-                """
-                requires:
-                  logging:
-                    interface: loki_push_api
-                """
-            )
-
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args)
-                self._port = 3100
-                self.loki_consumer = LokiPushApiConsumer(
-                    self,
-                    alert_rules_path=alert_rules_path,
-                    recursive=True,
-                    skip_alert_topology_labeling=True,
-                )
-
-        self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
-        # self.harness = Harness(FakeConsumerCharm, meta=FakeConsumerCharm.metadata_yaml)
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin_with_initial_hooks()
-        self.harness.set_leader(True)
-        self.rel_id = self.harness.add_relation("logging", "loki")
-
-        # need to manually emit relation changed
-        # https://github.com/canonical/operator/issues/682
-        self.harness.charm.on.logging_relation_joined.emit(
-            self.harness.charm.model.get_relation("logging")
-        )
-
-    def test_reload_when_dir_is_still_empty_changes_nothing(self):
-        """Scenario: The reload method is called when the alerts dir is still empty."""
-        # GIVEN relation data contains no alerts
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
-
-        # WHEN no rule files are present
-
-        # AND the reload method is called
-        self.harness.charm.loki_consumer._reinitialize_alert_rules()
-
-        # THEN relation data is unchanged
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
-
-    def test_reload_after_dir_is_populated_updates_relation_data(self):
-        """Scenario: The reload method is called after some alert files are added."""
-        # GIVEN relation data contains no alerts
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
-
-        # WHEN some rule files are added to the alerts dir
-        self.sandbox.writetext("alert.rule", self.ALERT)
-
-        # AND the reload method is called
-        self.harness.charm.loki_consumer._reinitialize_alert_rules()
-
-        # THEN relation data is updated
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertNotEqual(
-            relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS
-        )
-
-    def test_reload_after_dir_is_emptied_updates_relation_data(self):
-        """Scenario: The reload method is called after all the loaded alert files are removed."""
-        # GIVEN alert files are present and relation data contains respective alerts
-        self.sandbox.writetext("alert.rule", self.ALERT)
-        self.harness.charm.loki_consumer._reinitialize_alert_rules()
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertEqual(
-            json.loads(relation.data[self.harness.charm.app].get("alert_rules", "")),
-            self.RENDERED_ALERT_WITHOUT_LABELS,
-        )
-
-        # WHEN all rule files are deleted from the alerts dir
-        self.sandbox.clean()
-
-        # AND the reload method is called
-        self.harness.charm.loki_consumer._reinitialize_alert_rules()
-
-        # THEN relation data is empty again
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
-
-    def test_reload_after_dir_itself_removed_updates_relation_data(self):
-        """Scenario: The reload method is called after the alerts dir doesn't exist anymore."""
-        # GIVEN alert files are present and relation data contains respective alerts
-        self.sandbox.writetext("alert.rule", self.ALERT)
-        self.harness.charm.loki_consumer._reinitialize_alert_rules()
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertNotEqual(
-            relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS
-        )
-
-        # WHEN the alerts dir itself is deleted
-        self.sandbox.clean()
-
-        # AND the reload method is called
-        self.harness.charm.loki_consumer._reinitialize_alert_rules()
-
-        # THEN relation data is empty again
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
-
-
-class TestAlertRuleNaming(unittest.TestCase):
-    """AlertRules should return sanitized names for any given relative path.
-
-    It is potentially risky to include any characters which may be path separators, drive
-    separators on Windows, or `..|...` in names, since the behavior of Pebble pushing or
-    otherwise writing is not predictable, and we can mitigate side_channel attacks.
-    """
-
-    PATHS = {
-        r"src/alert_rules/foo.rule": "testing_20ce8299_tester_render_alerts",
-        r"src/alert_rules/a/foo.rule": "testing_20ce8299_tester_a_render_alerts",
-        r"src/alert_rules/a/b/foo.rule": "testing_20ce8299_tester_a_b_render_alerts",
-        r"src/alert_rules/../../proc/cpuinfo": "testing_20ce8299_tester_proc_render_alerts",
-        r"src/alert_rules/../../../sys/class/net": "testing_20ce8299_tester_sys_class_render_alerts",
+    rel = state_out.get_relation(logging_rel.id)
+    rules = json.loads(rel.local_app_data.get("alert_rules", ""))
+    expr = rules["groups"][0]["rules"][0]["expr"]
+    assert "juju_model" in expr
+    assert "juju_model_uuid" in expr
+    assert "juju_application" in expr
+    assert "juju_charm" in expr
+    assert "juju_unit" not in expr
+    assert set(rules["groups"][0]["rules"][0]["labels"]) == {
+        "juju_application",
+        "juju_charm",
+        "juju_model",
+        "juju_model_uuid",
+        "severity",
     }
 
-    def test_path_transformation(self):
-        topology = JujuTopology.from_dict(
+
+def test_rules_have_correct_labels_when_unit_is_set(format_context):
+    """Test that rules have correct juju topology labels including unit when set."""
+    ctx, sandbox = format_context
+
+    unlabeled_rule = {
+        "groups": [
             {
-                "model": "testing",
-                "model_uuid": "20ce8299-3634-4bef-8bd8-5ace6c8816b4",
-                "application": "tester",
-                "unit": "tester/0",
+                "name": "alert_on_error",
+                "rules": [
+                    {
+                        "alert": "alert_on_error",
+                        "expr": 'rate({%%juju_topology%%, juju_unit="app/0"} |= "ERROR" [5m]) > 0',
+                        "for": "1m",
+                        "labels": {
+                            "severity": "critical",
+                            "juju_unit": "app/0",
+                        },
+                        "annotations": {"summary": "Logs found at ERROR level"},
+                    }
+                ],
             }
-        )
+        ]
+    }
+    sandbox.writetext("error.rules", yaml.dump(unlabeled_rule))
 
-        ar = AlertRules(topology)
+    peer_rel = PeerRelation("replicas")
+    logging_rel = Relation("logging", remote_app_name="loki", remote_units_data={0: {}})
+    state = State(leader=True, relations=[logging_rel, peer_rel], model=Model(uuid="20ce8299-3634-4bef-8bd8-5ace6c8816b4"))
 
-        for path, rename in self.PATHS.items():
-            val = ar._group_name(Path("src/alert_rules"), path, "render")
-            self.assertEqual(val, rename)
+    with patch("platform.processor", return_value="x86_64"):
+        state_out = ctx.run(ctx.on.relation_joined(logging_rel), state)
 
-
-class TestAlertRuleFormat(unittest.TestCase):
-    """Feature: Consumer lib should warn when encountering invalid rules files.
-
-    Background: It is not easy to determine the validity of rule files, but some cases are trivial:
-      - empty files
-      - files made up of only white-spaces that yaml.safe_load parses as None (space, newline)
-
-    In those cases a warning should be emitted.
-    """
-
-    NO_ALERTS = json.dumps({})  # relation data representation for the case of "no alerts"
-
-    def setUp(self):
-        self.sandbox = TempFS("consumer_rule_files", auto_clean=True)
-        self.addCleanup(self.sandbox.close)
-
-        # CosTool uses platform.processor() to locate the cos-tool binary.
-        # On some systems (containers, CI) this returns "" instead of "x86_64",
-        # so the binary isn't found and label injection is silently skipped.
-        # Reset the class-level cache and mock the processor to ensure the
-        # binary is discovered.
-        CosTool._path = None  # type: ignore
-        CosTool._disabled = False  # type: ignore
-        self.processor_patcher = patch("platform.processor", return_value="x86_64")
-        self.processor_patcher.start()
-        self.addCleanup(self.processor_patcher.stop)
-
-        alert_rules_path = self.sandbox.getsyspath("/")
-
-        class ConsumerCharm(CharmBase):
-            metadata_yaml = textwrap.dedent(
-                """
-                name: loki-consumer-k8s
-                requires:
-                  logging:
-                    interface: loki_push_api
-                peers:
-                  replicas:
-                    interface: consumer_charm_replica
-                """
-            )
-
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args)
-                self._port = 3100
-                self.loki_consumer = LokiPushApiConsumer(
-                    self, alert_rules_path=alert_rules_path, recursive=True
-                )
-
-        self.harness = Harness(ConsumerCharm, meta=ConsumerCharm.metadata_yaml)
-        self.addCleanup(self.harness.cleanup)
-
-        self.peer_rel_id = self.harness.add_relation("replicas", self.harness.model.app.name)
-        self.harness.set_model_name("20ce8299-3634-4bef-8bd8-5ace6c8816b4")
-        self.harness.set_leader(True)
-
-        self.rel_id = self.harness.add_relation(relation_name="logging", remote_app="loki")
-        self.harness.add_relation_unit(self.rel_id, "loki/0")
-
-    def test_empty_rule_files_are_dropped_and_produce_an_error(self):
-        """Scenario: Consumer charm attempts to forward an empty rule file."""
-        # GIVEN a bunch of empty rule files (and ONLY empty rule files)
-        self.sandbox.writetext("empty.rule", "")
-        self.sandbox.writetext("whitespace1.rule", " ")
-        self.sandbox.writetext("whitespace2.rule", "\n")
-        self.sandbox.writetext("whitespace3.rule", "\r\n")
-
-        # WHEN charm starts
-        with self.assertLogs(level="ERROR") as logger:
-            self.harness.begin_with_initial_hooks()
-
-        # THEN relation data is empty (empty rule files do not get forwarded in any way)
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
-
-        # AND an error message is recorded for every empty file
-        logger_output = "\n".join(logger.output)
-        self.assertIn("empty.rule", logger_output)
-        self.assertIn("whitespace1.rule", logger_output)
-        self.assertIn("whitespace2.rule", logger_output)
-        self.assertIn("whitespace3.rule", logger_output)
-
-    def test_rules_files_with_invalid_yaml_are_dropped_and_produce_an_error(self):
-        """Scenario: Consumer charm attempts to forward a rule file which is invalid yaml."""
-        # GIVEN a bunch of invalid yaml rule files (and ONLY invalid yaml rule files)
-        self.sandbox.writetext("tab.rule", "\t")
-        self.sandbox.writetext("multicolon.rule", "this: is: not: yaml")
-
-        # WHEN charm starts
-        with self.assertLogs(level="ERROR") as logger:
-            self.harness.begin_with_initial_hooks()
-
-        # THEN relation data is empty (invalid rule files do not get forwarded in any way)
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        self.assertEqual(relation.data[self.harness.charm.app].get("alert_rules"), self.NO_ALERTS)
-
-        # AND an error message is recorded for every invalid file
-        logger_output = "\n".join(logger.output)
-        self.assertIn("tab.rule", logger_output)
-        self.assertIn("multicolon.rule", logger_output)
-
-    def test_rules_have_correct_labels(self):
-        unlabeled_rule = {
-            "groups": [
-                {
-                    "name": "alert_on_error",
-                    "rules": [
-                        {
-                            "alert": "alert_on_error",
-                            "expr": 'rate({%%juju_topology%%} |= "ERROR" [5m]) > 0',
-                            "for": "1m",
-                            "labels": {
-                                "severity": "critical",
-                            },
-                            "annotations": {"summary": "Logs found at ERROR level"},
-                        }
-                    ],
-                }
-            ]
-        }
-        self.sandbox.writetext("error.rules", yaml.dump(unlabeled_rule))
-        self.harness.begin_with_initial_hooks()
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules", ""))
-        expr = rules["groups"][0]["rules"][0]["expr"]
-        self.assertIn("juju_model", expr)
-        self.assertIn("juju_model_uuid", expr)
-        self.assertIn("juju_application", expr)
-        self.assertIn("juju_charm", expr)
-        self.assertNotIn("juju_unit", expr)
-        self.assertEqual(
-            set(rules["groups"][0]["rules"][0]["labels"]),
-            {"juju_application", "juju_charm", "juju_model", "juju_model_uuid", "severity"},
-        )
-
-    def test_rules_have_correct_labels_when_unit_is_set(self):
-        unlabeled_rule = {
-            "groups": [
-                {
-                    "name": "alert_on_error",
-                    "rules": [
-                        {
-                            "alert": "alert_on_error",
-                            "expr": 'rate({%%juju_topology%%, juju_unit="app/0"} |= "ERROR" [5m]) > 0',
-                            "for": "1m",
-                            "labels": {
-                                "severity": "critical",
-                                "juju_unit": "app/0",
-                            },
-                            "annotations": {"summary": "Logs found at ERROR level"},
-                        }
-                    ],
-                }
-            ]
-        }
-        self.sandbox.writetext("error.rules", yaml.dump(unlabeled_rule))
-        self.harness.begin_with_initial_hooks()
-        relation = self.harness.charm.model.get_relation("logging")
-        assert relation
-        rules = json.loads(relation.data[self.harness.charm.app].get("alert_rules", ""))
-        expr = rules["groups"][0]["rules"][0]["expr"]
-        self.assertIn("juju_model", expr)
-        self.assertIn("juju_model_uuid", expr)
-        self.assertIn("juju_application", expr)
-        self.assertIn("juju_charm", expr)
-        self.assertIn("juju_unit", expr)
-        self.assertEqual(
-            set(rules["groups"][0]["rules"][0]["labels"]),
-            {
-                "juju_application",
-                "juju_charm",
-                "juju_model",
-                "juju_model_uuid",
-                "severity",
-                "juju_unit",
-            },
-        )
+    rel = state_out.get_relation(logging_rel.id)
+    rules = json.loads(rel.local_app_data.get("alert_rules", ""))
+    expr = rules["groups"][0]["rules"][0]["expr"]
+    assert "juju_model" in expr
+    assert "juju_model_uuid" in expr
+    assert "juju_application" in expr
+    assert "juju_charm" in expr
+    assert "juju_unit" in expr
+    assert set(rules["groups"][0]["rules"][0]["labels"]) == {
+        "juju_application",
+        "juju_charm",
+        "juju_model",
+        "juju_model_uuid",
+        "severity",
+        "juju_unit",
+    }

@@ -1,7 +1,9 @@
+import logging
 from unittest.mock import PropertyMock, patch
 
 import ops
 import pytest
+from cosl.loki_logger import LokiHandler
 from ops.testing import Context
 from scenario import Container, Exec
 
@@ -10,6 +12,18 @@ from charm import LokiOperatorCharm
 
 def tautology(*_, **__) -> bool:
     return True
+
+
+@pytest.fixture(autouse=True)
+def cleanup_loki_handlers():
+    """Remove any LokiHandlers from the root logger after each test.
+
+    The charm_logging library adds LokiHandlers to the root logger during charm init,
+    and these persist across test runs causing test pollution.
+    """
+    yield
+    root_logger = logging.getLogger()
+    root_logger.handlers = [h for h in root_logger.handlers if not isinstance(h, LokiHandler)]
 
 
 @pytest.fixture
@@ -35,7 +49,10 @@ def loki_container():
     return Container(
         "loki",
         can_connect=True,
-        execs={Exec(["update-ca-certificates", "--fresh"], return_code=0)},
+        execs={
+            Exec(["update-ca-certificates", "--fresh"], return_code=0),
+            Exec(["/usr/bin/loki", "-version"], return_code=0, stdout="loki, version 3.14159"),
+        },
         layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
         service_statuses={"loki": ops.pebble.ServiceStatus.INACTIVE},
     )

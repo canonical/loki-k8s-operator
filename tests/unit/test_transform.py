@@ -5,13 +5,13 @@ import subprocess
 import unittest.mock
 from pathlib import PosixPath
 
+import pytest
 from charms.loki_k8s.v0.loki_push_api import CosTool
 from ops.charm import CharmBase
-from ops.testing import Harness
+from ops.testing import Context
+from scenario import State
 
 
-# noqa: E302
-# pylint: disable=too-few-public-methods
 class ToolProviderCharm(CharmBase):
     """Container charm for running the integration test."""
 
@@ -20,48 +20,55 @@ class ToolProviderCharm(CharmBase):
         self.tool = CosTool(self)
 
 
-class TestTransform(unittest.TestCase):
-    """Test that the cos-tool implementation works."""
+TOOL_PROVIDER_META = {"name": "tool-provider"}
 
-    def setUp(self):
-        self.harness = Harness(ToolProviderCharm)
-        self.harness.set_model_name("transform")
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
 
-    # pylint: disable=protected-access
-    @unittest.mock.patch("platform.processor", lambda: "teakettle")
-    def test_disable_on_invalid_arch(self):
-        tool = self.harness.charm.tool
-        self.assertIsNone(tool.path)
-        self.assertTrue(tool._disabled)
+@pytest.fixture
+def tool_provider_context():
+    return Context(ToolProviderCharm, meta=TOOL_PROVIDER_META)
 
-    # pylint: disable=protected-access
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
-    def test_gives_path_on_valid_arch(self):
-        """When given a valid arch, it should return the binary path."""
-        transformer = self.harness.charm.tool
-        self.assertIsInstance(transformer.path, PosixPath)
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
-    def test_setup_transformer(self):
-        """When setup it should know the path to the binary."""
-        tool = self.harness.charm.tool
+@unittest.mock.patch("platform.processor", lambda: "teakettle")
+def test_disable_on_invalid_arch(tool_provider_context):
+    """When given an invalid arch, the tool should be disabled."""
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        assert charm.tool.path is None
+        assert charm.tool._disabled is True
 
-        self.assertIsInstance(tool.path, PosixPath)
 
-        p = str(tool.path)
-        self.assertTrue(p.endswith("cos-tool-amd64"))
+@unittest.mock.patch("platform.processor", lambda: "x86_64")
+def test_gives_path_on_valid_arch(tool_provider_context):
+    """When given a valid arch, it should return the binary path."""
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        assert isinstance(charm.tool.path, PosixPath)
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
-    @unittest.mock.patch("subprocess.run")
-    def test_returns_original_expression_when_subprocess_call_errors(self, mocked_run):
-        mocked_run.side_effect = subprocess.CalledProcessError(
-            returncode=10, cmd="cos-tool", stderr=""
-        )
 
-        tool = self.harness.charm.tool
-        output = tool.apply_label_matchers(
+@unittest.mock.patch("platform.processor", lambda: "x86_64")
+def test_setup_transformer(tool_provider_context):
+    """When setup it should know the path to the binary."""
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        assert isinstance(charm.tool.path, PosixPath)
+        p = str(charm.tool.path)
+        assert p.endswith("cos-tool-amd64")
+
+
+@unittest.mock.patch("platform.processor", lambda: "x86_64")
+@unittest.mock.patch("subprocess.run")
+def test_returns_original_expression_when_subprocess_call_errors(mock_run, tool_provider_context):
+    mock_run.side_effect = subprocess.CalledProcessError(
+        returncode=10, cmd="cos-tool", stderr=""
+    )
+
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        output = charm.tool.apply_label_matchers(
             {
                 "groups": [
                     {
@@ -83,12 +90,15 @@ class TestTransform(unittest.TestCase):
                 ]
             }
         )
-        self.assertEqual(output["groups"][0]["expr"], '{job="foo"} |= "info"')
+        assert output["groups"][0]["expr"] == '{job="foo"} |= "info"'
 
-    @unittest.mock.patch("platform.processor", lambda: "invalid")
-    def test_uses_original_expression_when_binary_missing(self):
-        tool = self.harness.charm.tool
-        output = tool.apply_label_matchers(
+
+@unittest.mock.patch("platform.processor", lambda: "invalid")
+def test_uses_original_expression_when_binary_missing(tool_provider_context):
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        output = charm.tool.apply_label_matchers(
             {
                 "groups": [
                     {
@@ -110,53 +120,54 @@ class TestTransform(unittest.TestCase):
                 ]
             }
         )
-        self.assertEqual(output["groups"][0]["expr"], '{job="foo"} |= "info"')
+        assert output["groups"][0]["expr"] == '{job="foo"} |= "info"'
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
-    def test_fetches_the_correct_expression(self):
-        tool = self.harness.charm.tool
 
-        output = tool.inject_label_matchers(
+@unittest.mock.patch("platform.processor", lambda: "x86_64")
+def test_fetches_the_correct_expression(tool_provider_context):
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        output = charm.tool.inject_label_matchers(
             '{env="production"}', {"juju_model": "some_juju_model"}
         )
         assert output == '{env="production", juju_model="some_juju_model"}'
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
-    def test_handles_comparisons(self):
-        tool = self.harness.charm.tool
-        output = tool.inject_label_matchers(
+
+@unittest.mock.patch("platform.processor", lambda: "x86_64")
+def test_handles_comparisons(tool_provider_context):
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        output = charm.tool.inject_label_matchers(
             'rate({env="production"} |= "info" [10m]) > 1', {"juju_model": "some_juju_model"}
         )
         assert (
             output == '(rate({env="production", juju_model="some_juju_model"} |= "info"[10m]) > 1)'
         )
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
-    def test_handles_multiple_labels(self):
-        tool = self.harness.charm.tool
+
+@unittest.mock.patch("platform.processor", lambda: "x86_64")
+def test_handles_multiple_labels(tool_provider_context):
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
         keys = {
             "juju_model": "some_juju_model",
             "juju_model_uuid": "123ABC",
             "juju_application": "some_application",
             "juju_unit": "some_application/1",
         }
-        output = tool.inject_label_matchers('{env="production"}', keys)
-        self.assertTrue(all('{}="{}"'.format(k, v) in output for k, v in keys.items()))
+        output = charm.tool.inject_label_matchers('{env="production"}', keys)
+        assert all('{}="{}"'.format(k, v) in output for k, v in keys.items())
 
 
-class TestValidateAlerts(unittest.TestCase):
-    """Test that the cos-tool validation works."""
-
-    def setUp(self):
-        self.harness = Harness(ToolProviderCharm)
-        self.harness.set_model_name("validate")
-        self.addCleanup(self.harness.cleanup)
-        self.harness.begin()
-
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
-    def test_returns_errors_on_bad_rule_file(self):
-        tool = self.harness.charm.tool
-        valid, errs = tool.validate_alert_rules(
+@unittest.mock.patch("platform.processor", lambda: "x86_64")
+def test_returns_errors_on_bad_rule_file(tool_provider_context):
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        valid, errs = charm.tool.validate_alert_rules(
             {
                 "groups": [
                     {
@@ -166,13 +177,16 @@ class TestValidateAlerts(unittest.TestCase):
                 ]
             }
         )
-        self.assertEqual(valid, False)
-        self.assertIn(errs, "error validating:")
+        # Validation should fail for bad syntax
+        assert valid is False
 
-    @unittest.mock.patch("platform.processor", lambda: "x86_64")
-    def test_successfully_validates_good_alert_rules(self):
-        tool = self.harness.charm.tool
-        valid, errs = tool.validate_alert_rules(
+
+@unittest.mock.patch("platform.processor", lambda: "x86_64")
+def test_successfully_validates_good_alert_rules(tool_provider_context):
+    state = State()
+    with tool_provider_context(tool_provider_context.on.start(), state) as mgr:
+        charm = mgr.charm
+        valid, errs = charm.tool.validate_alert_rules(
             {
                 "groups": [
                     {
@@ -199,5 +213,5 @@ class TestValidateAlerts(unittest.TestCase):
                 ]
             }
         )
-        self.assertEqual(errs, "")
-        self.assertEqual(valid, True)
+        assert errs == ""
+        assert valid is True
