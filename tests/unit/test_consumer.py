@@ -3,6 +3,7 @@
 
 import json
 import shutil
+import tempfile
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -11,11 +12,30 @@ import pytest
 import yaml
 from charms.loki_k8s.v0.loki_push_api import AlertRules, CosTool, LokiPushApiConsumer
 from cosl import JujuTopology
-from fs.tempfs import TempFS
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.testing import Context
 from scenario import Model, PeerRelation, Relation, State
+
+
+class TempDir:
+    """Simple temp directory wrapper replacing fs.TempFS."""
+
+    def __init__(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._path = Path(self._tmpdir.name)
+
+    def getsyspath(self, subpath: str) -> str:
+        return str(self._path / subpath.lstrip("/"))
+
+    def writetext(self, filename: str, content: str) -> None:
+        (self._path / filename).write_text(content)
+
+    def remove(self, filename: str) -> None:
+        (self._path / filename).unlink()
+
+    def close(self) -> None:
+        self._tmpdir.cleanup()
 
 FAKE_CONSUMER_META = {
     "name": "fake-consumer",
@@ -164,7 +184,7 @@ def test_on_upgrade_charm_endpoint_joined_event_fired_for_follower(consumer_cont
 @pytest.fixture
 def alert_rules_sandbox():
     """Fixture that provides a temporary directory for alert rule files."""
-    sandbox = TempFS("rule_files", auto_clean=True)
+    sandbox = TempDir()
     yield sandbox
     sandbox.close()
 
@@ -337,7 +357,7 @@ def test_path_transformation():
 @pytest.fixture
 def format_context():
     """Context for testing alert rule format validation."""
-    sandbox = TempFS("consumer_rule_files", auto_clean=True)
+    sandbox = TempDir()
 
     # Reset CosTool cache and mock processor
     CosTool._path = None
