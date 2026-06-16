@@ -2,21 +2,29 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import asyncio
 import logging
-from pathlib import Path
 
-import pytest
+import jubilant
 import yaml
-from helpers import delete_pod, get_pebble_plan, loki_alerts, oci_image
+from helpers import delete_pod, get_pebble_plan, loki_rules, oci_image
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-resources = {
-    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
-    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
-}
+
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
+def wait_for_loki_rules(juju: jubilant.Juju, app_name: str) -> dict:
+    """Wait for alert rules to be loaded into Loki."""
+    rules = loki_rules(juju, app_name)
+    if not rules:
+        raise ValueError("Alert rules not loaded yet")
+    return rules
+
+
 tester_resources = {
     "workload-image": oci_image(
         "./tests/integration/log-forwarder-tester/charmcraft.yaml", "workload-image"
@@ -24,61 +32,58 @@ tester_resources = {
 }
 
 
-@pytest.mark.abort_on_fail
-async def test_containers_forward_logs_after_pod_kill(
-    ops_test, loki_charm, log_forwarder_tester_charm
-):
-    loki_app_name = "loki"
-    tester_app_name = "log-forwarder-tester"
-    app_names = [loki_app_name, tester_app_name]
+def test_deploy(juju: jubilant.Juju, loki_charm, loki_resources, log_forwarder_tester_charm):
+    juju.deploy(loki_charm, "loki", resources=loki_resources, trust=True)
+    juju.deploy(log_forwarder_tester_charm, "log-forwarder-tester", resources=tester_resources)
 
-    await asyncio.gather(
-        ops_test.model.deploy(
-            loki_charm,
-            resources=resources,
-            application_name=loki_app_name,
-            trust=True,
-        ),
-        ops_test.model.deploy(
-            log_forwarder_tester_charm,
-            resources=tester_resources,
-            application_name=tester_app_name,
-        ),
+
+def test_containers_forward_logs_after_pod_kill(juju: jubilant.Juju):
+    juju.wait(
+        lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
+        timeout=5 * 60,
     )
-    await ops_test.model.wait_for_idle(apps=app_names, status="active")
+    juju.integrate("loki", "log-forwarder-tester")
+    juju.wait(
+        lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
+        timeout=5 * 60,
+    )
 
-    await ops_test.model.add_relation(loki_app_name, tester_app_name)
-    await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
-
-    workload_a_plan = await get_pebble_plan(ops_test.model_name, tester_app_name, 0, "workload-a")
-    workload_b_plan = await get_pebble_plan(ops_test.model_name, tester_app_name, 0, "workload-b")
-
+    assert juju.model
+    workload_a_plan = get_pebble_plan(juju.model, "log-forwarder-tester", 0, "workload-a")
+    workload_b_plan = get_pebble_plan(juju.model, "log-forwarder-tester", 0, "workload-b")
     assert "log-targets" in yaml.safe_load(workload_a_plan)
     assert "log-targets" in yaml.safe_load(workload_b_plan)
 
     # Delete tester pod
-    await delete_pod(ops_test.model_name, tester_app_name, 0)
-    await ops_test.model.wait_for_idle(apps=[loki_app_name, tester_app_name], status="active")
-
-    restarted_workload_a_plan = await get_pebble_plan(
-        ops_test.model_name, tester_app_name, 0, "workload-a"
-    )
-    restarted_workload_b_plan = await get_pebble_plan(
-        ops_test.model_name, tester_app_name, 0, "workload-b"
+    delete_pod(juju.model, "log-forwarder-tester", 0)
+    juju.wait(
+        lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
+        timeout=5 * 60,
     )
 
+    restarted_workload_a_plan = get_pebble_plan(juju.model, "log-forwarder-tester", 0, "workload-a")
+    restarted_workload_b_plan = get_pebble_plan(juju.model, "log-forwarder-tester", 0, "workload-b")
     assert "log-targets" in yaml.safe_load(restarted_workload_a_plan)
     assert "log-targets" in yaml.safe_load(restarted_workload_b_plan)
 
 
-@pytest.mark.abort_on_fail
-async def test_alert_rules_fire(ops_test, loki_charm, log_forwarder_tester_charm):
+def test_alerts_are_in_loki(juju: jubilant.Juju):
     """Test basic alerts functionality of Log Forwarder."""
-    tester_app_name = "log-forwarder-tester"
-
-    # Trigger a log message to fire an alert on
-    await ops_test.model.applications[tester_app_name].set_config({"rate": "5"})
-    alerts = await loki_alerts(ops_test, "loki")
+    juju.config("log-forwarder-tester", {"rate": "5"})
+    juju.wait(
+        lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
+        timeout=5 * 60,
+    )
+    wait_for_loki_rules(juju, "loki")
+    rules_response = loki_rules(juju, "loki")
+    # Loki rules is a dict of {group_name: [groups]}, where groups is a list of dicts with a "rules" key containing a list of rules.
+    # We first flatten this structure to get a list of rules, then check that the expected Juju labels are present in each rule's labels.
+    alerts = [
+        rule
+        for groups in rules_response.values()
+        for group in groups
+        for rule in group["rules"]
+    ]
     assert all(
         key in alert["labels"].keys()
         for key in ["juju_application", "juju_model", "juju_model_uuid"]

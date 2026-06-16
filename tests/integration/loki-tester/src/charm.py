@@ -5,7 +5,6 @@
 """A Integration tester charm for Loki Operator."""
 
 import logging
-from multiprocessing import Queue
 from typing import Dict, Optional
 
 import logging_loki  # type: ignore
@@ -147,16 +146,19 @@ class LokiTesterCharm(CharmBase):
             return
 
         tags = self.topology.label_matcher_dict
+        tags["job"] = f"{self.topology.model}/{self.topology.application}"
         log_endpoints = self._loki_consumer.loki_endpoints
 
         loki_handlers = {}
         for idx, endpoint in enumerate(log_endpoints):
             logging_loki.emitter.LokiEmitter.level_tag = "level"
+            # Use synchronous LokiHandler instead of LokiQueueHandler to avoid
+            # multiprocessing.Queue cleanup issues that cause action failures
             loki_handlers.update(
                 {
                     "loki-{}".format(idx): {
-                        "handler": logging_loki.LokiQueueHandler(
-                            Queue(-1), url=endpoint["url"], version="1", tags=dict(tags)
+                        "handler": logging_loki.LokiHandler(
+                            url=endpoint["url"], version="1", tags=dict(tags)
                         ),
                         "level": logging.DEBUG,
                     }

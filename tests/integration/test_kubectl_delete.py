@@ -6,7 +6,7 @@
 import logging
 from pathlib import Path
 
-import pytest
+import jubilant
 import sh
 import yaml
 from helpers import is_loki_up
@@ -15,30 +15,31 @@ logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 app_name = METADATA["name"]
-resources = {
-    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
-    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
-}
 
 
-@pytest.mark.abort_on_fail
-async def test_deploy_from_local_path(ops_test, loki_charm):
+def test_deploy_from_local_path(juju: jubilant.Juju, loki_charm, loki_resources):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
-
-    await ops_test.model.deploy(
-        loki_charm, application_name=app_name, resources=resources, trust=True
+    juju.deploy(loki_charm, app_name, resources=loki_resources, trust=True)
+    juju.wait(
+        lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
+        timeout=15 * 60,
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-    await is_loki_up(ops_test, app_name)
+    assert is_loki_up(juju, app_name)
 
 
-@pytest.mark.abort_on_fail
-async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_test):
+def test_config_values_are_retained_after_pod_deleted_and_restarted(juju: jubilant.Juju):
     pod_name = f"{app_name}-0"
+    model_name = juju.status().model.name
 
-    sh.kubectl.delete.pod(pod_name, namespace=ops_test.model_name)  # pyright: ignore
+    sh.kubectl.delete.pod(pod_name, namespace=model_name)  # pyright: ignore
 
-    await ops_test.model.block_until(lambda: len(ops_test.model.applications[app_name].units) > 0)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-    assert await is_loki_up(ops_test, app_name)
+    juju.wait(
+        lambda status: (
+            len(status.apps[app_name].units) > 0
+            and jubilant.all_active(status)
+            and jubilant.all_agents_idle(status)
+        ),
+        timeout=15 * 60,
+    )
+    assert is_loki_up(juju, app_name)

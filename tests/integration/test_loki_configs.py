@@ -5,41 +5,32 @@
 import logging
 from pathlib import Path
 
-import pytest
+import jubilant
 import yaml
 from helpers import is_loki_up, loki_config, loki_services
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 app_name = METADATA["name"]
-resources = {
-    "loki-image": METADATA["resources"]["loki-image"]["upstream-source"],
-    "node-exporter-image": METADATA["resources"]["node-exporter-image"]["upstream-source"],
-}
 
 
-@pytest.mark.abort_on_fail
-async def test_services_running(ops_test: OpsTest, loki_charm):
+def test_services_running(juju: jubilant.Juju, loki_charm, loki_resources):
     """Deploy the charm-under-test."""
     logger.debug("deploy local charm")
-    assert ops_test.model
-
-    await ops_test.model.deploy(
-        loki_charm, application_name=app_name, resources=resources, trust=True
+    juju.deploy(loki_charm, app_name, resources=loki_resources, trust=True)
+    juju.wait(
+        lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
+        timeout=15 * 60,
     )
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
-    assert await is_loki_up(ops_test, app_name)
+    assert is_loki_up(juju, app_name)
 
-    services = await loki_services(ops_test, app_name)
+    services = loki_services(juju, app_name)
     assert all(status == "Running" for status in services.values()), "Not all services are running"
 
 
-@pytest.mark.abort_on_fail
-async def test_retention_configs(ops_test: OpsTest):
-    assert ops_test.model
-    default_configs = await loki_config(ops_test, app_name)
+def test_retention_configs(juju: jubilant.Juju):
+    default_configs = loki_config(juju, app_name)
     assert all(
         [
             default_configs["limits_config"]["retention_period"] == "0s",
@@ -47,12 +38,13 @@ async def test_retention_configs(ops_test: OpsTest):
         ]
     )
 
-    application = ops_test.model.applications[app_name]
-    assert application
-    await application.set_config({"retention-period": "3"})
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    juju.config(app_name, {"retention-period": "3"})
+    juju.wait(
+        lambda status: jubilant.all_active(status) and jubilant.all_agents_idle(status),
+        timeout=15 * 60,
+    )
 
-    configs_with_retention = await loki_config(ops_test, app_name)
+    configs_with_retention = loki_config(juju, app_name)
     assert all(
         [
             configs_with_retention["limits_config"]["retention_period"] == "3d",

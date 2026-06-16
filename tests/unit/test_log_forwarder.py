@@ -71,6 +71,7 @@ def test_handle_logging_with_relation_lifecycle(log_forwarder_context):
                     "juju_model_uuid": charm.log_forwarder.topology._model_uuid,
                     "juju_application": charm.log_forwarder.topology._application,
                     "juju_unit": charm.log_forwarder.topology._unit,
+                    "job": f"juju_{charm.log_forwarder.topology.identifier}",
                 },
             },
             "loki/1": {
@@ -85,6 +86,7 @@ def test_handle_logging_with_relation_lifecycle(log_forwarder_context):
                     "juju_model_uuid": charm.log_forwarder.topology._model_uuid,
                     "juju_application": charm.log_forwarder.topology._application,
                     "juju_unit": charm.log_forwarder.topology._unit,
+                    "job": f"juju_{charm.log_forwarder.topology.identifier}",
                 },
             },
         }
