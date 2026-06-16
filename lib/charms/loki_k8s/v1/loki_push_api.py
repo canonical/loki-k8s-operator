@@ -544,7 +544,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 28
+LIBPATCH = 29
 
 PYDEPS = ["cosl"]
 
@@ -1409,7 +1409,6 @@ class ConsumerBase(Object):
                 endpoints.append(deserialized_endpoint)
 
         return endpoints
-
 
 
 class LokiPushApiConsumer(ConsumerBase):
