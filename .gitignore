@@ -14,3 +14,5 @@ cos-tool*
 # Terraform
 **/.terraform/*
 **/.terraform.lock.hcl
+prometheus-*.tar.gz
+prometheus-*/
