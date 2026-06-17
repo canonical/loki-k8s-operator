@@ -458,7 +458,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from urllib import request
-from urllib.error import URLError
+from urllib.error import HTTPError
 
 import yaml
 from cosl import JujuTopology
@@ -485,7 +485,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 35
+LIBPATCH = 32
 
 PYDEPS = ["cosl"]
 
@@ -847,16 +847,7 @@ class AlertRules:
             List of files in `dir_path` that have one of the suffixes specified in `suffixes`.
         """
         all_files_in_dir = dir_path.glob("**/*" if recursive else "*")
-        all_files = {p for p in all_files_in_dir if p.is_file()}
-        matched = {p for p in all_files if p.suffix in suffixes}
-        ignored = all_files - matched
-        if ignored:
-            logger.info(
-                "Ignoring files with unrecognized suffix (expected one of %s): %s",
-                suffixes,
-                ", ".join(str(p) for p in sorted(ignored)),
-            )
-        return sorted(matched)
+        return list(filter(lambda f: f.is_file() and f.suffix in suffixes, all_files_in_dir))
 
     def _from_dir(self, dir_path: Path, recursive: bool) -> List[dict]:
         """Read all rule files in a directory.
@@ -1821,7 +1812,7 @@ class LogProxyConsumer(ConsumerBase):
         self.insecure_skip_verify = insecure_skip_verify
 
         # architecture used for promtail binary
-        arch = platform.machine()
+        arch = platform.processor()
         self._arch = "amd64" if arch == "x86_64" else arch
 
         events = self._charm.on[relation_name]
@@ -2341,7 +2332,7 @@ class LogProxyConsumer(ConsumerBase):
         if not self._is_promtail_installed(promtail_binaries[self._arch]):
             try:
                 self._obtain_promtail(promtail_binaries[self._arch])
-            except URLError as e:
+            except HTTPError as e:
                 msg = "Promtail binary couldn't be downloaded - {}".format(str(e))
                 logger.warning(msg)
                 self.on.promtail_digest_error.emit(msg)
