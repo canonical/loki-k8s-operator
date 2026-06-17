@@ -4,6 +4,7 @@
 import json
 import textwrap
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import yaml
@@ -418,6 +419,7 @@ class TestAlertRuleFormat(unittest.TestCase):
         self.assertIn("tab.rule", logger_output)
         self.assertIn("multicolon.rule", logger_output)
 
+    @unittest.mock.patch("platform.processor", lambda: "x86_64")
     def test_rules_have_correct_labels(self):
         unlabeled_rule = {
             "groups": [
@@ -453,6 +455,7 @@ class TestAlertRuleFormat(unittest.TestCase):
             {"juju_application", "juju_charm", "juju_model", "juju_model_uuid", "severity"},
         )
 
+    @unittest.mock.patch("platform.processor", lambda: "x86_64")
     def test_rules_have_correct_labels_when_unit_is_set(self):
         unlabeled_rule = {
             "groups": [
