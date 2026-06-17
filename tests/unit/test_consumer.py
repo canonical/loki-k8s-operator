@@ -4,6 +4,7 @@
 import json
 import textwrap
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import yaml
