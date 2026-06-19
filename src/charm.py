@@ -870,9 +870,7 @@ class LokiOperatorCharm(CharmBase):
         # The provider's alerts property writes {"errors": ...} to relation data
         # when cos-tool rejects a rule. The charm should go blocked in that case.
         if self._has_alert_rule_errors():
-            msg = "Invalid alert rules. See debug-log"
-            logger.error(msg)
-            self._stored.status["rules"] = to_tuple(BlockedStatus(msg))
+            self._stored.status["rules"] = to_tuple(BlockedStatus("Invalid alert rules. See debug-log"))
 
     def _has_alert_rule_errors(self) -> bool:
         """Check if any logging relations have alert rule validation errors."""
