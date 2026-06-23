@@ -544,7 +544,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 30
+LIBPATCH = 31
 
 PYDEPS = ["cosl"]
 
@@ -1188,7 +1188,10 @@ class LokiPushApiProvider(Object):
                 )
                 continue
 
-            alerts[identifier] = self._tool.apply_label_matchers(alert_rules)  # type: ignore
+            # Topology labels are already injected by _inject_alert_expr_labels using
+            # alert_expression_dict, which intentionally excludes juju_charm and juju_unit.
+            # Don't call apply_label_matchers here as it would re-inject juju_charm.
+            alerts[identifier] = alert_rules
 
             _, errmsg = self._tool.validate_alert_rules(cast(OfficialRuleFileFormat, alert_rules))
             if errmsg:
