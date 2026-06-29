@@ -35,7 +35,7 @@ from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferRequires,
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.grafana_k8s.v0.grafana_source import GrafanaSourceData, GrafanaSourceProvider
+from charms.grafana_k8s.v1.grafana_source import GrafanaSourceData, GrafanaSourceProvider
 from charms.loki_k8s.v0.charm_logging import log_charm
 from charms.loki_k8s.v1.loki_push_api import (
     LokiPushApiAlertRulesChanged,
@@ -216,7 +216,7 @@ class LokiOperatorCharm(CharmBase):
                 self._cert_requirer.on.certificate_available,
             ],
             source_type="loki",
-            source_url=self._external_url,
+            app_datasource_url=self.ingress_per_unit.url or self._service_url,
         )
 
         self.metrics_provider = MetricsEndpointProvider(
@@ -551,6 +551,14 @@ class LokiOperatorCharm(CharmBase):
         return self.internal_url
 
     @property
+    def _service_url(self) -> str:
+        """Return the K8s service URL (without unit prefix) for app-level datasources."""
+        scheme = "https" if self._tls_available else "http"
+        # hostname is e.g. "loki-0.loki-k8s-endpoints..."; strip unit prefix for service URL
+        service_hostname = self.hostname.split(".", 1)[-1]
+        return f"{scheme}://{service_hostname}:{self._port}"
+
+    @property
     def scrape_jobs(self) -> List[Dict[str, Any]]:
         """Loki and node exporter scrape jobs."""
         return self.loki_scrape_jobs + self.node_exporter_scrape_jobs
@@ -682,7 +690,9 @@ class LokiOperatorCharm(CharmBase):
             scheme="https" if self._tls_available else "http", port=self._port
         )
         self.metrics_provider.update_scrape_job_spec(self.scrape_jobs)
-        self.grafana_source_provider.update_source(source_url=self._external_url)
+        self.grafana_source_provider.update_app_source(
+            app_datasource_url=self.ingress_per_unit.url or self._service_url
+        )
         self.loki_provider.update_endpoint(url=self._external_url)
         self.catalogue.update_item(item=self._catalogue_item)
 

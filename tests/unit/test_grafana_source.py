@@ -3,7 +3,7 @@
 
 import json
 
-from charms.grafana_k8s.v0.grafana_source import GrafanaSourceData
+from charms.grafana_k8s.v1.grafana_source import GrafanaSourceData
 from scenario import Relation, State
 
 from src.charm import LokiOperatorCharm
