@@ -30,14 +30,14 @@ def test_setup_env(juju: jubilant.Juju):
     juju.model_config({"logging-config": "<root>=WARNING; unit=DEBUG"})
 
 
-def test_workload_tracing_is_present(juju: jubilant.Juju, loki_charm, cos_channel):
+def test_workload_tracing_is_present(juju: jubilant.Juju, loki_charm):
     # Deploy a Tempo cluster
     minio_user = "accesskey"
     minio_pass = "secretkey"
     minio_bucket = "tempo"
 
-    juju.deploy("tempo-worker-k8s", "tempo-worker", channel=cos_channel, trust=True)
-    juju.deploy("tempo-coordinator-k8s", TEMPO_APP_NAME, channel=cos_channel, trust=True)
+    juju.deploy("tempo-worker-k8s", "tempo-worker", channel="dev/edge", trust=True)
+    juju.deploy("tempo-coordinator-k8s", TEMPO_APP_NAME, channel="dev/edge", trust=True)
     # Set up minio and s3-integrator
     juju.deploy(
         "minio",
