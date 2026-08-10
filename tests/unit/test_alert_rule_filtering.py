@@ -168,6 +168,7 @@ def test_invalid_relation_becoming_valid_recovers_to_active(context, loki_contai
     assert _written_group_names(context, recovered_state) == {"valid-group"}
     assert isinstance(recovered_state.unit_status, ActiveStatus)
 
+# This test can be removed when https://github.com/canonical/loki-k8s-operator/issues/642 is fixed.
 
 def test_non_leader_unit_not_blocked_by_invalid_relation(context, loki_container):
     # GIVEN a relation with invalid rules on a non-leader unit
