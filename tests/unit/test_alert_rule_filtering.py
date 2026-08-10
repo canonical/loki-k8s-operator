@@ -167,3 +167,16 @@ def test_invalid_relation_becoming_valid_recovers_to_active(context, loki_contai
     # THEN the previous invalid status is cleared and valid rules are written
     assert _written_group_names(context, recovered_state) == {"valid-group"}
     assert isinstance(recovered_state.unit_status, ActiveStatus)
+
+
+def test_non_leader_unit_not_blocked_by_invalid_relation(context, loki_container):
+    # GIVEN a relation with invalid rules on a non-leader unit
+    state_in = State(relations=[INVALID_RELATION], containers=[loki_container], leader=False)
+
+    # WHEN the relation changed event is processed
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=None):
+        state_out = context.run(context.on.relation_changed(INVALID_RELATION), state_in)
+
+    # THEN invalid relation rules are not written and the unit is not blocked
+    assert _written_group_names(context, state_out) == set()
+    assert not isinstance(state_out.unit_status, BlockedStatus)
