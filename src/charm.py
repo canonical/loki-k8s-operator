@@ -679,7 +679,7 @@ class LokiOperatorCharm(CharmBase):
             # _check_alert_rules will set the status to Active just because the Loki API returned a 200, even though there are
             # still errors in relation data.
             # Thus, we will only call _check_alert_rules if there are no invalid alert rules in relation data.
-            if not self._has_alert_rule_errors():
+            if not self.loki_provider.has_invalid_alert_rules():
                 # Wait briefly for Loki to come back up and re-check the alert rules
                 # in case an upgrade/refresh caused the check to occur when it wasn't
                 # ready yet. TODO: use custom pebble notice for "workload ready" event.
@@ -879,32 +879,8 @@ class LokiOperatorCharm(CharmBase):
         # Check if any relations reported alert rule validation errors.
         # The provider's alerts property writes {"errors": ...} to relation data
         # when cos-tool rejects a rule. The charm should go blocked in that case.
-        if self._has_alert_rule_errors():
+        if self.loki_provider.has_invalid_alert_rules():
             self._stored.status["rules"] = to_tuple(BlockedStatus("Invalid alert rules. See debug-log"))
-
-    def _has_alert_rule_errors(self) -> bool:
-        """Check if any logging relations have alert rule validation errors."""
-        import json
-
-        if not self.unit.is_leader():
-            return False
-
-        for relation in self.model.relations.get("logging", []):
-            app_data = relation.data.get(self.app)
-            if app_data:
-                event_raw = app_data.get("event", "{}")
-                try:
-                    event_data = json.loads(event_raw)
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                if event_data.get("errors"):
-                    logger.debug(
-                        "Alert rule validation error on relation %s: %s",
-                        relation.id,
-                        event_data["errors"],
-                    )
-                    return True
-        return False
 
     def _generate_alert_rules_files(self) -> None:
         """Generate and upload alert rules files.
