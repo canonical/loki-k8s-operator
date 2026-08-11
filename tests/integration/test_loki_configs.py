@@ -31,12 +31,8 @@ def test_services_running(juju: jubilant.Juju, loki_charm, loki_resources):
 
 def test_retention_configs(juju: jubilant.Juju):
     default_configs = loki_config(juju, app_name)
-    assert all(
-        [
-            default_configs["limits_config"]["retention_period"] == "0s",
-            not default_configs["compactor"]["retention_enabled"],
-        ]
-    )
+    assert default_configs["limits_config"]["retention_period"] == "15d"
+    assert default_configs["compactor"]["retention_enabled"] is True
 
     juju.config(app_name, {"retention-period": "3"})
     juju.wait(
