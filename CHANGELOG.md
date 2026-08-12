@@ -1,0 +1,72 @@
+# Changelog
+
+Changes on `track/3.7` since the common ancestor with `track/2` (`0e295ee`).
+
+## Features
+
+- feat(tf): base input variable ([#652](https://github.com/canonical/loki-k8s-operator/pull/652)) (#653)
+- feat: add charms blueprint ([#649](https://github.com/canonical/loki-k8s-operator/pull/649))
+- feat: bump to 26.04 ([#620](https://github.com/canonical/loki-k8s-operator/pull/620))
+- feat: add logging when ignoring files without suffixes ([#528](https://github.com/canonical/loki-k8s-operator/pull/528))
+- feat: log files ignored due to unrecognized suffix in loki_push_api ([e740339](https://github.com/canonical/loki-k8s-operator/commit/e740339e56a75d3b0e9c58aff2b87a21615c7570))
+- feat: filter out invalid rule groups and save valid rules to disk ([#622](https://github.com/canonical/loki-k8s-operator/pull/622))
+- feat: use patched Loki 3.7.1 rock ([#613](https://github.com/canonical/loki-k8s-operator/pull/613))
+- feat(terraform): Support for Juju provider v2 ([#612](https://github.com/canonical/loki-k8s-operator/pull/612))
+- feat: TF resources variable ([#610](https://github.com/canonical/loki-k8s-operator/pull/610))
+- feat: replace local CosTool fork with cosl implementation ([#607](https://github.com/canonical/loki-k8s-operator/pull/607))
+- feat: remove fresh_install ([#593](https://github.com/canonical/loki-k8s-operator/pull/593))
+- feat: migrate charm-tracing to ops[tracing] ([#601](https://github.com/canonical/loki-k8s-operator/pull/601))
+- feat: use AlertRules from `cosl` ([#597](https://github.com/canonical/loki-k8s-operator/pull/597))
+- feat(terraform): add channel validation ([#592](https://github.com/canonical/loki-k8s-operator/pull/592))
+- feat: bump to workload version Loki 3.7.1 ([#582](https://github.com/canonical/loki-k8s-operator/pull/582))
+- feat: Manually trigger release CI ([#573](https://github.com/canonical/loki-k8s-operator/pull/573))
+- feat: Store updated PushAPI endpoint ([#565](https://github.com/canonical/loki-k8s-operator/pull/565))
+- feat(LokiPushApiProvider): deprecate `address` arg ([#559](https://github.com/canonical/loki-k8s-operator/pull/559))
+- feat: change default track to 'dev' in release workflow ([c406a58](https://github.com/canonical/loki-k8s-operator/commit/c406a5804a319a0fab4e49aa9001f789e210301f))
+
+## Fixes
+
+- fix: validate for correct track name ([#654](https://github.com/canonical/loki-k8s-operator/pull/654))
+- fix(lib): exclude juju_charm from alert rule expressions ([#646](https://github.com/canonical/loki-k8s-operator/pull/646))
+- fix: alert rule errors message ([#645](https://github.com/canonical/loki-k8s-operator/pull/645))
+- fix: bump LIBPATCH in loki_push_api v1 ([8c4e43d](https://github.com/canonical/loki-k8s-operator/commit/8c4e43d99420f853afbb0a7b4cd6b3972548dd69))
+- fix: LokiRequestLatency alert aggregation and add distributor failure detection ([#563](https://github.com/canonical/loki-k8s-operator/pull/563))
+- fix: use platform.machine() ([#637](https://github.com/canonical/loki-k8s-operator/pull/637))
+- fix: empty errors from relation data if there are no validation errors ([#631](https://github.com/canonical/loki-k8s-operator/pull/631))
+- fix: exception in v0 of the lib ([#633](https://github.com/canonical/loki-k8s-operator/pull/633))
+- fix: update docs link ([#617](https://github.com/canonical/loki-k8s-operator/pull/617))
+- fix: set promtail_binary_zip_url on relation_changed as fallback for reconcile-pattern charms ([40dcdb6](https://github.com/canonical/loki-k8s-operator/commit/40dcdb6137040079864c0cd22c522d5eceb25aa2))
+- fix: update xfail for workload tracing itest ([#605](https://github.com/canonical/loki-k8s-operator/pull/605))
+- fix: prevent v13 schema date drift on pod churn and upgrades ([#591](https://github.com/canonical/loki-k8s-operator/pull/591))
+- fix: Split TF endpoints output to requires/provides ([#571](https://github.com/canonical/loki-k8s-operator/pull/571))
+- fix: inclusive namecheck ([#557](https://github.com/canonical/loki-k8s-operator/pull/557))
+
+## Others
+
+- chore: update terraform-docs ([0823197](https://github.com/canonical/loki-k8s-operator/commit/08231972d5e837d55115cee284e00c195399c80c))
+- chore(blueprints): refresh charms.just ([1974521](https://github.com/canonical/loki-k8s-operator/commit/19745219ff7d0a3d42096643dd9c25fd17f37fb6))
+- chore: refresh charms.just from canonical/observability ([0304d09](https://github.com/canonical/loki-k8s-operator/commit/0304d097641edf3f9c01c7e5df0c26399071289c))
+- chore: upgrade grafana_source library to v1 for stable datasource UIDs ([#650](https://github.com/canonical/loki-k8s-operator/pull/650))
+- chore: update charm libraries ([#648](https://github.com/canonical/loki-k8s-operator/pull/648))
+- chore: update charm libraries ([#643](https://github.com/canonical/loki-k8s-operator/pull/643))
+- chore: bump base of tester charms ([#640](https://github.com/canonical/loki-k8s-operator/pull/640))
+- revert: feat: log files ignored due to unrecognized suffix in loki_push_api ([60c8099](https://github.com/canonical/loki-k8s-operator/commit/60c809969474ce1a66ca8d7387df955ccc658a07))
+- test(integration): migrate from pytest-operator to jubilant ([#625](https://github.com/canonical/loki-k8s-operator/pull/625))
+- test: migrate unit tests from Harness to Scenario ([#626](https://github.com/canonical/loki-k8s-operator/pull/626))
+- chore: update charm libraries ([#630](https://github.com/canonical/loki-k8s-operator/pull/630))
+- chore: update charm libraries ([#621](https://github.com/canonical/loki-k8s-operator/pull/621))
+- chore: update charm libraries ([#619](https://github.com/canonical/loki-k8s-operator/pull/619))
+- chore: update charm libraries ([#618](https://github.com/canonical/loki-k8s-operator/pull/618))
+- ci: fix token permissions for release workflow ([#611](https://github.com/canonical/loki-k8s-operator/pull/611))
+- ci: add explicit workflow permissions for CodeQL ([#609](https://github.com/canonical/loki-k8s-operator/pull/609))
+- chore: rewrite migration unit tests in scenario ([#594](https://github.com/canonical/loki-k8s-operator/pull/594))
+- chore(ci): bump reusable workflows to v2 ([#599](https://github.com/canonical/loki-k8s-operator/pull/599))
+- chore: Remove promtail ([#585](https://github.com/canonical/loki-k8s-operator/pull/585))
+- charm_logging v1: add juju_ prefix to all topology labels ([#584](https://github.com/canonical/loki-k8s-operator/pull/584))
+- docs: improve charmcraft.yaml description field ([#586](https://github.com/canonical/loki-k8s-operator/pull/586))
+- chore: update charm libraries ([#580](https://github.com/canonical/loki-k8s-operator/pull/580))
+- update prometheus_scrape lib ([#579](https://github.com/canonical/loki-k8s-operator/pull/579))
+- chore: update charm libraries ([#568](https://github.com/canonical/loki-k8s-operator/pull/568))
+- chore: Revert lib-patch so we can release the lib ([#567](https://github.com/canonical/loki-k8s-operator/pull/567))
+- chore: update charm libraries ([#561](https://github.com/canonical/loki-k8s-operator/pull/561))
+
