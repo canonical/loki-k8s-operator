@@ -1,9 +1,12 @@
 import logging
+import shlex
 from unittest.mock import PropertyMock, patch
 
 import ops
 import pytest
 from cosl.loki_logger import LokiHandler
+from helpers import pebble_change_error
+from ops.model import Container as OpsContainer
 from ops.testing import Context
 from scenario import Container, Exec
 
@@ -56,3 +59,35 @@ def loki_container():
         layers={"loki": ops.pebble.Layer({"services": {"loki": {}}})},
         service_statuses={"loki": ops.pebble.ServiceStatus.INACTIVE},
     )
+
+
+@pytest.fixture
+def pebble_restart_checks_binary():
+    """Make the simulated Pebble reject service starts whose executable is absent.
+
+    The stock ops.testing Pebble mock only checks that the service exists in the
+    plan; real Pebble fails the start with ``fork/exec ...: no such file or
+    directory``. Use this fixture whenever a test needs that fidelity (e.g.
+    regression tests for https://github.com/canonical/loki-k8s-operator/issues/659).
+    """
+    original_restart = OpsContainer.restart
+
+    def restart(self, *service_names):
+        plan = self.get_plan()
+        for name in service_names:
+            binary = shlex.split(plan.services[name].command)[0]
+            try:
+                self.list_files(binary)
+                missing = False
+            except Exception:
+                missing = True
+            if missing:
+                raise pebble_change_error(
+                    "cannot perform the following tasks:\n"
+                    f'- Start service "{name}" (cannot start service: fork/exec '
+                    f"{binary}: no such file or directory)"
+                )
+        return original_restart(self, *service_names)
+
+    with patch.object(OpsContainer, "restart", restart):
+        yield
