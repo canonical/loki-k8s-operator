@@ -17,6 +17,7 @@ dependencies = [
   "jsonschema",
   "cryptography",
   "pydantic>=2.9.0",
+  "charmlibs-interfaces-certificate_transfer",
 ]
 
 [project.optional-dependencies]

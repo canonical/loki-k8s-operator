@@ -485,7 +485,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 35
+LIBPATCH = 36
 
 PYDEPS = ["cosl"]
 
@@ -1521,7 +1521,9 @@ class ConsumerBase(Object):
         endpoints = []  # type: list
 
         for relation in self._charm.model.relations[self._relation_name]:
-            for unit in relation.units:
+            # Sort the units so the endpoints list order is stable across runs,
+            # otherwise the generated promtail config flaps.
+            for unit in sorted(relation.units, key=lambda u: u.name):
                 if unit.app == self._charm.app:
                     # This is a peer unit
                     continue
