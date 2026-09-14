@@ -1337,8 +1337,6 @@ class LokiPushApiProvider(Object):
                     relation.data[relation.app].get(ALERT_RULES_KEY, "{}")
                 )
             except Exception as e:
-                # Never let unreadable remote data break the provider: a consumer could
-                # be writing rules in a format this version of the library predates.
                 unreadable[relation.id] = str(e)
                 continue
 
