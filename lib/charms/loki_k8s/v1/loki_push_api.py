@@ -1076,9 +1076,6 @@ class LokiPushApiProvider(Object):
         self.framework.observe(events.relation_changed, self._on_logging_relation_changed)
         self.framework.observe(events.relation_departed, self._on_logging_relation_departed)
         self.framework.observe(events.relation_broken, self._on_logging_relation_broken)
-        # Consumers only compress their alert rules if we advertise that we can read them,
-        # so make sure the advertisement is (re)published after a leadership change, when no
-        # relation event may fire.
         self.framework.observe(
             self._charm.on.leader_elected,
             self._publish_encodings_to_all_relation_databags,
