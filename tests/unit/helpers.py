@@ -2,13 +2,32 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import yaml
+from ops.pebble import Change, ChangeError, ChangeID
 
 
 def tautology(*_, **__) -> bool:
     return True
+
+
+def pebble_change_error(message: str) -> ChangeError:
+    """Build a ChangeError like the one real Pebble raises for a failed service start."""
+    now = datetime.now(timezone.utc)
+    change = Change(
+        id=ChangeID("1"),
+        kind="start",
+        summary="Start service",
+        status="Error",
+        tasks=[],
+        ready=True,
+        err=message,
+        spawn_time=now,
+        ready_time=now,
+    )
+    return ChangeError(message, change)
 
 
 k8s_resource_multipatch = patch.multiple(

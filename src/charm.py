@@ -29,11 +29,11 @@ from urllib.parse import urlparse
 
 import ops
 import yaml
-from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
-from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
-from charms.certificate_transfer_interface.v1.certificate_transfer import (
+from charmlibs.interfaces.certificate_transfer import (
     CertificateTransferRequires,
 )
+from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
+from charms.catalogue_k8s.v1.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.grafana_k8s.v1.grafana_source import GrafanaSourceData, GrafanaSourceProvider
 from charms.loki_k8s.v0.charm_logging import log_charm
