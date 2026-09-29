@@ -7,7 +7,7 @@ requires-python = "~=3.14.0"
 
 dependencies = [
   "ops[tracing]",
-  "cosl>=1.9.1",
+  "cosl>=1.11.0",
   "kubernetes",
   "requests",
   "pyyaml",
@@ -28,6 +28,7 @@ dev = [
   "pyright",
   # Unit
   "pytest",
+  "pytest-bdd>=8",
   "coverage[toml]",
   "ops[testing]",
   "responses",
