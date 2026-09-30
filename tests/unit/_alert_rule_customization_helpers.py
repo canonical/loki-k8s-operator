@@ -14,8 +14,6 @@ from typing import Any, Dict, List
 import yaml
 from ops.testing import Relation
 
-from charm import to_status
-
 # ---------------------------------------------------------------------------
 # Relation construction
 # ---------------------------------------------------------------------------
@@ -64,8 +62,5 @@ def read_all_rules(context, state_out) -> Dict[str, List[Dict[str, Any]]]:
 
 
 def customization_status(state_out) -> Any:
-    """Return the charm's ``alert_rules_customizations`` stored-state status."""
-    charm_stored = next(
-        s for s in state_out.stored_states if s.owner_path == "LokiOperatorCharm"
-    )
-    return to_status(charm_stored.content["status"]["alert_rules_customizations"])
+    """Return the charm's ``alert_rules_customizations`` status from the unit status."""
+    return state_out.unit_status

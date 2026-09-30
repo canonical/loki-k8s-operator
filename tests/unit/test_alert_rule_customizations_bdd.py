@@ -104,9 +104,28 @@ def _run_config_changed(base_state, docstring):
     )
 
     with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=None):
-        state_out = ctx.run(ctx.on.relation_changed(relation), state_in)
+        state_out = ctx.run(ctx.on.config_changed(), state_in)
 
     return state_out
+
+
+def _baseline_rules(base_state):
+    """Run config-changed with no customization and return the written rules."""
+    ctx = base_state["ctx"]
+    loki_container = base_state["loki_container"]
+    relation = base_state["relation"]
+
+    state_in = State(
+        config={"alert_rule_customizations": ""},
+        relations=[relation],
+        containers=[loki_container],
+        leader=True,
+    )
+
+    with patch("charm.LokiOperatorCharm._check_alert_rules", return_value=None):
+        state_out = ctx.run(ctx.on.config_changed(), state_in)
+
+    return read_all_rules(ctx, state_out)
 
 
 @when(
@@ -140,6 +159,30 @@ def then_alert_is_written(base_state, state_out, alert_name):
     assert alert_name in all_alerts, (
         f"Expected alert '{alert_name}' to be present but not found in: {all_alerts}"
     )
+
+
+@then(parsers.parse('alert "{alert_name}" has "{field}" not equal to the original'))
+def then_alert_field_not_original(base_state, state_out, alert_name, field):
+    ctx = base_state["ctx"]
+    original_groups = base_state["groups"]
+    original_value = None
+    for g in original_groups:
+        for r in g["rules"]:
+            if r.get("alert") == alert_name:
+                original_value = r.get(field)
+                break
+        if original_value is not None:
+            break
+
+    rules = read_all_rules(ctx, state_out)
+    for group_rules in rules.values():
+        for rule in group_rules:
+            if rule.get("alert") == alert_name:
+                assert str(rule.get(field)) != str(original_value), (
+                    f"Alert '{alert_name}' field '{field}' should differ from original '{original_value}'"
+                )
+                return
+    pytest.fail(f"Alert '{alert_name}' not found in written rules")
 
 
 @then(parsers.parse('alert "{alert_name}" has "{field}" equal to "{value}"'))
@@ -191,28 +234,14 @@ def then_customization_active(base_state, state_out):
 @then("all provided alert rules are still written unchanged")
 def then_rules_unchanged(base_state, state_out):
     ctx = base_state["ctx"]
-    groups = base_state["groups"]
     rules = read_all_rules(ctx, state_out)
-
-    expected_alerts = {r["alert"] for g in groups for r in g["rules"]}
-    written_alerts = {r.get("alert") for group_rules in rules.values() for r in group_rules}
-
-    # The lib injects topology labels, so we just check that all original alert names are present.
-    assert expected_alerts.issubset(written_alerts), (
-        f"Expected all alerts {expected_alerts} to be written, but got: {written_alerts}"
-    )
+    baseline = _baseline_rules(base_state)
+    assert rules == baseline, f"Rules changed unexpectedly. Baseline: {baseline}, got: {rules}"
 
 
 @then("the written alert rules are unchanged")
 def then_rules_same_as_baseline(base_state, state_out):
-    """The output matches what we'd get with no customization applied."""
     ctx = base_state["ctx"]
-    groups = base_state["groups"]
     rules = read_all_rules(ctx, state_out)
-
-    expected_alerts = {r["alert"] for g in groups for r in g["rules"]}
-    written_alerts = {r.get("alert") for group_rules in rules.values() for r in group_rules}
-
-    assert expected_alerts.issubset(written_alerts), (
-        f"Expected all original alerts {expected_alerts} to still be written; got {written_alerts}"
-    )
+    baseline = _baseline_rules(base_state)
+    assert rules == baseline, f"Rules changed unexpectedly. Baseline: {baseline}, got: {rules}"

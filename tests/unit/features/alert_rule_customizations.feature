@@ -108,6 +108,17 @@ Feature: Alert rule customizations
     Then alert "AlphaFiringRenamed" is written
     And alert "AlphaFiring" is not written
 
+Scenario: Patching replaces the expression of a matching alert
+    When the customization is set to:
+      """
+      patch:
+        - where:
+            alert: AlphaFiring
+          set:
+            expr: 'count_over_time({job="alpha"}[10m]) > 10'
+      """
+    Then alert "AlphaFiring" has "expr" not equal to the original
+
   Scenario: Patching adds a new label and preserves existing labels
     When the customization is set to:
       """

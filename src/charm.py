@@ -328,7 +328,7 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_config_changed(self, _):
         self._configure()
-        if self._loki_container.can_connect() and self._ensure_alert_rules_path():
+        if self._ensure_alert_rules_path():
             self._regenerate_alert_rules()
 
     def _on_upgrade_charm(self, _):
@@ -906,7 +906,7 @@ class LokiOperatorCharm(CharmBase):
                     "ALL customizations are now dropped."
                 )
                 self._stored.status["alert_rules_customizations"] = to_tuple(
-                    BlockedStatus("Unable to validate alert rule customizations")
+                    BlockedStatus("Unable to validate alert rule customizations. See debug-log")
                 )
                 alerts = self.loki_provider.alerts  # fall back to originals
 
