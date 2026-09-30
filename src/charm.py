@@ -54,7 +54,12 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesRequiresV4,
 )
 from charms.traefik_k8s.v1.ingress_per_unit import IngressPerUnitRequirer
-from cosl import JujuTopology
+from cosl import (
+    AlertRulesCustomization,
+    AlertRulesCustomizationError,
+    AlertRulesCustomizationValidationError,
+    JujuTopology,
+)
 from cosl.interfaces.datasource_exchange import DatasourceDict, DatasourceExchange
 from ops import CollectStatusEvent, StoredState
 from ops.charm import CharmBase
@@ -104,6 +109,7 @@ class CompositeStatus(TypedDict):
     config: Tuple[str, str]
     rules: Tuple[str, str]
     retention: Tuple[str, str]
+    alert_rules_customizations: Tuple[str, str]
 
 
 def to_tuple(status: StatusBase) -> Tuple[str, str]:
@@ -141,6 +147,7 @@ class LokiOperatorCharm(CharmBase):
                 config=to_tuple(ActiveStatus()),
                 rules=to_tuple(ActiveStatus()),
                 retention=to_tuple(ActiveStatus()),
+                alert_rules_customizations=to_tuple(ActiveStatus()),
             ),
         )
 
@@ -321,6 +328,8 @@ class LokiOperatorCharm(CharmBase):
 
     def _on_config_changed(self, _):
         self._configure()
+        if self._ensure_alert_rules_path():
+            self._regenerate_alert_rules()
 
     def _on_upgrade_charm(self, _):
         self._configure()
@@ -867,13 +876,41 @@ class LokiOperatorCharm(CharmBase):
         """Recreate all alert rules."""
         self._remove_alert_rules_files()
 
+        # Parse the customization config (fail-open: use a no-op on parse error).
+        try:
+            customization = AlertRulesCustomization.from_yaml(
+                cast(str, self.model.config.get("alert_rule_customizations") or ""),
+                query_type="logql",
+            )
+            self._stored.status["alert_rules_customizations"] = to_tuple(ActiveStatus())
+        except AlertRulesCustomizationError as e:
+            logger.error("Error parsing alert rule customizations: %s", e)
+            self._stored.status["alert_rules_customizations"] = to_tuple(
+                BlockedStatus("Customized alert rules are invalid. See debug-log")
+            )
+            customization = AlertRulesCustomization(query_type="logql")  # no-op
+
         alerts = self.loki_provider.alerts
 
-        # If there aren't any alerts, we can just clean it and move on
+        # If there aren't any alerts, we can just clean it and move on.
         # The alerts at this point are guaranteed to be valid,
-        # since library filters out invalid rules before returning the dictionary.
+        # since the library filters out invalid rules before returning the dictionary.
         if alerts:
-            self._generate_alert_rules_files()
+            try:
+                alerts = customization.apply(alerts)
+            except AlertRulesCustomizationValidationError:
+                # When this exception is raised, the customization treats apply() as a no-op
+                # and returns the alert rules unchanged.
+                logger.info(
+                    "Some alerts became invalid after applying the provided customizations. "
+                    "ALL customizations are now dropped."
+                )
+                self._stored.status["alert_rules_customizations"] = to_tuple(
+                    BlockedStatus("Unable to validate alert rule customizations. See debug-log")
+                )
+                alerts = self.loki_provider.alerts  # fall back to originals
+
+            self._generate_alert_rules_files(alerts)
             self._check_alert_rules()
 
         # Check if any relations reported alert rule validation errors.
@@ -882,15 +919,16 @@ class LokiOperatorCharm(CharmBase):
         if self.loki_provider.has_invalid_alert_rules():
             self._stored.status["rules"] = to_tuple(BlockedStatus("Invalid alert rules. See debug-log"))
 
-    def _generate_alert_rules_files(self) -> None:
+    def _generate_alert_rules_files(self, alerts: Dict[str, Any]) -> None:
         """Generate and upload alert rules files.
 
         Args:
-            container: Container into which alert rules files are going to be uploaded
+            alerts: mapping of identifier to rule file dict, as returned by
+                ``LokiPushApiProvider.alerts`` (possibly after customization).
         """
         file_mappings = {}
 
-        for identifier, alert_rules in self.loki_provider.alerts.items():
+        for identifier, alert_rules in alerts.items():
             rules = yaml.dump({"groups": alert_rules["groups"]})
             file_mappings["{}_alert.rules".format(identifier)] = rules
 

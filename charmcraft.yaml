@@ -229,3 +229,40 @@ config:
         Ref: https://grafana.com/docs/loki/latest/configure/#analytics
       type: boolean
       default: true
+    alert_rule_customizations:
+      type: string
+      description: |
+        A YAML string for customizing the alert rules that Loki receives from any
+        connected application via the `logging` relation.
+        The following top-level operations are supported: `remove` and `patch`.
+
+        `remove`: drop matching alerting rules (or entire groups).
+        Each entry requires a `where` selector with at least one of: `alert`,
+        `group`, `labels`, `annotations`. When `group` is the only selector,
+        the entire group (including recording rules) is dropped.
+
+        `patch`: merge a `set` block into every matching alerting rule.
+        Each entry requires both a `where` selector and a `set` block.
+        Supported `set` keys: `alert`, `expr`, `for`, `labels`, `annotations`.
+
+        Operations are applied in order: remove → patch. Inputs are never mutated.
+
+        Example:
+
+          remove:
+          - where:
+              alert: NoisyAlert
+          - where:
+              labels:
+                juju_application: noisy-app
+
+          patch:
+          - where:
+              alert: SlowAlert
+            set:
+              for: 30m
+              labels:
+                severity: warning
+
+        If the config is invalid the charm is blocked but continues to write the
+        original rules unchanged (fail-open).
