@@ -48,6 +48,7 @@ from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     adjust_resource_requirements,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.prometheus_k8s.v1.prometheus_remote_write import PrometheusRemoteWriteConsumer
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateRequestAttributes,
@@ -204,6 +205,17 @@ class LokiOperatorCharm(CharmBase):
         self.alertmanager_consumer = AlertmanagerConsumer(self, relation_name="alertmanager")
         self.framework.observe(
             self.alertmanager_consumer.on.cluster_changed, self._on_alertmanager_change
+        )
+
+        self.remote_write_consumer = PrometheusRemoteWriteConsumer(
+            self,
+            relation_name="send-remote-write",
+            peer_relation_name="replicas",
+            forward_alert_rules=False,
+        )
+        self.framework.observe(
+            self.remote_write_consumer.on.endpoints_changed,
+            self._on_remote_write_endpoints_changed,
         )
 
         self.ingress_per_unit = IngressPerUnitRequirer(
@@ -368,6 +380,9 @@ class LokiOperatorCharm(CharmBase):
         logger.info("Node Exporter started")
 
     def _on_alertmanager_change(self, _):
+        self._configure()
+
+    def _on_remote_write_endpoints_changed(self, _):
         self._configure()
 
     def _on_ingress_changed(self, _):
@@ -665,6 +680,7 @@ class LokiOperatorCharm(CharmBase):
             reporting_enabled=bool(self.config["reporting-enabled"]),
             grafana_external_url=source_data.external_url,
             datasource_uid=source_data.get_unit_uid(self.unit.name),
+            remote_write_url=self._remote_write_url(),
         ).build()
 
         # Add a layer so we can check if the service is running
@@ -808,6 +824,20 @@ class LokiOperatorCharm(CharmBase):
             return alerting_config
 
         return ",".join(alertmanagers)
+
+    def _remote_write_url(self) -> Optional[str]:
+        """Return the remote-write endpoint URL for the ruler, if any.
+
+        Returns:
+            The URL of the remote-write endpoint, or None if not related.
+        """
+        endpoints = self.remote_write_consumer.endpoints
+        if not endpoints:
+            logger.debug("No remote-write endpoints available")
+            return None
+        url = endpoints[0].get("url", "")
+        logger.debug("Remote-write endpoint selected: %s", url)
+        return url or None
 
     def _get_schema_config_version_migration_date_from_backup(self, sc_version: str) -> str:
         """Get the 'from' date from the sc_version schema in Loki config.
