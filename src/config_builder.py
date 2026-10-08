@@ -59,6 +59,7 @@ class ConfigBuilder:
         reporting_enabled: bool,
         grafana_external_url: Optional[str],
         datasource_uid: str,
+        remote_write_url: Optional[str] = None,
     ):
         """Init method."""
         self.instance_addr = instance_addr
@@ -72,6 +73,7 @@ class ConfigBuilder:
         self.reporting_enabled = reporting_enabled
         self.grafana_external_url = grafana_external_url
         self.datasource_uid = datasource_uid
+        self.remote_write_url = remote_write_url
 
     def build(self) -> dict:
         """Build Loki config dictionary."""
@@ -132,6 +134,13 @@ class ConfigBuilder:
         }
         if self.grafana_external_url:  # external_url has no default so we conditionally add it
             ruler_config.update({"external_url": self.grafana_external_url})
+        # The ruler need to have the remote write config in order to be able to
+        # remote write metrics generated from recording rules.
+        if self.remote_write_url:
+            ruler_config["remote_write"] = {
+                "enabled": True,
+                "client": {"url": self.remote_write_url},
+            }
         return ruler_config
 
     @property

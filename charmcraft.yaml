@@ -157,6 +157,14 @@ requires:
     limit: 1
     description: |
       Receive a CA certificate for TLS validation of the tracing endpoint.
+  send-remote-write:
+    interface: prometheus_remote_write
+    optional: true
+    description: |
+      Integration to send metrics to a 
+      Prometheus-remote-write-compatible endpoint.
+      This is typically used in order for the Loki ruler component to forward metrics generated
+      from recording rules to a Prometheus-compatible endpoint.
 
 peers:
   replicas:
