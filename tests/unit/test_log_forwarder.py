@@ -5,6 +5,7 @@ import json
 
 import pytest
 from charms.loki_k8s.v1.loki_push_api import LogForwarder, _PebbleLogClient
+from ops import pebble
 from ops.charm import CharmBase
 from ops.testing import Context
 from scenario import Container, Relation, State
@@ -94,3 +95,43 @@ def test_handle_logging_with_relation_lifecycle(log_forwarder_context):
             expected_endpoints, charm.log_forwarder.topology, True
         )
         assert expected_layer_config == actual_layer_config
+
+
+def test_relation_broken_disables_log_target(log_forwarder_context):
+    """Removing the last Loki relation disables the stale log target.
+
+    ``_update_logging`` used to return early when no endpoints remained, leaving the
+    target of a removed relation enabled so that Pebble kept retrying the old endpoint.
+    """
+    # GIVEN a consumer already forwarding to a Loki endpoint
+    consumer_container = Container(
+        "consumer",
+        can_connect=True,
+        layers={
+            "consumer-log-forwarding": pebble.Layer(
+                {
+                    "log-targets": {
+                        "loki/0": {
+                            "override": "replace",
+                            "type": "loki",
+                            "location": "http://loki-0:3100/loki/api/v1/push",
+                            "services": ["all"],
+                        }
+                    }
+                }
+            )
+        },
+    )
+    # AND the relation has been removed, so it carries no endpoints
+    broken_relation = Relation("logging", remote_app_name="loki")
+    state = State(relations=[broken_relation], containers=[consumer_container], planned_units=1)
+
+    # WHEN relation-broken fires
+    with log_forwarder_context(
+        log_forwarder_context.on.relation_broken(broken_relation), state
+    ) as mgr:
+        state_out = mgr.run()
+
+    # THEN the stale target is disabled
+    layer = state_out.get_container("consumer").layers["consumer-log-forwarding"]
+    assert layer.to_dict()["log-targets"]["loki/0"]["services"] == ["-all"]
