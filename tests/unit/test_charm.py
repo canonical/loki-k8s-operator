@@ -191,6 +191,50 @@ def test_relating_over_alertmanager_updates_config_with_ip_addresses(ctx, loki_c
         assert config3["ruler"]["alertmanager_url"] == ""
 
 
+def test_relating_over_remote_write_updates_config(ctx, loki_container):
+    """Scenario: The charm is related to a prometheus-remote-write endpoint."""
+    state_in = State(leader=True, containers=[loki_container])
+
+    with patch.object(LokiOperatorCharm, "_update_cert"):
+        # GIVEN no remote-write relation initially
+        state_with_config = ctx.run(ctx.on.config_changed(), state_in)
+
+        fs = state_with_config.get_container("loki").get_filesystem(ctx)
+        config = yaml.safe_load((fs / LOKI_CONFIG_PATH.lstrip("/")).read_text())
+        assert "remote_write" not in config["ruler"]
+
+        # WHEN remote-write units join with multiple endpoints
+        rw_rel = Relation(
+            "send-remote-write",
+            remote_app_name="prometheus-app",
+            remote_units_data={
+                0: {"remote_write": json.dumps({"url": "http://10.0.0.2:9090/api/v1/write"})},
+                1: {"remote_write": json.dumps({"url": "http://10.0.0.1:9090/api/v1/write"})},
+            },
+        )
+        state_with_rw = replace(state_with_config, relations=frozenset([rw_rel]))
+
+        state_after_rw = ctx.run(ctx.on.relation_changed(rw_rel), state_with_rw)
+
+        # THEN the ruler config has the remote_write block with the sorted (deterministic) endpoint
+        fs2 = state_after_rw.get_container("loki").get_filesystem(ctx)
+        config2 = yaml.safe_load((fs2 / LOKI_CONFIG_PATH.lstrip("/")).read_text())
+        assert config2["ruler"]["remote_write"] == {
+            "enabled": True,
+            "clients": {"prometheus": {"url": "http://10.0.0.1:9090/api/v1/write"}},
+        }
+        assert config2["ruler"]["wal"] == {"dir": "/loki/ruler-wal"}
+
+        # WHEN the relation is broken
+        rel_from_state = state_after_rw.get_relation(rw_rel.id)
+        state_broken = ctx.run(ctx.on.relation_broken(rel_from_state), state_after_rw)
+
+        # THEN the remote_write block is gone
+        fs3 = state_broken.get_container("loki").get_filesystem(ctx)
+        config3 = yaml.safe_load((fs3 / LOKI_CONFIG_PATH.lstrip("/")).read_text())
+        assert "remote_write" not in config3["ruler"]
+
+
 def test_instance_address_is_set_to_this_unit_ip(ctx, loki_container):
     """Test that instance_addr is set to fqdn."""
     state = State(leader=True, containers=[loki_container])
