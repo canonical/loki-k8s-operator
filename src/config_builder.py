@@ -134,12 +134,13 @@ class ConfigBuilder:
         }
         if self.grafana_external_url:  # external_url has no default so we conditionally add it
             ruler_config.update({"external_url": self.grafana_external_url})
-        # The ruler need to have the remote write config in order to be able to
+        ruler_config["wal"] = {"dir": os.path.join(LOKI_DIR, "ruler-wal")}
+        # The ruler needs to have the remote write config in order to be able to
         # remote write metrics generated from recording rules.
         if self.remote_write_url:
             ruler_config["remote_write"] = {
                 "enabled": True,
-                "client": {"url": self.remote_write_url},
+                "clients": {"prometheus": {"url": self.remote_write_url}},
             }
         return ruler_config
 

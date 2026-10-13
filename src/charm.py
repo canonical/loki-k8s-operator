@@ -829,9 +829,10 @@ class LokiOperatorCharm(CharmBase):
         """Return the remote-write endpoint URL for the ruler, if any.
 
         Returns:
-            The URL of the remote-write endpoint, or None if not related.
+            The URL of the remote-write endpoint. Returns None if not related, or if no
+            endpoint is available.
         """
-        endpoints = self.remote_write_consumer.endpoints
+        endpoints = sorted(self.remote_write_consumer.endpoints, key=lambda e: e.get("url", ""))
         if not endpoints:
             logger.debug("No remote-write endpoints available")
             return None

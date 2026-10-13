@@ -195,9 +195,7 @@ def test_relating_over_remote_write_updates_config(ctx, loki_container):
     """Scenario: The charm is related to a prometheus-remote-write endpoint."""
     state_in = State(leader=True, containers=[loki_container])
 
-    with patch.object(
-        LokiOperatorCharm, "_update_cert"
-    ):
+    with patch.object(LokiOperatorCharm, "_update_cert"):
         # GIVEN no remote-write relation initially
         state_with_config = ctx.run(ctx.on.config_changed(), state_in)
 
@@ -205,34 +203,34 @@ def test_relating_over_remote_write_updates_config(ctx, loki_container):
         config = yaml.safe_load((fs / LOKI_CONFIG_PATH.lstrip("/")).read_text())
         assert "remote_write" not in config["ruler"]
 
-        # WHEN remote_write_consumer reports an endpoint
-        state_with_mock = replace(state_with_config)
+        # WHEN remote-write units join with multiple endpoints
+        rw_rel = Relation(
+            "send-remote-write",
+            remote_app_name="prometheus-app",
+            remote_units_data={
+                0: {"remote_write": json.dumps({"url": "http://10.0.0.2:9090/api/v1/write"})},
+                1: {"remote_write": json.dumps({"url": "http://10.0.0.1:9090/api/v1/write"})},
+            },
+        )
+        state_with_rw = replace(state_with_config, relations=frozenset([rw_rel]))
 
-        with patch(
-            "charm.PrometheusRemoteWriteConsumer.endpoints",
-            new_callable=PropertyMock,
-            return_value=[{"url": "http://10.0.0.1:9090/api/v1/write"}],
-        ):
-            state_after_rw = ctx.run(ctx.on.config_changed(), state_with_mock)
+        state_after_rw = ctx.run(ctx.on.relation_changed(rw_rel), state_with_rw)
 
-        # THEN the ruler config has the remote_write block
+        # THEN the ruler config has the remote_write block with the sorted (deterministic) endpoint
         fs2 = state_after_rw.get_container("loki").get_filesystem(ctx)
         config2 = yaml.safe_load((fs2 / LOKI_CONFIG_PATH.lstrip("/")).read_text())
         assert config2["ruler"]["remote_write"] == {
             "enabled": True,
-            "client": {"url": "http://10.0.0.1:9090/api/v1/write"},
+            "clients": {"prometheus": {"url": "http://10.0.0.1:9090/api/v1/write"}},
         }
+        assert config2["ruler"]["wal"] == {"dir": "/loki/ruler-wal"}
 
-        # WHEN endpoints are removed
-        with patch(
-            "charm.PrometheusRemoteWriteConsumer.endpoints",
-            new_callable=PropertyMock,
-            return_value=[],
-        ):
-            state_after_removal = ctx.run(ctx.on.config_changed(), state_after_rw)
+        # WHEN the relation is broken
+        rel_from_state = state_after_rw.get_relation(rw_rel.id)
+        state_broken = ctx.run(ctx.on.relation_broken(rel_from_state), state_after_rw)
 
         # THEN the remote_write block is gone
-        fs3 = state_after_removal.get_container("loki").get_filesystem(ctx)
+        fs3 = state_broken.get_container("loki").get_filesystem(ctx)
         config3 = yaml.safe_load((fs3 / LOKI_CONFIG_PATH.lstrip("/")).read_text())
         assert "remote_write" not in config3["ruler"]
 
