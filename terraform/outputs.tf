@@ -15,11 +15,12 @@ output "provides" {
 
 output "requires" {
   value = {
-    alertmanager     = "alertmanager"
-    ingress          = "ingress"
-    catalogue        = "catalogue"
-    certificates     = "certificates"
-    charm_tracing    = "charm-tracing"
-    workload_tracing = "workload-tracing"
+    alertmanager      = "alertmanager"
+    send_remote_write = "send-remote-write"
+    ingress           = "ingress"
+    catalogue         = "catalogue"
+    certificates      = "certificates"
+    charm_tracing     = "charm-tracing"
+    workload_tracing  = "workload-tracing"
   }
 }
