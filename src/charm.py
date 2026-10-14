@@ -176,7 +176,7 @@ class LokiOperatorCharm(CharmBase):
             # since it's overridden by sans, we can use a short,
             # constrained value like app name.
             common_name=self.app.name,
-            sans_dns=frozenset((self.hostname,)),
+            sans_dns=frozenset((self.hostname, self._service_hostname)),
         )
         self._cert_requirer = TLSCertificatesRequiresV4(
             charm=self,
@@ -560,12 +560,16 @@ class LokiOperatorCharm(CharmBase):
         return self.internal_url
 
     @property
+    def _service_hostname(self) -> str:
+        """Return the bare K8s service hostname (without the unit prefix)."""
+        # hostname is e.g. "loki-0.loki-k8s-endpoints..."; strip unit prefix for service hostname
+        return self.hostname.split(".", 1)[-1]
+
+    @property
     def _service_url(self) -> str:
         """Return the K8s service URL (without unit prefix) for app-level datasources."""
         scheme = "https" if self._tls_available else "http"
-        # hostname is e.g. "loki-0.loki-k8s-endpoints..."; strip unit prefix for service URL
-        service_hostname = self.hostname.split(".", 1)[-1]
-        return f"{scheme}://{service_hostname}:{self._port}"
+        return f"{scheme}://{self._service_hostname}:{self._port}"
 
     @property
     def scrape_jobs(self) -> List[Dict[str, Any]]:
