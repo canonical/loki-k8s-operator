@@ -1,0 +1,6 @@
+groups:
+  - name: loki_recording_rules
+    rules:
+      - record: loki_tester_errors_total
+        expr: |
+          count_over_time(({logger="loki-tester", level="error", %%juju_topology%%})[1m])
