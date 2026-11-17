@@ -7,6 +7,7 @@ import time
 
 import jubilant
 from helpers import is_loki_up, loki_api_query, oci_image
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,18 @@ tester_apps = {
 loki_app_name = "loki"
 tester_app_names = list(tester_apps.keys())
 app_names = [loki_app_name] + tester_app_names
+
+
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
+def wait_for_logs(juju: jubilant.Juju, query: str) -> list:
+    logs = loki_api_query(juju, loki_app_name, query, unit_num=0)
+    if not logs or not logs[0]["values"]:
+        raise ValueError(f"No logs yet for query: {query}")
+    return logs
 
 
 def test_loki_api_client_logs(
@@ -69,7 +82,7 @@ def test_loki_api_client_logs(
     )
 
     for query in tester_apps.values():
-        logs = loki_api_query(juju, loki_app_name, query, unit_num=0)
+        logs = wait_for_logs(juju, query)
         assert len(logs) > 0 and len(logs[0]["values"]) > 0
 
 
