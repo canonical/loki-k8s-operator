@@ -291,6 +291,30 @@ def get_traces_patiently(tempo_host: str, service_name: str = "tracegen-otlp_htt
     return traces
 
 
+@retry(
+    stop=stop_after_attempt(20),
+    wait=wait_exponential(multiplier=1, min=3, max=30),
+    reraise=True,
+)
+def prometheus_query(
+    juju: jubilant.Juju, app_name: str, query: str, unit_num: int = 0
+) -> list:
+    """Run an instant query against Prometheus.
+
+    Uses tenacity with exponential backoff to wait for metrics to appear.
+    Recording rules need 60+ seconds to evaluate plus remote-write flush time.
+    """
+    address = get_unit_address(juju, app_name, unit_num)
+    url = f"http://{address}:9090/api/v1/query"
+
+    response = urllib.request.urlopen(f"{url}?query={query}", data=None, timeout=10)
+    data = json.loads(response.read())
+    results = data["data"]["result"]
+    if not results:
+        raise ValueError(f"No results for query: {query}")
+    return results
+
+
 def get_application_ip(juju: jubilant.Juju, app_name: str) -> str:
     """Get the application IP address."""
     status = juju.status()
