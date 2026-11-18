@@ -183,6 +183,9 @@ class LokiOperatorCharm(CharmBase):
             charm=self,
             relationship_name="certificates",
             certificate_requests=[self._csr_attributes],
+            # A charm refresh may change the requested SANs; without this, the stale CSR stays
+            # in the relation databag, never matches `_csr_attributes`, and TLS silently drops.
+            refresh_events=[self.on.upgrade_charm],
         )
         self._cert_transfer = CertificateTransferRequires(self, "receive-ca-cert")
         # Update certs here in init to avoid code ordering issues
